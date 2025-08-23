@@ -19,244 +19,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 
+		// global shortcuts
+		if key == "ctrl+c" || key == "q" {
+			return m, tea.Quit
+		}
+
 		switch m.state {
-
 		case stateWelcome:
-			switch key {
-			case "ctrl+c", "q":
-				return m, tea.Quit
-			case "enter":
-				if m.cfg.Token == "" {
-					m.state = stateTokenPrompt
-					m.statusMsg = "Bitte gib deinen Token ein."
-				} else {
-					m.state = stateValidating
-					m.statusMsg = "Validiere Token…"
-					return m, m.validateTokenCmd()
-				}
-			}
-
+			return m.handleWelcomeKey(key)
 		case stateTokenPrompt:
-			switch key {
-			case "esc":
-				m.state = stateWelcome
-				m.statusMsg = "Zurück zum Welcome."
-				return m, nil
-			case "enter":
-				m.cfg.Token = strings.TrimSpace(m.ti.Value())
-				if m.cfg.Token == "" {
-					m.statusMsg = "Token leer."
-					return m, nil
-				}
-				m.state = stateValidating
-				m.statusMsg = "Validiere Token…"
-				return m, m.validateTokenCmd()
-			default:
-				var cmd tea.Cmd
-				m.ti, cmd = m.ti.Update(msg)
-				return m, cmd
-			}
-
+			return m.handleTokenPromptKey(msg)
 		case stateValidating:
-			if key == "q" {
-				return m, tea.Quit
-			}
-
+			return m.handleValidatingKey(key)
 		case stateSpaceSelect:
-			switch key {
-			case "ctrl+c", "q":
-				// zurück? Für MVP beenden wir lieber nicht – aber User erwartet "q" to quit:
-				return m, tea.Quit
-			case "j", "down":
-				if m.selectedIndex < len(m.spaces)-1 {
-					m.selectedIndex++
-				}
-			case "k", "up":
-				if m.selectedIndex > 0 {
-					m.selectedIndex--
-				}
-			case "enter":
-				if len(m.spaces) == 0 {
-					return m, nil
-				}
-				chosen := m.spaces[m.selectedIndex]
-				if m.selectingSource {
-					// Source wählen; Target-Auswahl vorbereiten
-					m.sourceSpace = &chosen
-					m.selectingSource = false
-					// optional: Target nicht gleich Source erlauben?
-					// wir lassen es erstmal zu; man kann später coden, dass source!=target sein muss.
-					m.statusMsg = fmt.Sprintf("Source gesetzt: %s (%d). Wähle jetzt Target.", chosen.Name, chosen.ID)
-					// Reset index für Target-Auswahl
-					m.selectedIndex = 0
-				} else {
-					m.targetSpace = &chosen
-					m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Scanne jetzt Stories…", chosen.Name, chosen.ID)
-					m.state = stateScanning
-					return m, m.scanStoriesCmd()
-				}
-			}
-
+			return m.handleSpaceSelectKey(key)
 		case stateScanning:
-			// Platzhalter – später starten wir hier den echten Scan und wechseln nach BrowseList.
-			if key == "q" {
-				return m, tea.Quit
-			}
-
+			return m.handleScanningKey(key)
 		case stateBrowseList:
-			if m.filter.prefixing {
-				switch key {
-				case "esc":
-					m.filter.prefixInput.Blur()
-					if strings.TrimSpace(m.filter.prefixInput.Value()) == "" {
-						m.filter.prefix = ""
-					}
-					m.filter.prefixing = false
-					m.applyFilter()
-					return m, nil
-				case "enter":
-					m.filter.prefix = strings.TrimSpace(m.filter.prefixInput.Value())
-					m.filter.prefixing = false
-					m.filter.prefixInput.Blur()
-					m.applyFilter()
-					return m, nil
-				case "ctrl+c", "q":
-					return m, tea.Quit
-				default:
-					var cmd tea.Cmd
-					m.filter.prefixInput, cmd = m.filter.prefixInput.Update(msg)
-					return m, cmd
-				}
-			}
-
-			if m.search.searching {
-				switch key {
-				case "esc":
-					// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
-					if strings.TrimSpace(m.search.query) == "" {
-						m.search.searching = false
-						m.search.searchInput.Blur()
-						return m, nil
-					}
-					m.search.query = ""
-					m.search.searchInput.SetValue("")
-					m.applyFilter()
-					return m, nil
-				case "enter":
-					// Enter: Suche schließen, Ergebnis bleibt aktiv
-					m.search.searching = false
-					m.search.searchInput.Blur()
-					return m, nil
-					// in stateBrowseList:
-				case "+":
-					m.search.minCoverage += 0.05
-					if m.search.minCoverage > 0.95 {
-						m.search.minCoverage = 0.95
-					}
-					m.applyFilter()
-				case "-":
-					m.search.minCoverage -= 0.05
-					if m.search.minCoverage < 0.3 {
-						m.search.minCoverage = 0.3
-					}
-					m.applyFilter()
-				case "ctrl+c", "q":
-					return m, tea.Quit
-				default:
-					var cmd tea.Cmd
-					m.search.searchInput, cmd = m.search.searchInput.Update(msg)
-					newQ := m.search.searchInput.Value()
-					if newQ != m.search.query {
-						m.search.query = newQ
-						m.applyFilter()
-					}
-					return m, cmd
-				}
-			}
-
-			switch key {
-			case "ctrl+c", "q":
-				return m, tea.Quit
-				// Suche togglen
-			case "f":
-				m.search.searching = true
-				m.search.searchInput.SetValue(m.search.query)
-				m.search.searchInput.CursorEnd()
-				m.search.searchInput.Focus()
-				return m, nil
-			case "F":
-				m.search.query = ""
-				m.search.searchInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-			case "p": // Prefix bearbeiten
-				m.filter.prefixing = true
-				m.filter.prefixInput.SetValue(m.filter.prefix)
-				m.filter.prefixInput.CursorEnd()
-				m.filter.prefixInput.Focus()
-				return m, nil
-			case "P": // Prefix schnell löschen
-				m.filter.prefix = ""
-				m.filter.prefixInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-			case "c":
-				m.search.query = ""
-				m.filter.prefix = ""
-				m.search.searchInput.SetValue("")
-				m.applyFilter()
-				m.filter.prefixInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-				// Navigation mit aktueller Länge
-			case "j", "down":
-				if m.selection.listIndex < m.itemsLen()-1 {
-					m.selection.listIndex++
-					m.ensureCursorVisible()
-				}
-			case "k", "up":
-				if m.selection.listIndex > 0 {
-					m.selection.listIndex--
-					m.ensureCursorVisible()
-				}
-			case "ctrl+d", "pgdown":
-				if m.itemsLen() > 0 {
-					m.selection.listIndex += m.selection.listViewport
-					if m.selection.listIndex > m.itemsLen()-1 {
-						m.selection.listIndex = m.itemsLen() - 1
-					}
-					m.ensureCursorVisible()
-				}
-			case "ctrl+u", "pgup":
-				m.selection.listIndex -= m.selection.listViewport
-				if m.selection.listIndex < 0 {
-					m.selection.listIndex = 0
-				}
-				m.ensureCursorVisible()
-
-				// Markieren – beachte filteredIdx beim Zugriff
-			case " ":
-				if m.itemsLen() == 0 {
-					return m, nil
-				}
-				st := m.itemAt(m.selection.listIndex)
-				if m.selection.selected == nil {
-					m.selection.selected = make(map[string]bool)
-				}
-				m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
-
-			// Rescan bleibt gleich
-			case "r":
-				m.state = stateScanning
-				m.statusMsg = "Rescan…"
-				return m, m.scanStoriesCmd()
-			case "s":
-				// Weiter zu Preflight in T6 – hier nur Platzhalter
-				m.statusMsg = "Preflight (T6) folgt …"
-			}
+			return m.handleBrowseListKey(msg)
 		}
 
 	case tea.WindowSizeMsg:
@@ -317,6 +97,241 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	return m, nil
+}
+
+// ---------- Handlers ----------
+
+func (m Model) handleWelcomeKey(key string) (Model, tea.Cmd) {
+	switch key {
+	case "enter":
+		if m.cfg.Token == "" {
+			m.state = stateTokenPrompt
+			m.statusMsg = "Bitte gib deinen Token ein."
+			return m, nil
+		}
+		m.state = stateValidating
+		m.statusMsg = "Validiere Token…"
+		return m, m.validateTokenCmd()
+	}
+	return m, nil
+}
+
+func (m Model) handleTokenPromptKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.state = stateWelcome
+		m.statusMsg = "Zurück zum Welcome."
+		return m, nil
+	case "enter":
+		m.cfg.Token = strings.TrimSpace(m.ti.Value())
+		if m.cfg.Token == "" {
+			m.statusMsg = "Token leer."
+			return m, nil
+		}
+		m.state = stateValidating
+		m.statusMsg = "Validiere Token…"
+		return m, m.validateTokenCmd()
+	default:
+		var cmd tea.Cmd
+		m.ti, cmd = m.ti.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m Model) handleValidatingKey(key string) (Model, tea.Cmd) {
+	return m, nil
+}
+
+func (m Model) handleSpaceSelectKey(key string) (Model, tea.Cmd) {
+	switch key {
+	case "j", "down":
+		if m.selectedIndex < len(m.spaces)-1 {
+			m.selectedIndex++
+		}
+	case "k", "up":
+		if m.selectedIndex > 0 {
+			m.selectedIndex--
+		}
+	case "enter":
+		if len(m.spaces) == 0 {
+			return m, nil
+		}
+		chosen := m.spaces[m.selectedIndex]
+		if m.selectingSource {
+			// Source wählen; Target-Auswahl vorbereiten
+			m.sourceSpace = &chosen
+			m.selectingSource = false
+			// optional: Target nicht gleich Source erlauben?
+			// wir lassen es erstmal zu; man kann später coden, dass source!=target sein muss.
+			m.statusMsg = fmt.Sprintf("Source gesetzt: %s (%d). Wähle jetzt Target.", chosen.Name, chosen.ID)
+			// Reset index für Target-Auswahl
+			m.selectedIndex = 0
+		} else {
+			m.targetSpace = &chosen
+			m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Scanne jetzt Stories…", chosen.Name, chosen.ID)
+			m.state = stateScanning
+			return m, m.scanStoriesCmd()
+		}
+	}
+	return m, nil
+}
+
+func (m Model) handleScanningKey(key string) (Model, tea.Cmd) {
+	// Platzhalter – später starten wir hier den echten Scan und wechseln nach BrowseList.
+	return m, nil
+}
+
+func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	key := msg.String()
+
+	if m.filter.prefixing {
+		switch key {
+		case "esc":
+			m.filter.prefixInput.Blur()
+			if strings.TrimSpace(m.filter.prefixInput.Value()) == "" {
+				m.filter.prefix = ""
+			}
+			m.filter.prefixing = false
+			m.applyFilter()
+			return m, nil
+		case "enter":
+			m.filter.prefix = strings.TrimSpace(m.filter.prefixInput.Value())
+			m.filter.prefixing = false
+			m.filter.prefixInput.Blur()
+			m.applyFilter()
+			return m, nil
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		default:
+			var cmd tea.Cmd
+			m.filter.prefixInput, cmd = m.filter.prefixInput.Update(msg)
+			return m, cmd
+		}
+	}
+
+	if m.search.searching {
+		switch key {
+		case "esc":
+			// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
+			if strings.TrimSpace(m.search.query) == "" {
+				m.search.searching = false
+				m.search.searchInput.Blur()
+				return m, nil
+			}
+			m.search.query = ""
+			m.search.searchInput.SetValue("")
+			m.applyFilter()
+			return m, nil
+		case "enter":
+			// Enter: Suche schließen, Ergebnis bleibt aktiv
+			m.search.searching = false
+			m.search.searchInput.Blur()
+			return m, nil
+		case "+":
+			m.search.minCoverage += 0.05
+			if m.search.minCoverage > 0.95 {
+				m.search.minCoverage = 0.95
+			}
+			m.applyFilter()
+		case "-":
+			m.search.minCoverage -= 0.05
+			if m.search.minCoverage < 0.3 {
+				m.search.minCoverage = 0.3
+			}
+			m.applyFilter()
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		default:
+			var cmd tea.Cmd
+			m.search.searchInput, cmd = m.search.searchInput.Update(msg)
+			newQ := m.search.searchInput.Value()
+			if newQ != m.search.query {
+				m.search.query = newQ
+				m.applyFilter()
+			}
+			return m, cmd
+		}
+	}
+
+	switch key {
+	case "f":
+		m.search.searching = true
+		m.search.searchInput.SetValue(m.search.query)
+		m.search.searchInput.CursorEnd()
+		m.search.searchInput.Focus()
+		return m, nil
+	case "F":
+		m.search.query = ""
+		m.search.searchInput.SetValue("")
+		m.applyFilter()
+		return m, nil
+
+	case "p": // Prefix bearbeiten
+		m.filter.prefixing = true
+		m.filter.prefixInput.SetValue(m.filter.prefix)
+		m.filter.prefixInput.CursorEnd()
+		m.filter.prefixInput.Focus()
+		return m, nil
+	case "P": // Prefix schnell löschen
+		m.filter.prefix = ""
+		m.filter.prefixInput.SetValue("")
+		m.applyFilter()
+		return m, nil
+
+	case "c":
+		m.search.query = ""
+		m.filter.prefix = ""
+		m.search.searchInput.SetValue("")
+		m.applyFilter()
+		m.filter.prefixInput.SetValue("")
+		m.applyFilter()
+		return m, nil
+
+	case "j", "down":
+		if m.selection.listIndex < m.itemsLen()-1 {
+			m.selection.listIndex++
+			m.ensureCursorVisible()
+		}
+	case "k", "up":
+		if m.selection.listIndex > 0 {
+			m.selection.listIndex--
+			m.ensureCursorVisible()
+		}
+	case "ctrl+d", "pgdown":
+		if m.itemsLen() > 0 {
+			m.selection.listIndex += m.selection.listViewport
+			if m.selection.listIndex > m.itemsLen()-1 {
+				m.selection.listIndex = m.itemsLen() - 1
+			}
+			m.ensureCursorVisible()
+		}
+	case "ctrl+u", "pgup":
+		m.selection.listIndex -= m.selection.listViewport
+		if m.selection.listIndex < 0 {
+			m.selection.listIndex = 0
+		}
+		m.ensureCursorVisible()
+
+	case " ":
+		if m.itemsLen() == 0 {
+			return m, nil
+		}
+		st := m.itemAt(m.selection.listIndex)
+		if m.selection.selected == nil {
+			m.selection.selected = make(map[string]bool)
+		}
+		m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
+
+	case "r":
+		m.state = stateScanning
+		m.statusMsg = "Rescan…"
+		return m, m.scanStoriesCmd()
+	case "s":
+		// Weiter zu Preflight in T6 – hier nur Platzhalter
+		m.statusMsg = "Preflight (T6) folgt …"
+	}
 	return m, nil
 }
 
