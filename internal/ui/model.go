@@ -55,10 +55,6 @@ type SearchState struct {
 	searchInput textinput.Model
 	query       string // aktueller Suchstring
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
-	// search tuning
-	minCoverage float64 // Anteil der Query, der gematcht wurde (0.0–1.0)
-	maxSpread   int     // max. Abstand zwischen 1. und letzter Match-Position
-	maxResults  int     // harte Obergrenze für Ergebnisliste
 }
 
 type Model struct {
@@ -84,29 +80,10 @@ type Model struct {
 	storiesSource []sb.Story
 	storiesTarget []sb.Story
 
-<<<<<<< HEAD
 	selection SelectionState
 	filter    FilterState
 	search    SearchState
-=======
-	// browse list (source)
-	listIndex    int
-	listOffset   int
-	listViewport int
-	selected     map[string]bool // key: FullSlug (oder Full Path)
-
-	// searching
-	searching   bool
-	searchInput textinput.Model
-	query       string // aktueller Suchstring
-	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
-	// search tuning
 	filterCfg FilterConfig // Konfiguration für Such- und Filterparameter
-	// prefix-filter
-	prefixing   bool
-	prefixInput textinput.Model
-	prefix      string // z.B. "a__portal/de"
->>>>>>> e549d3c (Refactor filtering into modular functions and config)
 }
 
 func InitialModel() Model {
@@ -142,23 +119,14 @@ func InitialModel() Model {
 	si.Placeholder = "Fuzzy suchen…"
 	si.CharLimit = 200
 	si.Width = 40
-<<<<<<< HEAD
 	m.search.searchInput = si
 	m.search.query = ""
 	m.search.filteredIdx = nil
-	m.search.minCoverage = 0.6 // strenger -> höher (z.B. 0.7)
-	m.search.maxSpread = 40    // strenger -> kleiner (z.B. 25)
-	m.search.maxResults = 200  // UI ruhig halten
-=======
-	m.searchInput = si
-	m.query = ""
-	m.filteredIdx = nil
 	m.filterCfg = FilterConfig{
 		MinCoverage: 0.6, // strenger -> höher (z.B. 0.7)
 		MaxSpread:   40,  // strenger -> kleiner (z.B. 25)
 		MaxResults:  200, // UI ruhig halten
 	}
->>>>>>> e549d3c (Refactor filtering into modular functions and config)
 
 	// prefix
 	pi := textinput.New()
