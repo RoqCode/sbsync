@@ -9,7 +9,6 @@ import (
 	"storyblok-sync/internal/sb"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sahilm/fuzzy"
 )
 
 // ---------- Update ----------
@@ -36,7 +35,163 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case stateScanning:
 			return m.handleScanningKey(key)
 		case stateBrowseList:
+<<<<<<< HEAD
 			return m.handleBrowseListKey(msg)
+=======
+			if m.prefixing {
+				switch key {
+				case "esc":
+					m.prefixInput.Blur()
+					if strings.TrimSpace(m.prefixInput.Value()) == "" {
+						m.prefix = ""
+					}
+					m.prefixing = false
+					m.applyFilter()
+					return m, nil
+				case "enter":
+					m.prefix = strings.TrimSpace(m.prefixInput.Value())
+					m.prefixing = false
+					m.prefixInput.Blur()
+					m.applyFilter()
+					return m, nil
+				case "ctrl+c", "q":
+					return m, tea.Quit
+				default:
+					var cmd tea.Cmd
+					m.prefixInput, cmd = m.prefixInput.Update(msg)
+					return m, cmd
+				}
+			}
+
+			if m.searching {
+				switch key {
+				case "esc":
+					// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
+					if strings.TrimSpace(m.query) == "" {
+						m.searching = false
+						m.searchInput.Blur()
+						return m, nil
+					}
+					m.query = ""
+					m.searchInput.SetValue("")
+					m.applyFilter()
+					return m, nil
+				case "enter":
+					// Enter: Suche schließen, Ergebnis bleibt aktiv
+					m.searching = false
+					m.searchInput.Blur()
+					return m, nil
+					// in stateBrowseList:
+				case "+":
+					m.filterCfg.MinCoverage += 0.05
+					if m.filterCfg.MinCoverage > 0.95 {
+						m.filterCfg.MinCoverage = 0.95
+					}
+					m.applyFilter()
+				case "-":
+					m.filterCfg.MinCoverage -= 0.05
+					if m.filterCfg.MinCoverage < 0.3 {
+						m.filterCfg.MinCoverage = 0.3
+					}
+					m.applyFilter()
+				case "ctrl+c", "q":
+					return m, tea.Quit
+				default:
+					var cmd tea.Cmd
+					m.searchInput, cmd = m.searchInput.Update(msg)
+					newQ := m.searchInput.Value()
+					if newQ != m.query {
+						m.query = newQ
+						m.applyFilter()
+					}
+					return m, cmd
+				}
+			}
+
+			switch key {
+			case "ctrl+c", "q":
+				return m, tea.Quit
+				// Suche togglen
+			case "f":
+				m.searching = true
+				m.searchInput.SetValue(m.query)
+				m.searchInput.CursorEnd()
+				m.searchInput.Focus()
+				return m, nil
+			case "F":
+				m.query = ""
+				m.searchInput.SetValue("")
+				m.applyFilter()
+				return m, nil
+
+			case "p": // Prefix bearbeiten
+				m.prefixing = true
+				m.prefixInput.SetValue(m.prefix)
+				m.prefixInput.CursorEnd()
+				m.prefixInput.Focus()
+				return m, nil
+			case "P": // Prefix schnell löschen
+				m.prefix = ""
+				m.prefixInput.SetValue("")
+				m.applyFilter()
+				return m, nil
+
+			case "c":
+				m.query = ""
+				m.prefix = ""
+				m.searchInput.SetValue("")
+				m.applyFilter()
+				m.prefixInput.SetValue("")
+				m.applyFilter()
+				return m, nil
+
+			// Navigation mit aktueller Länge
+			case "j", "down":
+				if m.listIndex < m.itemsLen()-1 {
+					m.listIndex++
+					m.ensureCursorVisible()
+				}
+			case "k", "up":
+				if m.listIndex > 0 {
+					m.listIndex--
+					m.ensureCursorVisible()
+				}
+			case "ctrl+d", "pgdown":
+				if m.itemsLen() > 0 {
+					m.listIndex += m.listViewport
+					if m.listIndex > m.itemsLen()-1 {
+						m.listIndex = m.itemsLen() - 1
+					}
+					m.ensureCursorVisible()
+				}
+			case "ctrl+u", "pgup":
+				m.listIndex -= m.listViewport
+				if m.listIndex < 0 {
+					m.listIndex = 0
+				}
+				m.ensureCursorVisible()
+
+			// Markieren – beachte filteredIdx beim Zugriff
+			case " ":
+				if m.itemsLen() == 0 {
+					return m, nil
+				}
+				st := m.itemAt(m.listIndex)
+				if m.selected == nil {
+					m.selected = make(map[string]bool)
+				}
+				m.selected[st.FullSlug] = !m.selected[st.FullSlug]
+
+			// Rescan bleibt gleich
+			case "r":
+				m.state = stateScanning
+				m.statusMsg = "Rescan…"
+				return m, m.scanStoriesCmd()
+			case "s":
+				// Weiter zu Preflight in T6 – hier nur Platzhalter
+				m.statusMsg = "Preflight (T6) folgt …"
+			}
+>>>>>>> e549d3c (Refactor filtering into modular functions and config)
 		}
 
 	case tea.WindowSizeMsg:
@@ -463,19 +618,7 @@ func (m *Model) applyFilter() {
 		base[i] = strings.ToLower(name + "  " + st.Slug + "  " + st.FullSlug)
 	}
 
-	idx := make([]int, 0, len(m.storiesSource))
-	if pref != "" {
-		for i, st := range m.storiesSource {
-			if strings.HasPrefix(strings.ToLower(st.FullSlug), pref) {
-				idx = append(idx, i)
-			}
-		}
-	} else {
-		idx = idx[:0]
-		for i := range m.storiesSource {
-			idx = append(idx, i)
-		}
-	}
+	idx := filterByPrefix(m.storiesSource, pref)
 
 	if q == "" {
 		m.search.filteredIdx = append(m.search.filteredIdx[:0], idx...)
@@ -484,6 +627,7 @@ func (m *Model) applyFilter() {
 		return
 	}
 
+<<<<<<< HEAD
 	sub := make([]int, 0, min(m.search.maxResults, len(idx)))
 	for _, i := range idx {
 		if strings.Contains(base[i], q) {
@@ -493,6 +637,9 @@ func (m *Model) applyFilter() {
 			}
 		}
 	}
+=======
+	sub := filterBySubstring(q, base, idx, m.filterCfg)
+>>>>>>> e549d3c (Refactor filtering into modular functions and config)
 	if len(sub) > 0 {
 		m.search.filteredIdx = sub
 		m.selection.listIndex, m.selection.listOffset = 0, 0
@@ -500,6 +647,7 @@ func (m *Model) applyFilter() {
 		return
 	}
 
+<<<<<<< HEAD
 	subset := make([]string, len(idx))
 	mapBack := make([]int, len(idx))
 	for j, i := range idx {
@@ -529,26 +677,9 @@ func (m *Model) applyFilter() {
 
 	m.search.filteredIdx = pruned
 	m.selection.listIndex, m.selection.listOffset = 0, 0
+=======
+	m.filteredIdx = filterByFuzzy(q, base, idx, m.filterCfg)
+	m.listIndex, m.listOffset = 0, 0
+>>>>>>> e549d3c (Refactor filtering into modular functions and config)
 	m.ensureCursorVisible()
-}
-
-func matchCoverage(q string, m fuzzy.Match) float64 {
-	if len(q) == 0 {
-		return 1
-	}
-	return float64(len(m.MatchedIndexes)) / float64(len(q))
-}
-
-func matchSpread(m fuzzy.Match) int {
-	if len(m.MatchedIndexes) == 0 {
-		return 0
-	}
-	return m.MatchedIndexes[len(m.MatchedIndexes)-1] - m.MatchedIndexes[0]
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
