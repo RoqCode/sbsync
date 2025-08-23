@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"storyblok-sync/internal/sb"
+
+	"github.com/charmbracelet/lipgloss/tree"
 )
 
 func (m Model) View() string {
@@ -132,8 +134,6 @@ func (m Model) viewBrowseList() string {
 	} else {
 		// sichtbaren Bereich bestimmen
 		total := m.itemsLen()
-		start := m.selection.listOffset
-		end := min(start+m.selection.listViewport, total)
 
 		// Suchleiste (falls aktiv oder Query gesetzt)
 		label := "Suche: "
@@ -152,8 +152,16 @@ func (m Model) viewBrowseList() string {
 		if total == 0 {
 			b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).") + "\n")
 		} else {
-			for i := start; i < end; i++ {
-				st := m.itemAt(i)
+			// Sammle sichtbare Stories
+			stories := make([]sb.Story, total)
+			for i := 0; i < total; i++ {
+				stories[i] = m.itemAt(i)
+			}
+
+			// Erzeuge Tree-Struktur
+			tr := tree.New()
+			nodes := make(map[int]*tree.Tree, len(stories))
+			for i, st := range stories {
 				cursor := "  "
 				if i == m.selection.listIndex {
 					cursor = "▶ "
@@ -168,14 +176,26 @@ func (m Model) viewBrowseList() string {
 				if i == m.selection.listIndex {
 					line = selStyle.Render(line)
 				}
-				b.WriteString(line + "\n")
+
+				node := tree.Root(line)
+				nodes[st.ID] = node
 			}
+
+			for _, st := range stories {
+				node := nodes[st.ID]
+				if st.FolderID != nil {
+					if parent, ok := nodes[*st.FolderID]; ok {
+						parent.Child(node)
+						continue
+					}
+				}
+				tr.Child(node)
+			}
+
+			b.WriteString(tr.String() + "\n")
 		}
 
-		shown := 0
-		if end > start {
-			shown = end - start
-		}
+		shown := total
 
 		// Anzeige: Filterstatus + Range
 		suffix := ""
@@ -185,7 +205,7 @@ func (m Model) viewBrowseList() string {
 		b.WriteString("\n")
 		b.WriteString(subtleStyle.Render(
 			fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
-				start+1, end, total, shown, suffix),
+				1, total, total, shown, suffix),
 		))
 		b.WriteString("\n")
 	}
