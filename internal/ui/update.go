@@ -1,146 +1,19 @@
-package main
+package ui
 
 import (
 	"context"
 	"fmt"
-	"os"
-	"storyblok-sync/internal/config"
-	"storyblok-sync/internal/sb"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"storyblok-sync/internal/sb"
+
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
 )
 
-// --- UI Styles ---
-var (
-	titleStyle   = lipgloss.NewStyle().Bold(true).Underline(true)
-	subtleStyle  = lipgloss.NewStyle().Faint(true)
-	okStyle      = lipgloss.NewStyle().Bold(true)
-	warnStyle    = lipgloss.NewStyle().Bold(true)
-	helpStyle    = lipgloss.NewStyle().Faint(true)
-	dividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	focusStyle   = lipgloss.NewStyle().Bold(true)
-	selStyle     = lipgloss.NewStyle().Reverse(true)
-)
-
-// --- Model / State ---
-type state int
-
-const (
-	stateWelcome state = iota
-	stateTokenPrompt
-	stateValidating
-	stateSpaceSelect
-	stateScanning
-	stateBrowseList
-	stateQuit
-)
-
-type model struct {
-	state         state
-	cfg           config.Config
-	hasSBRC       bool
-	sbrcPath      string
-	statusMsg     string
-	validateErr   error
-	width, height int
-
-	// token input
-	ti textinput.Model
-
-	// spaces & selection
-	spaces          []sb.Space
-	selectedIndex   int
-	selectingSource bool
-	sourceSpace     *sb.Space
-	targetSpace     *sb.Space
-
-	// scan results
-	storiesSource []sb.Story
-	storiesTarget []sb.Story
-
-	// browse list (source)
-	listIndex    int
-	listOffset   int
-	listViewport int
-	selected     map[string]bool // key: FullSlug (oder Full Path)
-
-	// searching
-	searching   bool
-	searchInput textinput.Model
-	query       string // aktueller Suchstring
-	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
-	// search tuning
-	minCoverage float64 // Anteil der Query, der gematcht wurde (0.0–1.0)
-	maxSpread   int     // max. Abstand zwischen 1. und letzter Match-Position
-	maxResults  int     // harte Obergrenze für Ergebnisliste
-	// prefix-filter
-	prefixing   bool
-	prefixInput textinput.Model
-	prefix      string // z.B. "a__portal/de"
-}
-
-func initialModel() model {
-	p := config.DefaultPath()
-	cfg, err := config.Load(p)
-	hasFile := err == nil
-
-	m := model{
-		state:     stateWelcome,
-		cfg:       cfg,
-		hasSBRC:   hasFile,
-		sbrcPath:  p,
-		statusMsg: "",
-	}
-
-	if cfg.Token == "" {
-		m.statusMsg = "Keine ~/.sbrc oder kein Token – drück Enter für Token-Eingabe."
-	} else {
-		m.statusMsg = "Token gefunden – Enter zum Validieren, q zum Beenden."
-	}
-
-	// textinput
-	ti := textinput.New()
-	ti.Placeholder = "Storyblok Personal Access Token"
-	ti.Focus()
-	ti.EchoMode = textinput.EchoPassword
-	ti.CharLimit = 200
-	m.ti = ti
-	m.selected = make(map[string]bool)
-
-	// search
-	si := textinput.New()
-	si.Placeholder = "Fuzzy suchen…"
-	si.CharLimit = 200
-	si.Width = 40
-	m.searchInput = si
-	m.query = ""
-	m.filteredIdx = nil
-	m.minCoverage = 0.6 // strenger -> höher (z.B. 0.7)
-	m.maxSpread = 40    // strenger -> kleiner (z.B. 25)
-	m.maxResults = 200  // UI ruhig halten
-
-	// prefix
-	pi := textinput.New()
-	pi.Placeholder = "Slug-Prefix (z.B. a__portal/de)"
-	pi.CharLimit = 200
-	pi.Width = 40
-	m.prefixInput = pi
-	m.prefix = ""
-
-	return m
-}
-
-func (m model) Init() tea.Cmd {
-	return nil
-}
-
 // ---------- Update ----------
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
@@ -459,7 +332,7 @@ type scanMsg struct {
 	err error
 }
 
-func (m model) validateTokenCmd() tea.Cmd {
+func (m Model) validateTokenCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -472,7 +345,7 @@ func (m model) validateTokenCmd() tea.Cmd {
 	}
 }
 
-func (m model) scanStoriesCmd() tea.Cmd {
+func (m Model) scanStoriesCmd() tea.Cmd {
 	srcID, tgtID := 0, 0
 	if m.sourceSpace != nil {
 		srcID = m.sourceSpace.ID
@@ -500,168 +373,6 @@ func (m model) scanStoriesCmd() tea.Cmd {
 	}
 }
 
-func (m model) View() string {
-	if m.state == stateQuit {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Storyblok Sync (TUI)"))
-	b.WriteString("\n")
-	b.WriteString(dividerStyle.Render(strings.Repeat("─", max(10, m.width-2))))
-	b.WriteString("\n\n")
-
-	switch m.state {
-
-	case stateWelcome:
-		b.WriteString("Willkommen! Diese App hilft dir, Stories zwischen Spaces zu synchronisieren.\n\n")
-		if m.cfg.Token != "" {
-			b.WriteString(okStyle.Render("✓ Token vorhanden\n"))
-		} else {
-			b.WriteString(warnStyle.Render("! Kein Token gefunden (~/.sbrc oder SB_TOKEN)\n"))
-		}
-		if m.hasSBRC {
-			b.WriteString(subtleStyle.Render(fmt.Sprintf("Konfiguration gefunden: %s\n", m.sbrcPath)))
-		}
-		b.WriteString(subtleStyle.Render(m.statusMsg) + "\n\n")
-		b.WriteString(helpStyle.Render("Tasten: Enter weiter  |  q beenden"))
-
-	case stateTokenPrompt:
-		b.WriteString("Bitte gib deinen Storyblok Token ein:\n\n")
-		b.WriteString(m.ti.View() + "\n\n")
-		if m.validateErr != nil {
-			b.WriteString(warnStyle.Render(m.validateErr.Error()) + "\n\n")
-		}
-		b.WriteString(helpStyle.Render("Enter bestätigen  |  Esc zurück"))
-
-	case stateValidating:
-		b.WriteString("Validiere Token…\n\n")
-		b.WriteString(helpStyle.Render("q abbrechen"))
-
-	case stateSpaceSelect:
-		if m.selectingSource {
-			b.WriteString("Spaces (wähle **Source**):\n\n")
-		} else {
-			b.WriteString("Spaces (wähle **Target**):\n\n")
-			if m.sourceSpace != nil {
-				b.WriteString(subtleStyle.Render(fmt.Sprintf("Source: %s (%d)\n\n", m.sourceSpace.Name, m.sourceSpace.ID)))
-			}
-		}
-		if len(m.spaces) == 0 {
-			b.WriteString(warnStyle.Render("Keine Spaces gefunden.\n"))
-		} else {
-			for i, sp := range m.spaces {
-				cursor := "  "
-				if i == m.selectedIndex {
-					cursor = "> "
-				}
-				line := fmt.Sprintf("%s%s (id %d)", cursor, sp.Name, sp.ID)
-				if i == m.selectedIndex {
-					line = focusStyle.Render(line)
-				}
-				b.WriteString(line + "\n")
-			}
-		}
-		b.WriteString("\n" + helpStyle.Render("j/k bewegen  |  Enter wählen  |  q beenden"))
-
-	case stateScanning:
-		src := "(none)"
-		tgt := "(none)"
-		if m.sourceSpace != nil {
-			src = fmt.Sprintf("%s (%d)", m.sourceSpace.Name, m.sourceSpace.ID)
-		}
-		if m.targetSpace != nil {
-			tgt = fmt.Sprintf("%s (%d)", m.targetSpace.Name, m.targetSpace.ID)
-		}
-		b.WriteString("Scanning…\n\n")
-		b.WriteString(fmt.Sprintf("Source: %s\nTarget: %s\n\n", src, tgt))
-		b.WriteString(subtleStyle.Render("Hole Stories (flach)…") + "\n\n")
-		b.WriteString(helpStyle.Render("q beenden"))
-
-	case stateBrowseList:
-		srcCount := len(m.storiesSource)
-		tgtCount := len(m.storiesTarget)
-		b.WriteString(fmt.Sprintf("Browse (Source Stories) – %d Items  |  Target: %d\n\n", srcCount, tgtCount))
-		if srcCount == 0 {
-			b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.\n"))
-		} else {
-			// sichtbaren Bereich bestimmen
-			total := m.itemsLen()
-			start := m.listOffset
-			end := min(start+m.listViewport, total)
-
-			// Suchleiste (falls aktiv oder Query gesetzt)
-			label := "Suche: "
-			if m.searching {
-				b.WriteString(label + m.searchInput.View() + "  |  ")
-			} else {
-				b.WriteString(label + m.query + "  |  ")
-			}
-
-			if m.prefixing {
-				b.WriteString("Prefix: " + m.prefixInput.View() + "\n\n")
-			} else {
-				b.WriteString(subtleStyle.Render("Prefix: "+m.prefix) + "\n\n")
-			}
-
-			if total == 0 {
-				b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).\n"))
-			} else {
-				for i := start; i < end; i++ {
-					st := m.itemAt(i)
-					cursor := "  "
-					if i == m.listIndex {
-						cursor = "▶ "
-					}
-
-					mark := "[ ]"
-					if m.selected[st.FullSlug] {
-						mark = "[x]"
-					}
-
-					line := fmt.Sprintf("%s%s  %s", cursor, mark, displayStory(st))
-					if i == m.listIndex {
-						line = selStyle.Render(line)
-					}
-					b.WriteString(line + "\n")
-				}
-			}
-
-			shown := 0
-			if end > start {
-				shown = end - start
-			}
-
-			// Anzeige: Filterstatus + Range
-			suffix := ""
-			if m.filteredIdx != nil {
-				suffix = fmt.Sprintf("  |  gefiltert: %d", total)
-			}
-			b.WriteString("\n")
-			b.WriteString(subtleStyle.Render(
-				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
-					start+1, end, total, shown, suffix),
-			))
-			b.WriteString("\n")
-
-		}
-		// Footer / Hilfe
-		checked := 0
-		for _, v := range m.selected {
-			if v {
-				checked++
-			}
-		}
-		b.WriteString("\n")
-		b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-		b.WriteString(helpStyle.Render("j/k bewegen  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden\n"))
-		b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
-
-	}
-
-	b.WriteString("\n")
-	return b.String()
-}
-
 // ------ utils -------
 
 func containsSpaceID(spacesSlice []sb.Space, spaceID string) (sb.Space, bool) {
@@ -673,27 +384,11 @@ func containsSpaceID(spacesSlice []sb.Space, spaceID string) (sb.Space, bool) {
 	return sb.Space{}, false
 }
 
-func displayStory(st sb.Story) string {
-	name := st.Name
-	if name == "" {
-		name = st.Slug
-	}
-	return fmt.Sprintf("%s  (%s)", name, st.FullSlug)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func (m *model) ensureCursorVisible() {
+func (m *Model) ensureCursorVisible() {
 	if m.listViewport <= 0 {
 		m.listViewport = 10
 	}
 
-	// clamp index gegen aktuelle Länge
 	n := m.itemsLen()
 	if n == 0 {
 		m.listIndex = 0
@@ -707,7 +402,6 @@ func (m *model) ensureCursorVisible() {
 		m.listIndex = n - 1
 	}
 
-	// scroll up/down
 	if m.listIndex < m.listOffset {
 		m.listOffset = m.listIndex
 	}
@@ -715,7 +409,6 @@ func (m *model) ensureCursorVisible() {
 		m.listOffset = m.listIndex - m.listViewport + 1
 	}
 
-	// clamp offset
 	maxStart := n - m.listViewport
 	if maxStart < 0 {
 		maxStart = 0
@@ -728,28 +421,24 @@ func (m *model) ensureCursorVisible() {
 	}
 }
 
-// Gesamtlänge der aktuell sichtbaren Items (gefiltert oder voll)
-func (m *model) itemsLen() int {
+func (m *Model) itemsLen() int {
 	if m.filteredIdx != nil {
 		return len(m.filteredIdx)
 	}
 	return len(m.storiesSource)
 }
 
-// original Story für einen sichtbaren Index holen
-func (m *model) itemAt(visIdx int) sb.Story {
+func (m *Model) itemAt(visIdx int) sb.Story {
 	if m.filteredIdx != nil {
 		return m.storiesSource[m.filteredIdx[visIdx]]
 	}
 	return m.storiesSource[visIdx]
 }
 
-// Fuzzy anwenden (Name, Slug, FullSlug)
-func (m *model) applyFilter() {
+func (m *Model) applyFilter() {
 	q := strings.TrimSpace(strings.ToLower(m.query))
 	pref := strings.TrimSpace(strings.ToLower(m.prefix))
 
-	// Kandidaten-Strings vorbereiten
 	base := make([]string, len(m.storiesSource))
 	for i, st := range m.storiesSource {
 		name := st.Name
@@ -759,7 +448,6 @@ func (m *model) applyFilter() {
 		base[i] = strings.ToLower(name + "  " + st.Slug + "  " + st.FullSlug)
 	}
 
-	// 1) Prefix auf FullSlug anwenden → Indexmenge vorfiltern
 	idx := make([]int, 0, len(m.storiesSource))
 	if pref != "" {
 		for i, st := range m.storiesSource {
@@ -768,14 +456,12 @@ func (m *model) applyFilter() {
 			}
 		}
 	} else {
-		// keine Prefix-Einschränkung → alle Indizes
 		idx = idx[:0]
 		for i := range m.storiesSource {
 			idx = append(idx, i)
 		}
 	}
 
-	// Ohne Query? Dann nur Prefix anwenden.
 	if q == "" {
 		m.filteredIdx = append(m.filteredIdx[:0], idx...)
 		m.listIndex, m.listOffset = 0, 0
@@ -783,7 +469,6 @@ func (m *model) applyFilter() {
 		return
 	}
 
-	// 2) Substring pass auf vorgefiltertem Set
 	sub := make([]int, 0, min(m.maxResults, len(idx)))
 	for _, i := range idx {
 		if strings.Contains(base[i], q) {
@@ -800,8 +485,6 @@ func (m *model) applyFilter() {
 		return
 	}
 
-	// 3) Fuzzy-Fallback auf vorgefiltertem Set
-	//    → baue Teilmenge der Strings
 	subset := make([]string, len(idx))
 	mapBack := make([]int, len(idx))
 	for j, i := range idx {
@@ -838,7 +521,6 @@ func matchCoverage(q string, m fuzzy.Match) float64 {
 	if len(q) == 0 {
 		return 1
 	}
-	// m.MatchedIndexes Länge = wie viele Query-Zeichen gematcht wurden
 	return float64(len(m.MatchedIndexes)) / float64(len(q))
 }
 
@@ -849,14 +531,9 @@ func matchSpread(m fuzzy.Match) int {
 	return m.MatchedIndexes[len(m.MatchedIndexes)-1] - m.MatchedIndexes[0]
 }
 
-// --- main ---
-func main() {
-	if _, err := tea.NewProgram(
-		initialModel(),
-		tea.WithAltScreen(),
-		// optional: tea.WithMouseCellMotion(),
-	).Run(); err != nil {
-		fmt.Println("error:", err)
-		os.Exit(1)
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
+	return b
 }
