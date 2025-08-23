@@ -1,24 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/sb"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
-
-// func main() {
-// 	token, err := config.GetSbRc()
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		return
-// 	}
-// 	client := sb.NewStoryblokClient(token)
-// 	client.ListSpaces()
-// }
 
 // --- UI Styles ---
 var (
@@ -35,31 +29,46 @@ type state int
 
 const (
 	stateWelcome state = iota
+	stateTokenPrompt
+	stateValidating
 	stateQuit
 )
 
 type model struct {
 	state         state
+	cfg           config.Config
 	hasSBRC       bool
 	sbrcPath      string
 	statusMsg     string
 	width, height int
+
+	// token input
+	ti          textinput.Model
+	validateErr error
+	spacesCount int
 }
 
 func initialModel() model {
-	p := config.TOKEN_PATH
-	_, err := os.Stat(p)
-	has := err == nil
-	status := "Keine ~/.sbrc gefunden – du kannst gleich einen Token eingeben."
-	if has {
-		status = "Gefundene ~/.sbrc – wir können daraus lesen."
+	p := config.DefaultPath()
+	cfg, err := config.Load(p)
+	hasFile := err == nil
+	m := model{
+		state: stateWelcome,
+		cfg:   cfg, hasSBRC: hasFile, sbrcPath: p,
 	}
-	return model{
-		state:     stateWelcome,
-		hasSBRC:   has,
-		sbrcPath:  p,
-		statusMsg: status,
+	if cfg.Token == "" {
+		m.statusMsg = "Keine ~/.sbrc oder kein Token – drück Enter für Token-Eingabe."
+	} else {
+		m.statusMsg = "Token gefunden – Enter zum Validieren, q zum Beenden."
 	}
+	// textinput
+	ti := textinput.New()
+	ti.Placeholder = "Storyblok Personal Access Token"
+	ti.Focus()
+	ti.EchoMode = textinput.EchoPassword
+	ti.CharLimit = 200
+	m.ti = ti
+	return m
 }
 
 func (m model) Init() tea.Cmd {
@@ -73,20 +82,81 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		key := strings.ToLower(msg.String())
-		switch key {
-		case "ctrl+c", "q":
-			m.state = stateQuit
-			return m, tea.Quit
-		case "enter", " ":
-			// Hier würden wir in den nächsten Screen wechseln (Token-Prompt/SpaceSelect)
-			// Für v0: nur kleine Rückmeldung
-			m.statusMsg = "Okay – nächster Schritt wäre Token-Input oder Space-Select…"
-			return m, nil
+		switch m.state {
+
+		case stateWelcome:
+			switch key {
+			case "ctrl+c", "q":
+				return m, tea.Quit
+			case "enter":
+				if m.cfg.Token == "" {
+					m.state = stateTokenPrompt
+				} else {
+					m.state = stateValidating
+					return m, m.validateTokenCmd()
+				}
+			}
+
+		case stateTokenPrompt:
+			switch key {
+			case "esc":
+				m.state = stateWelcome
+				return m, nil
+			case "enter":
+				m.cfg.Token = strings.TrimSpace(m.ti.Value())
+				if m.cfg.Token == "" {
+					m.statusMsg = "Token leer."
+					return m, nil
+				}
+				m.state = stateValidating
+				return m, m.validateTokenCmd()
+			}
+
+			// Delegiere an textinput
+			var cmd tea.Cmd
+			m.ti, cmd = m.ti.Update(msg)
+			return m, cmd
+		case stateValidating:
+			if key == "q" {
+				return m, tea.Quit
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+	case validateMsg:
+		if msg.err != nil {
+			m.validateErr = msg.err
+			m.statusMsg = "Validierung fehlgeschlagen: " + msg.err.Error()
+			m.state = stateTokenPrompt
+			return m, nil
+		}
+
+		m.spacesCount = msg.count
+		m.statusMsg = fmt.Sprintf("Token ok. %d Spaces gefunden. (Enter für nächsten Schritt)", m.spacesCount)
+		m.state = stateWelcome
+		// Optional: config.Save(m.sbrcPath, m.cfg)
+		return m, nil
 	}
 	return m, nil
+}
+
+// async cmd + msg
+type validateMsg struct {
+	count int
+	err   error
+}
+
+func (m model) validateTokenCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		c := sb.New(m.cfg.Token)
+		spaces, err := c.ListSpaces(ctx)
+		if err != nil {
+			return validateMsg{err: err}
+		}
+		return validateMsg{count: len(spaces), err: nil}
+	}
 }
 
 // --- View ---
@@ -94,29 +164,34 @@ func (m model) View() string {
 	if m.state == stateQuit {
 		return ""
 	}
-
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Storyblok Sync (TUI)"))
 	b.WriteString("\n")
 	b.WriteString(dividerStyle.Render(strings.Repeat("─", max(10, m.width-2))))
 	b.WriteString("\n\n")
 
-	b.WriteString("Willkommen! Diese App hilft dir, Stories zwischen Spaces zu synchronisieren.\n\n")
-
-	if m.hasSBRC {
-		b.WriteString(okStyle.Render("✓ "))
-		b.WriteString(fmt.Sprintf("Konfiguration gefunden: %s\n", m.sbrcPath))
-	} else {
-		b.WriteString(warnStyle.Render("! "))
-		b.WriteString("Keine Konfiguration gefunden (~/.sbrc)\n")
+	switch m.state {
+	case stateWelcome:
+		b.WriteString("Willkommen! Diese App hilft dir, Stories zwischen Spaces zu synchronisieren.\n\n")
+		if m.cfg.Token != "" {
+			b.WriteString(okStyle.Render("✓ Token vorhanden\n"))
+		} else {
+			b.WriteString(warnStyle.Render("! Kein Token gefunden\n"))
+		}
+		b.WriteString(subtleStyle.Render(m.statusMsg) + "\n\n")
+		b.WriteString(helpStyle.Render("Tasten: Enter weiter  |  q beenden"))
+	case stateTokenPrompt:
+		b.WriteString("Bitte gib deinen Storyblok Token ein:\n\n")
+		b.WriteString(m.ti.View() + "\n\n")
+		if m.validateErr != nil {
+			b.WriteString(warnStyle.Render(m.validateErr.Error()) + "\n\n")
+		}
+		b.WriteString(helpStyle.Render("Enter bestätigen  |  Esc zurück"))
+	case stateValidating:
+		b.WriteString("Validiere Token…\n\n")
+		b.WriteString(helpStyle.Render("q abbrechen"))
 	}
-	b.WriteString(subtleStyle.Render(m.statusMsg))
-	b.WriteString("\n\n")
-
-	b.WriteString(helpStyle.Render("Tasten: "))
-	b.WriteString("⏎ weiter  |  q beenden")
 	b.WriteString("\n")
-
 	return b.String()
 }
 
