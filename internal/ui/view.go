@@ -6,7 +6,8 @@ import (
 
 	"storyblok-sync/internal/sb"
 
-	"github.com/charmbracelet/lipgloss/tree"
+	"github.com/charmbracelet/lipgloss"
+	tree "github.com/charmbracelet/lipgloss/tree"
 )
 
 func (m Model) View() string {
@@ -187,16 +188,25 @@ func (m Model) viewBrowseList() string {
 				if i >= len(lines) {
 					break
 				}
-				line := lines[i]
-				switch {
-				case i == m.selection.listIndex:
-					line = cursorBarStyle.Render(" ") + cursorLineStyle.Render(line)
-				case m.selection.selected[st.FullSlug]:
-					line = markBarStyle.Render(" ") + line
-				default:
-					line = " " + line
+
+				content := lines[i]
+				if i == m.selection.listIndex {
+					content = cursorLineStyle.Width(m.width - 2).Render(content)
+				} else {
+					content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
 				}
-				lines[i] = line
+
+				cursorCell := " "
+				if i == m.selection.listIndex {
+					cursorCell = cursorBarStyle.Render(" ")
+				}
+
+				markCell := " "
+				if m.selection.selected[st.FullSlug] {
+					markCell = markBarStyle.Render(" ")
+				}
+
+				lines[i] = cursorCell + markCell + content
 			}
 
 			start := m.selection.listOffset
