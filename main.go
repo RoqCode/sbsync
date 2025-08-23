@@ -23,6 +23,7 @@ var (
 	helpStyle    = lipgloss.NewStyle().Faint(true)
 	dividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	focusStyle   = lipgloss.NewStyle().Bold(true)
+	selStyle     = lipgloss.NewStyle().Reverse(true)
 )
 
 // --- Model / State ---
@@ -34,6 +35,7 @@ const (
 	stateValidating
 	stateSpaceSelect
 	stateScanning
+	stateBrowseList
 	stateQuit
 )
 
@@ -55,6 +57,16 @@ type model struct {
 	selectingSource bool
 	sourceSpace     *sb.Space
 	targetSpace     *sb.Space
+
+	// scan results
+	storiesSource []sb.Story
+	storiesTarget []sb.Story
+
+	// browse list (source)
+	listIndex    int
+	listOffset   int
+	listViewport int
+	selected     map[string]bool // key: FullSlug (oder Full Path)
 }
 
 func initialModel() model {
@@ -83,6 +95,7 @@ func initialModel() model {
 	ti.EchoMode = textinput.EchoPassword
 	ti.CharLimit = 200
 	m.ti = ti
+	m.selected = make(map[string]bool)
 
 	return m
 }
@@ -90,9 +103,6 @@ func initialModel() model {
 func (m model) Init() tea.Cmd {
 	return nil
 }
-
-// --- Update ---
-type keyMsg struct{ rune rune } // simple wrapper, wir nutzen tea.KeyMsg direkt
 
 // ---------- Update ----------
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -175,7 +185,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.targetSpace = &chosen
 					m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Scanne jetzt Stories…", chosen.Name, chosen.ID)
 					m.state = stateScanning
-					// hier später: Cmd für Scan starten
+					return m, m.scanStoriesCmd()
 				}
 			}
 
@@ -184,10 +194,68 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "q" {
 				return m, tea.Quit
 			}
+
+		case stateBrowseList:
+			switch key {
+			case "ctrl+c", "q":
+				return m, tea.Quit
+			case "j", "down":
+				if m.listIndex < len(m.storiesSource)-1 {
+					m.listIndex++
+					m.ensureCursorVisible()
+				}
+			case "k", "up":
+				if m.listIndex > 0 {
+					m.listIndex--
+					m.ensureCursorVisible()
+				}
+			case "ctrl+f", "pgdown":
+				if len(m.storiesSource) > 0 {
+					m.listIndex += m.listViewport
+					if m.listIndex > len(m.storiesSource)-1 {
+						m.listIndex = len(m.storiesSource) - 1
+					}
+					m.ensureCursorVisible()
+				}
+			case "ctrl+b", "pgup":
+				m.listIndex -= m.listViewport
+				if m.listIndex < 0 {
+					m.listIndex = 0
+				}
+				m.ensureCursorVisible()
+			case "h", "left":
+				// später für Tabs/Filter – aktuell no-op
+			case "l", "right":
+				// später für Tabs/Filter – aktuell no-op
+			case " ":
+				if len(m.storiesSource) == 0 {
+					return m, nil
+				}
+				if m.selected == nil {
+					m.selected = make(map[string]bool)
+				}
+				st := m.storiesSource[m.listIndex]
+				m.selected[st.FullSlug] = !m.selected[st.FullSlug]
+			case "r":
+				// Rescan
+				m.state = stateScanning
+				m.statusMsg = "Rescan…"
+				return m, m.scanStoriesCmd()
+			case "s":
+				// Weiter zu Preflight in T6 – hier nur Platzhalter
+				m.statusMsg = "Preflight (T6) folgt …"
+			}
 		}
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		// grobe Reserve für Header, Divider, Titel, Footer/Hilfe
+		const chrome = 8
+		vp := m.height - chrome
+		if vp < 3 {
+			vp = 3
+		}
+		m.listViewport = vp
 
 	case validateMsg:
 		if msg.err != nil {
@@ -196,15 +264,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateTokenPrompt
 			return m, nil
 		}
-		// Token ok
 		m.spaces = msg.spaces
 		m.statusMsg = fmt.Sprintf("Token ok. %d Spaces gefunden.", len(m.spaces))
 		m.state = stateSpaceSelect
 		m.selectingSource = true
 		m.selectedIndex = 0
+		return m, nil
 
-		// Optional: direkt speichern
-		// _ = config.Save(m.sbrcPath, m.cfg)
+	case scanMsg:
+		if msg.err != nil {
+			m.statusMsg = "Scan-Fehler: " + msg.err.Error()
+			m.state = stateSpaceSelect // zurück; du kannst auch einen Fehler-Screen bauen
+			return m, nil
+		}
+		m.storiesSource = msg.src
+		m.storiesTarget = msg.tgt
+		m.listIndex = 0
+		m.listOffset = 0
+		if m.selected == nil {
+			m.selected = make(map[string]bool)
+		} else {
+			// optional: Selektion leeren, da sich die Liste geändert hat
+			clear(m.selected)
+		}
+		m.statusMsg = fmt.Sprintf("Scan ok. Source: %d Stories, Target: %d Stories.", len(m.storiesSource), len(m.storiesTarget))
+		m.state = stateBrowseList
 		return m, nil
 	}
 
@@ -215,6 +299,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 type validateMsg struct {
 	spaces []sb.Space
 	err    error
+}
+
+type scanMsg struct {
+	src []sb.Story
+	tgt []sb.Story
+	err error
 }
 
 func (m model) validateTokenCmd() tea.Cmd {
@@ -230,12 +320,38 @@ func (m model) validateTokenCmd() tea.Cmd {
 	}
 }
 
-// ---------- View ----------
+func (m model) scanStoriesCmd() tea.Cmd {
+	srcID, tgtID := 0, 0
+	if m.sourceSpace != nil {
+		srcID = m.sourceSpace.ID
+	}
+	if m.targetSpace != nil {
+		tgtID = m.targetSpace.ID
+	}
+	token := m.cfg.Token
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		c := sb.New(token)
+
+		// Parallel wäre nice-to-have, hier sequentiell für Klarheit
+		src, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: srcID, PerPage: 50})
+		if err != nil {
+			return scanMsg{err: fmt.Errorf("source scan: %w", err)}
+		}
+		tgt, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: tgtID, PerPage: 50})
+		if err != nil {
+			return scanMsg{err: fmt.Errorf("target scan: %w", err)}
+		}
+		return scanMsg{src: src, tgt: tgt, err: nil}
+	}
+}
+
 func (m model) View() string {
 	if m.state == stateQuit {
 		return ""
 	}
-
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Storyblok Sync (TUI)"))
 	b.WriteString("\n")
@@ -306,12 +422,71 @@ func (m model) View() string {
 		}
 		b.WriteString("Scanning…\n\n")
 		b.WriteString(fmt.Sprintf("Source: %s\nTarget: %s\n\n", src, tgt))
-		b.WriteString(subtleStyle.Render("Hier startet als nächstes der Stories-Scan…") + "\n\n")
+		b.WriteString(subtleStyle.Render("Hole Stories (flach)…") + "\n\n")
 		b.WriteString(helpStyle.Render("q beenden"))
+
+	case stateBrowseList:
+		srcCount := len(m.storiesSource)
+		tgtCount := len(m.storiesTarget)
+		b.WriteString(fmt.Sprintf("Browse (Source Stories) – %d Items  |  Target: %d\n\n", srcCount, tgtCount))
+		if srcCount == 0 {
+			b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.\n"))
+		} else {
+			start := m.listOffset
+			end := min(start+m.listViewport, len(m.storiesSource))
+
+			for i := start; i < end; i++ {
+				st := m.storiesSource[i]
+				cursor := "  "
+				if i == m.listIndex {
+					cursor = "▶ "
+				}
+				mark := "[ ]"
+				if m.selected[st.FullSlug] {
+					mark = "[x]"
+				}
+				line := fmt.Sprintf("%s%s  %s", cursor, mark, displayStory(st))
+				if i == m.listIndex {
+					line = selStyle.Render(line)
+				}
+				b.WriteString(line + "\n")
+			}
+
+			// Footer (Range/Total)
+			shown := 0
+			if end > start {
+				shown = end - start
+			}
+			b.WriteString("\n")
+			b.WriteString(subtleStyle.Render(
+				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)",
+					start+1, end, len(m.storiesSource), shown),
+			))
+			b.WriteString("\n")
+		}
+		// Footer / Hilfe
+		checked := 0
+		for _, v := range m.selected {
+			if v {
+				checked++
+			}
+		}
+		b.WriteString("\n")
+		b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
+		b.WriteString(helpStyle.Render("j/k bewegen  |  Space markieren  |  r rescan  |  s preflight (T6)  |  q beenden"))
+
 	}
 
 	b.WriteString("\n")
 	return b.String()
+}
+
+func displayStory(st sb.Story) string {
+	name := st.Name
+	if name == "" {
+		name = st.Slug
+	}
+	return fmt.Sprintf("%s  (%s)", name, st.FullSlug)
 }
 
 func max(a, b int) int {
@@ -319,6 +494,31 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (m *model) ensureCursorVisible() {
+	if m.listViewport <= 0 {
+		m.listViewport = 10
+	}
+	// nach oben scrollen
+	if m.listIndex < m.listOffset {
+		m.listOffset = m.listIndex
+	}
+	// nach unten scrollen
+	if m.listIndex >= m.listOffset+m.listViewport {
+		m.listOffset = m.listIndex - m.listViewport + 1
+	}
+	// Offset clampen, damit wir nicht über das Ende hinausragen
+	maxStart := len(m.storiesSource) - m.listViewport
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if m.listOffset > maxStart {
+		m.listOffset = maxStart
+	}
+	if m.listOffset < 0 {
+		m.listOffset = 0
+	}
 }
 
 // --- main ---
