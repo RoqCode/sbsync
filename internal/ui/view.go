@@ -192,22 +192,33 @@ func (m Model) viewBrowseList() string {
 				tr.Child(node)
 			}
 
-			b.WriteString(tr.String() + "\n")
-		}
+			// Begrenze Ausgabe auf sichtbaren Bereich
+			lines := strings.Split(tr.String(), "\n")
+			start := m.selection.listOffset
+			if start > len(lines) {
+				start = len(lines)
+			}
+			end := start + m.selection.listViewport
+			if end > len(lines) {
+				end = len(lines)
+			}
+			b.WriteString(strings.Join(lines[start:end], "\n"))
+			b.WriteString("\n")
 
-		shown := total
+			shown := end - start
 
-		// Anzeige: Filterstatus + Range
-		suffix := ""
-		if m.search.filteredIdx != nil {
-			suffix = fmt.Sprintf("  |  gefiltert: %d", total)
+			// Anzeige: Filterstatus + Range
+			suffix := ""
+			if m.search.filteredIdx != nil {
+				suffix = fmt.Sprintf("  |  gefiltert: %d", total)
+			}
+			b.WriteString("\n")
+			b.WriteString(subtleStyle.Render(
+				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
+					start+1, end, total, shown, suffix),
+			))
+			b.WriteString("\n")
 		}
-		b.WriteString("\n")
-		b.WriteString(subtleStyle.Render(
-			fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
-				1, total, total, shown, suffix),
-		))
-		b.WriteString("\n")
 	}
 	// Footer / Hilfe
 	checked := 0
