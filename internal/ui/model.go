@@ -34,6 +34,33 @@ const (
 	stateQuit
 )
 
+type SelectionState struct {
+	// browse list (source)
+	listIndex    int
+	listOffset   int
+	listViewport int
+	selected     map[string]bool // key: FullSlug (oder Full Path)
+}
+
+type FilterState struct {
+	// prefix-filter
+	prefixing   bool
+	prefixInput textinput.Model
+	prefix      string // z.B. "a__portal/de"
+}
+
+type SearchState struct {
+	// searching
+	searching   bool
+	searchInput textinput.Model
+	query       string // aktueller Suchstring
+	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
+	// search tuning
+	minCoverage float64 // Anteil der Query, der gematcht wurde (0.0–1.0)
+	maxSpread   int     // max. Abstand zwischen 1. und letzter Match-Position
+	maxResults  int     // harte Obergrenze für Ergebnisliste
+}
+
 type Model struct {
 	state         state
 	cfg           config.Config
@@ -57,25 +84,9 @@ type Model struct {
 	storiesSource []sb.Story
 	storiesTarget []sb.Story
 
-	// browse list (source)
-	listIndex    int
-	listOffset   int
-	listViewport int
-	selected     map[string]bool // key: FullSlug (oder Full Path)
-
-	// searching
-	searching   bool
-	searchInput textinput.Model
-	query       string // aktueller Suchstring
-	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
-	// search tuning
-	minCoverage float64 // Anteil der Query, der gematcht wurde (0.0–1.0)
-	maxSpread   int     // max. Abstand zwischen 1. und letzter Match-Position
-	maxResults  int     // harte Obergrenze für Ergebnisliste
-	// prefix-filter
-	prefixing   bool
-	prefixInput textinput.Model
-	prefix      string // z.B. "a__portal/de"
+	selection SelectionState
+	filter    FilterState
+	search    SearchState
 }
 
 func InitialModel() Model {
@@ -104,27 +115,27 @@ func InitialModel() Model {
 	ti.EchoMode = textinput.EchoPassword
 	ti.CharLimit = 200
 	m.ti = ti
-	m.selected = make(map[string]bool)
+	m.selection.selected = make(map[string]bool)
 
 	// search
 	si := textinput.New()
 	si.Placeholder = "Fuzzy suchen…"
 	si.CharLimit = 200
 	si.Width = 40
-	m.searchInput = si
-	m.query = ""
-	m.filteredIdx = nil
-	m.minCoverage = 0.6 // strenger -> höher (z.B. 0.7)
-	m.maxSpread = 40    // strenger -> kleiner (z.B. 25)
-	m.maxResults = 200  // UI ruhig halten
+	m.search.searchInput = si
+	m.search.query = ""
+	m.search.filteredIdx = nil
+	m.search.minCoverage = 0.6 // strenger -> höher (z.B. 0.7)
+	m.search.maxSpread = 40    // strenger -> kleiner (z.B. 25)
+	m.search.maxResults = 200  // UI ruhig halten
 
 	// prefix
 	pi := textinput.New()
 	pi.Placeholder = "Slug-Prefix (z.B. a__portal/de)"
 	pi.CharLimit = 200
 	pi.Width = 40
-	m.prefixInput = pi
-	m.prefix = ""
+	m.filter.prefixInput = pi
+	m.filter.prefix = ""
 
 	return m
 }

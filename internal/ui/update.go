@@ -104,70 +104,70 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case stateBrowseList:
-			if m.prefixing {
+			if m.filter.prefixing {
 				switch key {
 				case "esc":
-					m.prefixInput.Blur()
-					if strings.TrimSpace(m.prefixInput.Value()) == "" {
-						m.prefix = ""
+					m.filter.prefixInput.Blur()
+					if strings.TrimSpace(m.filter.prefixInput.Value()) == "" {
+						m.filter.prefix = ""
 					}
-					m.prefixing = false
+					m.filter.prefixing = false
 					m.applyFilter()
 					return m, nil
 				case "enter":
-					m.prefix = strings.TrimSpace(m.prefixInput.Value())
-					m.prefixing = false
-					m.prefixInput.Blur()
+					m.filter.prefix = strings.TrimSpace(m.filter.prefixInput.Value())
+					m.filter.prefixing = false
+					m.filter.prefixInput.Blur()
 					m.applyFilter()
 					return m, nil
 				case "ctrl+c", "q":
 					return m, tea.Quit
 				default:
 					var cmd tea.Cmd
-					m.prefixInput, cmd = m.prefixInput.Update(msg)
+					m.filter.prefixInput, cmd = m.filter.prefixInput.Update(msg)
 					return m, cmd
 				}
 			}
 
-			if m.searching {
+			if m.search.searching {
 				switch key {
 				case "esc":
 					// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
-					if strings.TrimSpace(m.query) == "" {
-						m.searching = false
-						m.searchInput.Blur()
+					if strings.TrimSpace(m.search.query) == "" {
+						m.search.searching = false
+						m.search.searchInput.Blur()
 						return m, nil
 					}
-					m.query = ""
-					m.searchInput.SetValue("")
+					m.search.query = ""
+					m.search.searchInput.SetValue("")
 					m.applyFilter()
 					return m, nil
 				case "enter":
 					// Enter: Suche schließen, Ergebnis bleibt aktiv
-					m.searching = false
-					m.searchInput.Blur()
+					m.search.searching = false
+					m.search.searchInput.Blur()
 					return m, nil
 					// in stateBrowseList:
 				case "+":
-					m.minCoverage += 0.05
-					if m.minCoverage > 0.95 {
-						m.minCoverage = 0.95
+					m.search.minCoverage += 0.05
+					if m.search.minCoverage > 0.95 {
+						m.search.minCoverage = 0.95
 					}
 					m.applyFilter()
 				case "-":
-					m.minCoverage -= 0.05
-					if m.minCoverage < 0.3 {
-						m.minCoverage = 0.3
+					m.search.minCoverage -= 0.05
+					if m.search.minCoverage < 0.3 {
+						m.search.minCoverage = 0.3
 					}
 					m.applyFilter()
 				case "ctrl+c", "q":
 					return m, tea.Quit
 				default:
 					var cmd tea.Cmd
-					m.searchInput, cmd = m.searchInput.Update(msg)
-					newQ := m.searchInput.Value()
-					if newQ != m.query {
-						m.query = newQ
+					m.search.searchInput, cmd = m.search.searchInput.Update(msg)
+					newQ := m.search.searchInput.Value()
+					if newQ != m.search.query {
+						m.search.query = newQ
 						m.applyFilter()
 					}
 					return m, cmd
@@ -179,74 +179,74 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 				// Suche togglen
 			case "f":
-				m.searching = true
-				m.searchInput.SetValue(m.query)
-				m.searchInput.CursorEnd()
-				m.searchInput.Focus()
+				m.search.searching = true
+				m.search.searchInput.SetValue(m.search.query)
+				m.search.searchInput.CursorEnd()
+				m.search.searchInput.Focus()
 				return m, nil
 			case "F":
-				m.query = ""
-				m.searchInput.SetValue("")
+				m.search.query = ""
+				m.search.searchInput.SetValue("")
 				m.applyFilter()
 				return m, nil
 
 			case "p": // Prefix bearbeiten
-				m.prefixing = true
-				m.prefixInput.SetValue(m.prefix)
-				m.prefixInput.CursorEnd()
-				m.prefixInput.Focus()
+				m.filter.prefixing = true
+				m.filter.prefixInput.SetValue(m.filter.prefix)
+				m.filter.prefixInput.CursorEnd()
+				m.filter.prefixInput.Focus()
 				return m, nil
 			case "P": // Prefix schnell löschen
-				m.prefix = ""
-				m.prefixInput.SetValue("")
+				m.filter.prefix = ""
+				m.filter.prefixInput.SetValue("")
 				m.applyFilter()
 				return m, nil
 
 			case "c":
-				m.query = ""
-				m.prefix = ""
-				m.searchInput.SetValue("")
+				m.search.query = ""
+				m.filter.prefix = ""
+				m.search.searchInput.SetValue("")
 				m.applyFilter()
-				m.prefixInput.SetValue("")
+				m.filter.prefixInput.SetValue("")
 				m.applyFilter()
 				return m, nil
 
-			// Navigation mit aktueller Länge
+				// Navigation mit aktueller Länge
 			case "j", "down":
-				if m.listIndex < m.itemsLen()-1 {
-					m.listIndex++
+				if m.selection.listIndex < m.itemsLen()-1 {
+					m.selection.listIndex++
 					m.ensureCursorVisible()
 				}
 			case "k", "up":
-				if m.listIndex > 0 {
-					m.listIndex--
+				if m.selection.listIndex > 0 {
+					m.selection.listIndex--
 					m.ensureCursorVisible()
 				}
 			case "ctrl+d", "pgdown":
 				if m.itemsLen() > 0 {
-					m.listIndex += m.listViewport
-					if m.listIndex > m.itemsLen()-1 {
-						m.listIndex = m.itemsLen() - 1
+					m.selection.listIndex += m.selection.listViewport
+					if m.selection.listIndex > m.itemsLen()-1 {
+						m.selection.listIndex = m.itemsLen() - 1
 					}
 					m.ensureCursorVisible()
 				}
 			case "ctrl+u", "pgup":
-				m.listIndex -= m.listViewport
-				if m.listIndex < 0 {
-					m.listIndex = 0
+				m.selection.listIndex -= m.selection.listViewport
+				if m.selection.listIndex < 0 {
+					m.selection.listIndex = 0
 				}
 				m.ensureCursorVisible()
 
-			// Markieren – beachte filteredIdx beim Zugriff
+				// Markieren – beachte filteredIdx beim Zugriff
 			case " ":
 				if m.itemsLen() == 0 {
 					return m, nil
 				}
-				st := m.itemAt(m.listIndex)
-				if m.selected == nil {
-					m.selected = make(map[string]bool)
+				st := m.itemAt(m.selection.listIndex)
+				if m.selection.selected == nil {
+					m.selection.selected = make(map[string]bool)
 				}
-				m.selected[st.FullSlug] = !m.selected[st.FullSlug]
+				m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
 
 			// Rescan bleibt gleich
 			case "r":
@@ -267,7 +267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if vp < 3 {
 			vp = 3
 		}
-		m.listViewport = vp
+		m.selection.listViewport = vp
 
 	case validateMsg:
 		if msg.err != nil {
@@ -304,13 +304,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.storiesSource = msg.src
 		m.storiesTarget = msg.tgt
-		m.listIndex, m.listOffset = 0, 0
+		m.selection.listIndex, m.selection.listOffset = 0, 0
 		m.applyFilter()
-		if m.selected == nil {
-			m.selected = make(map[string]bool)
+		if m.selection.selected == nil {
+			m.selection.selected = make(map[string]bool)
 		} else {
 			// optional: Selektion leeren, da sich die Liste geändert hat
-			clear(m.selected)
+			clear(m.selection.selected)
 		}
 		m.statusMsg = fmt.Sprintf("Scan ok. Source: %d Stories, Target: %d Stories.", len(m.storiesSource), len(m.storiesTarget))
 		m.state = stateBrowseList
@@ -385,59 +385,59 @@ func containsSpaceID(spacesSlice []sb.Space, spaceID string) (sb.Space, bool) {
 }
 
 func (m *Model) ensureCursorVisible() {
-	if m.listViewport <= 0 {
-		m.listViewport = 10
+	if m.selection.listViewport <= 0 {
+		m.selection.listViewport = 10
 	}
 
 	n := m.itemsLen()
 	if n == 0 {
-		m.listIndex = 0
-		m.listOffset = 0
+		m.selection.listIndex = 0
+		m.selection.listOffset = 0
 		return
 	}
-	if m.listIndex < 0 {
-		m.listIndex = 0
+	if m.selection.listIndex < 0 {
+		m.selection.listIndex = 0
 	}
-	if m.listIndex > n-1 {
-		m.listIndex = n - 1
-	}
-
-	if m.listIndex < m.listOffset {
-		m.listOffset = m.listIndex
-	}
-	if m.listIndex >= m.listOffset+m.listViewport {
-		m.listOffset = m.listIndex - m.listViewport + 1
+	if m.selection.listIndex > n-1 {
+		m.selection.listIndex = n - 1
 	}
 
-	maxStart := n - m.listViewport
+	if m.selection.listIndex < m.selection.listOffset {
+		m.selection.listOffset = m.selection.listIndex
+	}
+	if m.selection.listIndex >= m.selection.listOffset+m.selection.listViewport {
+		m.selection.listOffset = m.selection.listIndex - m.selection.listViewport + 1
+	}
+
+	maxStart := n - m.selection.listViewport
 	if maxStart < 0 {
 		maxStart = 0
 	}
-	if m.listOffset > maxStart {
-		m.listOffset = maxStart
+	if m.selection.listOffset > maxStart {
+		m.selection.listOffset = maxStart
 	}
-	if m.listOffset < 0 {
-		m.listOffset = 0
+	if m.selection.listOffset < 0 {
+		m.selection.listOffset = 0
 	}
 }
 
 func (m *Model) itemsLen() int {
-	if m.filteredIdx != nil {
-		return len(m.filteredIdx)
+	if m.search.filteredIdx != nil {
+		return len(m.search.filteredIdx)
 	}
 	return len(m.storiesSource)
 }
 
 func (m *Model) itemAt(visIdx int) sb.Story {
-	if m.filteredIdx != nil {
-		return m.storiesSource[m.filteredIdx[visIdx]]
+	if m.search.filteredIdx != nil {
+		return m.storiesSource[m.search.filteredIdx[visIdx]]
 	}
 	return m.storiesSource[visIdx]
 }
 
 func (m *Model) applyFilter() {
-	q := strings.TrimSpace(strings.ToLower(m.query))
-	pref := strings.TrimSpace(strings.ToLower(m.prefix))
+	q := strings.TrimSpace(strings.ToLower(m.search.query))
+	pref := strings.TrimSpace(strings.ToLower(m.filter.prefix))
 
 	base := make([]string, len(m.storiesSource))
 	for i, st := range m.storiesSource {
@@ -463,24 +463,24 @@ func (m *Model) applyFilter() {
 	}
 
 	if q == "" {
-		m.filteredIdx = append(m.filteredIdx[:0], idx...)
-		m.listIndex, m.listOffset = 0, 0
+		m.search.filteredIdx = append(m.search.filteredIdx[:0], idx...)
+		m.selection.listIndex, m.selection.listOffset = 0, 0
 		m.ensureCursorVisible()
 		return
 	}
 
-	sub := make([]int, 0, min(m.maxResults, len(idx)))
+	sub := make([]int, 0, min(m.search.maxResults, len(idx)))
 	for _, i := range idx {
 		if strings.Contains(base[i], q) {
 			sub = append(sub, i)
-			if len(sub) >= m.maxResults {
+			if len(sub) >= m.search.maxResults {
 				break
 			}
 		}
 	}
 	if len(sub) > 0 {
-		m.filteredIdx = sub
-		m.listIndex, m.listOffset = 0, 0
+		m.search.filteredIdx = sub
+		m.selection.listIndex, m.selection.listOffset = 0, 0
 		m.ensureCursorVisible()
 		return
 	}
@@ -495,25 +495,25 @@ func (m *Model) applyFilter() {
 
 	pruned := make([]int, 0, len(matches))
 	for _, mt := range matches {
-		if matchCoverage(q, mt) < m.minCoverage {
+		if matchCoverage(q, mt) < m.search.minCoverage {
 			continue
 		}
-		if matchSpread(mt) > m.maxSpread {
+		if matchSpread(mt) > m.search.maxSpread {
 			continue
 		}
 		pruned = append(pruned, mapBack[mt.Index])
-		if len(pruned) >= m.maxResults {
+		if len(pruned) >= m.search.maxResults {
 			break
 		}
 	}
 	if len(pruned) == 0 {
-		for i := 0; i < len(matches) && i < m.maxResults; i++ {
+		for i := 0; i < len(matches) && i < m.search.maxResults; i++ {
 			pruned = append(pruned, mapBack[matches[i].Index])
 		}
 	}
 
-	m.filteredIdx = pruned
-	m.listIndex, m.listOffset = 0, 0
+	m.search.filteredIdx = pruned
+	m.selection.listIndex, m.selection.listOffset = 0, 0
 	m.ensureCursorVisible()
 }
 
