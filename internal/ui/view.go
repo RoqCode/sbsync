@@ -71,7 +71,7 @@ func (m Model) viewTokenPrompt() string {
 
 func (m Model) viewValidating() string {
 	var b strings.Builder
-	b.WriteString("Validiere Token…\n\n")
+	b.WriteString(m.spinner.View() + " Validiere Token…\n\n")
 	b.WriteString(helpStyle.Render("q abbrechen"))
 	return b.String()
 }
@@ -115,7 +115,7 @@ func (m Model) viewScanning() string {
 	if m.targetSpace != nil {
 		tgt = fmt.Sprintf("%s (%d)", m.targetSpace.Name, m.targetSpace.ID)
 	}
-	b.WriteString("Scanning…\n\n")
+	b.WriteString(m.spinner.View() + " Scanning…\n\n")
 	b.WriteString(fmt.Sprintf("Source: %s\nTarget: %s\n\n", src, tgt))
 	b.WriteString(subtleStyle.Render("Hole Stories (flach)…") + "\n\n")
 	b.WriteString(helpStyle.Render("q beenden"))

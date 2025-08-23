@@ -4,6 +4,7 @@ import (
 	"storyblok-sync/internal/config"
 	"storyblok-sync/internal/sb"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -70,6 +71,9 @@ type Model struct {
 	statusMsg     string
 	validateErr   error
 	width, height int
+
+	// spinner for loading states
+	spinner spinner.Model
 
 	// token input
 	ti textinput.Model
@@ -140,6 +144,12 @@ func InitialModel() Model {
 	pi.Width = 40
 	m.filter.prefixInput = pi
 	m.filter.prefix = ""
+
+	// spinner
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = subtleStyle
+	m.spinner = sp
 
 	return m
 }
