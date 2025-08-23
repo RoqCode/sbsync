@@ -1,31 +1,41 @@
 package ui
 
 import (
-	"storyblok-sync/internal/config"
-	"storyblok-sync/internal/sb"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/sb"
 )
 
 // --- UI Styles ---
 var (
-	titleStyle   = lipgloss.NewStyle().Bold(true).Underline(true)
-	subtleStyle  = lipgloss.NewStyle().Faint(true)
-	okStyle      = lipgloss.NewStyle().Bold(true)
-	warnStyle    = lipgloss.NewStyle().Bold(true)
-	helpStyle    = lipgloss.NewStyle().Faint(true)
-	dividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	focusStyle   = lipgloss.NewStyle().Bold(true)
-	selStyle     = lipgloss.NewStyle().Reverse(true)
+	titleStyle      = lipgloss.NewStyle().Bold(true).Underline(true)
+	subtleStyle     = lipgloss.NewStyle().Faint(true)
+	okStyle         = lipgloss.NewStyle().Bold(true)
+	warnStyle       = lipgloss.NewStyle().Bold(true)
+	helpStyle       = lipgloss.NewStyle().Faint(true)
+	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	focusStyle      = lipgloss.NewStyle().Bold(true)
+	cursorLineStyle = lipgloss.NewStyle().Background(lipgloss.Color("#2A2B3D"))
+	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
+	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
 
 	// markers for different story types (colored squares)
-	symbolStory  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8942E1")).Render("S")
-	symbolFolder = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA")).Render("F")
-	symbolRoot   = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("R")
+	symbolStory  = fgSymbol("#8942E1", "S")
+	symbolFolder = fgSymbol("#3AC4BA", "F")
+	symbolRoot   = fgSymbol("214", "R")
 )
+
+func fgSymbol(col, ch string) string {
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(col)).Render(ch)
+	const reset = "\x1b[0m"
+	return strings.TrimSuffix(s, reset) + "\x1b[39m"
+}
 
 // --- Model / State ---
 type state int

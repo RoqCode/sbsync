@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	"storyblok-sync/internal/sb"
+
+	"github.com/charmbracelet/lipgloss"
+	tree "github.com/charmbracelet/lipgloss/tree"
 )
 
 func (m Model) View() string {
@@ -132,8 +135,6 @@ func (m Model) viewBrowseList() string {
 	} else {
 		// sichtbaren Bereich bestimmen
 		total := m.itemsLen()
-		start := m.selection.listOffset
-		end := min(start+m.selection.listViewport, total)
 
 		// Suchleiste (falls aktiv oder Query gesetzt)
 		label := "Suche: "
@@ -152,42 +153,87 @@ func (m Model) viewBrowseList() string {
 		if total == 0 {
 			b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).") + "\n")
 		} else {
-			for i := start; i < end; i++ {
-				st := m.itemAt(i)
-				cursor := "  "
-				if i == m.selection.listIndex {
-					cursor = "▶ "
-				}
-
-				mark := "[ ]"
-				if m.selection.selected[st.FullSlug] {
-					mark = "[x]"
-				}
-
-				line := fmt.Sprintf("%s%s %s", cursor, mark, displayStory(st))
-				if i == m.selection.listIndex {
-					line = selStyle.Render(line)
-				}
-				b.WriteString(line + "\n")
+			// Sammle sichtbare Stories
+			stories := make([]sb.Story, total)
+			for i := 0; i < total; i++ {
+				stories[i] = m.itemAt(i)
 			}
-		}
 
-		shown := 0
-		if end > start {
-			shown = end - start
-		}
+			// Erzeuge Tree-Struktur
+			tr := tree.New()
+			nodes := make(map[int]*tree.Tree, len(stories))
+			for _, st := range stories {
+				node := tree.Root(displayStory(st))
+				nodes[st.ID] = node
+			}
 
-		// Anzeige: Filterstatus + Range
-		suffix := ""
-		if m.search.filteredIdx != nil {
-			suffix = fmt.Sprintf("  |  gefiltert: %d", total)
+			for _, st := range stories {
+				node := nodes[st.ID]
+				if st.FolderID != nil {
+					if parent, ok := nodes[*st.FolderID]; ok {
+						parent.Child(node)
+						continue
+					}
+				}
+				tr.Child(node)
+			}
+
+			// Begrenze Ausgabe auf sichtbaren Bereich
+			lines := strings.Split(tr.String(), "\n")
+			if len(lines) > 0 && lines[len(lines)-1] == "" {
+				lines = lines[:len(lines)-1]
+			}
+
+			for i, st := range stories {
+				if i >= len(lines) {
+					break
+				}
+
+				content := lines[i]
+				if i == m.selection.listIndex {
+					content = cursorLineStyle.Width(m.width - 2).Render(content)
+				} else {
+					content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
+				}
+
+				cursorCell := " "
+				if i == m.selection.listIndex {
+					cursorCell = cursorBarStyle.Render(" ")
+				}
+
+				markCell := " "
+				if m.selection.selected[st.FullSlug] {
+					markCell = markBarStyle.Render(" ")
+				}
+
+				lines[i] = cursorCell + markCell + content
+			}
+
+			start := m.selection.listOffset
+			if start > len(lines) {
+				start = len(lines)
+			}
+			end := start + m.selection.listViewport
+			if end > len(lines) {
+				end = len(lines)
+			}
+			b.WriteString(strings.Join(lines[start:end], "\n"))
+			b.WriteString("\n")
+
+			shown := end - start
+
+			// Anzeige: Filterstatus + Range
+			suffix := ""
+			if m.search.filteredIdx != nil {
+				suffix = fmt.Sprintf("  |  gefiltert: %d", total)
+			}
+			b.WriteString("\n")
+			b.WriteString(subtleStyle.Render(
+				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
+					start+1, end, total, shown, suffix),
+			))
+			b.WriteString("\n")
 		}
-		b.WriteString("\n")
-		b.WriteString(subtleStyle.Render(
-			fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
-				start+1, end, total, shown, suffix),
-		))
-		b.WriteString("\n")
 	}
 	// Footer / Hilfe
 	checked := 0
