@@ -134,7 +134,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spacesCount = msg.count
 		m.statusMsg = fmt.Sprintf("Token ok. %d Spaces gefunden. (Enter für nächsten Schritt)", m.spacesCount)
 		m.state = stateWelcome
-		// Optional: config.Save(m.sbrcPath, m.cfg)
+		config.Save(m.sbrcPath, m.cfg)
 		return m, nil
 	}
 	return m, nil
@@ -204,7 +204,11 @@ func max(a, b int) int {
 
 // --- main ---
 func main() {
-	if _, err := tea.NewProgram(initialModel()).Run(); err != nil {
+	if _, err := tea.NewProgram(
+		initialModel(),
+		tea.WithAltScreen(),
+		// optional: tea.WithMouseCellMotion(),
+	).Run(); err != nil {
 		fmt.Println("error:", err)
 		os.Exit(1)
 	}
