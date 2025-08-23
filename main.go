@@ -74,6 +74,10 @@ type model struct {
 	searchInput textinput.Model
 	query       string // aktueller Suchstring
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
+	// search tuning
+	minCoverage float64 // Anteil der Query, der gematcht wurde (0.0–1.0)
+	maxSpread   int     // max. Abstand zwischen 1. und letzter Match-Position
+	maxResults  int     // harte Obergrenze für Ergebnisliste
 }
 
 func initialModel() model {
@@ -112,6 +116,9 @@ func initialModel() model {
 	m.searchInput = si
 	m.query = ""
 	m.filteredIdx = nil
+	m.minCoverage = 0.6 // strenger -> höher (z.B. 0.7)
+	m.maxSpread = 40    // strenger -> kleiner (z.B. 25)
+	m.maxResults = 200  // UI ruhig halten
 
 	return m
 }
@@ -230,6 +237,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.searching = false
 					m.searchInput.Blur()
 					return m, nil
+					// in stateBrowseList:
+				case "+":
+					m.minCoverage += 0.05
+					if m.minCoverage > 0.95 {
+						m.minCoverage = 0.95
+					}
+					m.applyFilter()
+				case "-":
+					m.minCoverage -= 0.05
+					if m.minCoverage < 0.3 {
+						m.minCoverage = 0.3
+					}
+					m.applyFilter()
+				case "ctrl+c", "q":
+					return m, tea.Quit
 				default:
 					var cmd tea.Cmd
 					m.searchInput, cmd = m.searchInput.Update(msg)
@@ -570,7 +592,7 @@ func (m model) View() string {
 		}
 		b.WriteString("\n")
 		b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-		b.WriteString(helpStyle.Render("j/k bewegen  |  Story markieren  |  f suchen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück  |  r rescan  |  s preflight  |  q beenden"))
+		b.WriteString(helpStyle.Render(fmt.Sprintf("j/k bewegen  |  Story markieren  |  f suchen  |  +/- strenger/lockerer (cov=%.2f, spread=%d)  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück  |  r rescan  |  s preflight  |  q beenden", m.minCoverage, m.maxSpread)))
 
 	}
 
@@ -662,33 +684,80 @@ func (m *model) itemAt(visIdx int) sb.Story {
 
 // Fuzzy anwenden (Name, Slug, FullSlug)
 func (m *model) applyFilter() {
-	q := strings.TrimSpace(m.query)
+	q := strings.TrimSpace(strings.ToLower(m.query))
 	if q == "" {
-		m.filteredIdx = nil // Filter aus
-		m.listIndex = 0
-		m.listOffset = 0
+		m.filteredIdx = nil
+		m.listIndex, m.listOffset = 0, 0
 		return
 	}
-	// Suchbasis: kombinierter String pro Story
-	candidates := make([]string, len(m.storiesSource))
+
+	// Kandidaten zusammensetzen
+	base := make([]string, len(m.storiesSource))
 	for i, st := range m.storiesSource {
 		name := st.Name
 		if name == "" {
 			name = st.Slug
 		}
-		candidates[i] = name + "  " + st.Slug + "  " + st.FullSlug
+		base[i] = strings.ToLower(name + "  " + st.Slug + "  " + st.FullSlug)
 	}
-	matches := fuzzy.Find(q, candidates)
 
-	// baue Indexliste
-	m.filteredIdx = m.filteredIdx[:0]
-	for _, mt := range matches {
-		m.filteredIdx = append(m.filteredIdx, mt.Index)
+	// Pass 1: Substring (präzise, schnell)
+	sub := make([]int, 0, 128)
+	for i, s := range base {
+		if strings.Contains(s, q) {
+			sub = append(sub, i)
+			if len(sub) >= m.maxResults {
+				break
+			}
+		}
 	}
-	// Cursor zurücksetzen & sichtbar halten
-	m.listIndex = 0
-	m.listOffset = 0
+	if len(sub) > 0 {
+		m.filteredIdx = sub
+		m.listIndex, m.listOffset = 0, 0
+		m.ensureCursorVisible()
+		return
+	}
+
+	// Pass 2: Fuzzy (Fallback, aber gedrosselt)
+	matches := fuzzy.Find(q, base)
+	pruned := make([]int, 0, len(matches))
+	for _, mt := range matches {
+		if matchCoverage(q, mt) < m.minCoverage {
+			continue
+		}
+		if matchSpread(mt) > m.maxSpread {
+			continue
+		}
+		pruned = append(pruned, mt.Index)
+		if len(pruned) >= m.maxResults {
+			break
+		}
+	}
+
+	if len(pruned) == 0 {
+		// falls alles zu streng: zeig die Top N rohen Fuzzy-Ergebnisse
+		for i := 0; i < len(matches) && i < m.maxResults; i++ {
+			pruned = append(pruned, matches[i].Index)
+		}
+	}
+	m.filteredIdx = pruned
+	m.listIndex, m.listOffset = 0, 0
 	m.ensureCursorVisible()
+}
+
+func matchCoverage(q string, m fuzzy.Match) float64 {
+	if len(q) == 0 {
+		return 1
+	}
+	// m.MatchedIndexes Länge = wie viele Query-Zeichen gematcht wurden
+	return float64(len(m.MatchedIndexes)) / float64(len(q))
+}
+
+func matchSpread(m fuzzy.Match) int {
+	if len(m.MatchedIndexes) == 0 {
+		return 0
+	}
+	return m.MatchedIndexes[len(m.MatchedIndexes)-1] - m.MatchedIndexes[0]
 }
 
 // --- main ---
