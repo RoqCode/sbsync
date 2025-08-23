@@ -35,163 +35,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case stateScanning:
 			return m.handleScanningKey(key)
 		case stateBrowseList:
-<<<<<<< HEAD
 			return m.handleBrowseListKey(msg)
-=======
-			if m.prefixing {
-				switch key {
-				case "esc":
-					m.prefixInput.Blur()
-					if strings.TrimSpace(m.prefixInput.Value()) == "" {
-						m.prefix = ""
-					}
-					m.prefixing = false
-					m.applyFilter()
-					return m, nil
-				case "enter":
-					m.prefix = strings.TrimSpace(m.prefixInput.Value())
-					m.prefixing = false
-					m.prefixInput.Blur()
-					m.applyFilter()
-					return m, nil
-				case "ctrl+c", "q":
-					return m, tea.Quit
-				default:
-					var cmd tea.Cmd
-					m.prefixInput, cmd = m.prefixInput.Update(msg)
-					return m, cmd
-				}
-			}
-
-			if m.searching {
-				switch key {
-				case "esc":
-					// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
-					if strings.TrimSpace(m.query) == "" {
-						m.searching = false
-						m.searchInput.Blur()
-						return m, nil
-					}
-					m.query = ""
-					m.searchInput.SetValue("")
-					m.applyFilter()
-					return m, nil
-				case "enter":
-					// Enter: Suche schließen, Ergebnis bleibt aktiv
-					m.searching = false
-					m.searchInput.Blur()
-					return m, nil
-					// in stateBrowseList:
-				case "+":
-					m.filterCfg.MinCoverage += 0.05
-					if m.filterCfg.MinCoverage > 0.95 {
-						m.filterCfg.MinCoverage = 0.95
-					}
-					m.applyFilter()
-				case "-":
-					m.filterCfg.MinCoverage -= 0.05
-					if m.filterCfg.MinCoverage < 0.3 {
-						m.filterCfg.MinCoverage = 0.3
-					}
-					m.applyFilter()
-				case "ctrl+c", "q":
-					return m, tea.Quit
-				default:
-					var cmd tea.Cmd
-					m.searchInput, cmd = m.searchInput.Update(msg)
-					newQ := m.searchInput.Value()
-					if newQ != m.query {
-						m.query = newQ
-						m.applyFilter()
-					}
-					return m, cmd
-				}
-			}
-
-			switch key {
-			case "ctrl+c", "q":
-				return m, tea.Quit
-				// Suche togglen
-			case "f":
-				m.searching = true
-				m.searchInput.SetValue(m.query)
-				m.searchInput.CursorEnd()
-				m.searchInput.Focus()
-				return m, nil
-			case "F":
-				m.query = ""
-				m.searchInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-			case "p": // Prefix bearbeiten
-				m.prefixing = true
-				m.prefixInput.SetValue(m.prefix)
-				m.prefixInput.CursorEnd()
-				m.prefixInput.Focus()
-				return m, nil
-			case "P": // Prefix schnell löschen
-				m.prefix = ""
-				m.prefixInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-			case "c":
-				m.query = ""
-				m.prefix = ""
-				m.searchInput.SetValue("")
-				m.applyFilter()
-				m.prefixInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-			// Navigation mit aktueller Länge
-			case "j", "down":
-				if m.listIndex < m.itemsLen()-1 {
-					m.listIndex++
-					m.ensureCursorVisible()
-				}
-			case "k", "up":
-				if m.listIndex > 0 {
-					m.listIndex--
-					m.ensureCursorVisible()
-				}
-			case "ctrl+d", "pgdown":
-				if m.itemsLen() > 0 {
-					m.listIndex += m.listViewport
-					if m.listIndex > m.itemsLen()-1 {
-						m.listIndex = m.itemsLen() - 1
-					}
-					m.ensureCursorVisible()
-				}
-			case "ctrl+u", "pgup":
-				m.listIndex -= m.listViewport
-				if m.listIndex < 0 {
-					m.listIndex = 0
-				}
-				m.ensureCursorVisible()
-
-			// Markieren – beachte filteredIdx beim Zugriff
-			case " ":
-				if m.itemsLen() == 0 {
-					return m, nil
-				}
-				st := m.itemAt(m.listIndex)
-				if m.selected == nil {
-					m.selected = make(map[string]bool)
-				}
-				m.selected[st.FullSlug] = !m.selected[st.FullSlug]
-
-			// Rescan bleibt gleich
-			case "r":
-				m.state = stateScanning
-				m.statusMsg = "Rescan…"
-				return m, m.scanStoriesCmd()
-			case "s":
-				// Weiter zu Preflight in T6 – hier nur Platzhalter
-				m.statusMsg = "Preflight (T6) folgt …"
-			}
->>>>>>> e549d3c (Refactor filtering into modular functions and config)
 		}
 
 	case tea.WindowSizeMsg:
@@ -385,15 +229,15 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.search.searchInput.Blur()
 			return m, nil
 		case "+":
-			m.search.minCoverage += 0.05
-			if m.search.minCoverage > 0.95 {
-				m.search.minCoverage = 0.95
+			m.filterCfg.MinCoverage += 0.05
+			if m.filterCfg.MinCoverage > 0.95 {
+				m.filterCfg.MinCoverage = 0.95
 			}
 			m.applyFilter()
 		case "-":
-			m.search.minCoverage -= 0.05
-			if m.search.minCoverage < 0.3 {
-				m.search.minCoverage = 0.3
+			m.filterCfg.MinCoverage -= 0.05
+			if m.filterCfg.MinCoverage < 0.3 {
+				m.filterCfg.MinCoverage = 0.3
 			}
 			m.applyFilter()
 		case "ctrl+c", "q":
@@ -627,19 +471,7 @@ func (m *Model) applyFilter() {
 		return
 	}
 
-<<<<<<< HEAD
-	sub := make([]int, 0, min(m.search.maxResults, len(idx)))
-	for _, i := range idx {
-		if strings.Contains(base[i], q) {
-			sub = append(sub, i)
-			if len(sub) >= m.search.maxResults {
-				break
-			}
-		}
-	}
-=======
 	sub := filterBySubstring(q, base, idx, m.filterCfg)
->>>>>>> e549d3c (Refactor filtering into modular functions and config)
 	if len(sub) > 0 {
 		m.search.filteredIdx = sub
 		m.selection.listIndex, m.selection.listOffset = 0, 0
@@ -647,39 +479,7 @@ func (m *Model) applyFilter() {
 		return
 	}
 
-<<<<<<< HEAD
-	subset := make([]string, len(idx))
-	mapBack := make([]int, len(idx))
-	for j, i := range idx {
-		subset[j] = base[i]
-		mapBack[j] = i
-	}
-	matches := fuzzy.Find(q, subset)
-
-	pruned := make([]int, 0, len(matches))
-	for _, mt := range matches {
-		if matchCoverage(q, mt) < m.search.minCoverage {
-			continue
-		}
-		if matchSpread(mt) > m.search.maxSpread {
-			continue
-		}
-		pruned = append(pruned, mapBack[mt.Index])
-		if len(pruned) >= m.search.maxResults {
-			break
-		}
-	}
-	if len(pruned) == 0 {
-		for i := 0; i < len(matches) && i < m.search.maxResults; i++ {
-			pruned = append(pruned, mapBack[matches[i].Index])
-		}
-	}
-
-	m.search.filteredIdx = pruned
+	m.search.filteredIdx = filterByFuzzy(q, base, idx, m.filterCfg)
 	m.selection.listIndex, m.selection.listOffset = 0, 0
-=======
-	m.filteredIdx = filterByFuzzy(q, base, idx, m.filterCfg)
-	m.listIndex, m.listOffset = 0, 0
->>>>>>> e549d3c (Refactor filtering into modular functions and config)
 	m.ensureCursorVisible()
 }
