@@ -55,10 +55,6 @@ type SearchState struct {
 	searchInput textinput.Model
 	query       string // aktueller Suchstring
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
-	// search tuning
-	minCoverage float64 // Anteil der Query, der gematcht wurde (0.0–1.0)
-	maxSpread   int     // max. Abstand zwischen 1. und letzter Match-Position
-	maxResults  int     // harte Obergrenze für Ergebnisliste
 }
 
 type Model struct {
@@ -87,6 +83,7 @@ type Model struct {
 	selection SelectionState
 	filter    FilterState
 	search    SearchState
+	filterCfg FilterConfig // Konfiguration für Such- und Filterparameter
 }
 
 func InitialModel() Model {
@@ -125,9 +122,11 @@ func InitialModel() Model {
 	m.search.searchInput = si
 	m.search.query = ""
 	m.search.filteredIdx = nil
-	m.search.minCoverage = 0.6 // strenger -> höher (z.B. 0.7)
-	m.search.maxSpread = 40    // strenger -> kleiner (z.B. 25)
-	m.search.maxResults = 200  // UI ruhig halten
+	m.filterCfg = FilterConfig{
+		MinCoverage: 0.6, // strenger -> höher (z.B. 0.7)
+		MaxSpread:   40,  // strenger -> kleiner (z.B. 25)
+		MaxResults:  200, // UI ruhig halten
+	}
 
 	// prefix
 	pi := textinput.New()

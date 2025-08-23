@@ -9,7 +9,6 @@ import (
 	"storyblok-sync/internal/sb"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sahilm/fuzzy"
 )
 
 // ---------- Update ----------
@@ -230,15 +229,15 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.search.searchInput.Blur()
 			return m, nil
 		case "+":
-			m.search.minCoverage += 0.05
-			if m.search.minCoverage > 0.95 {
-				m.search.minCoverage = 0.95
+			m.filterCfg.MinCoverage += 0.05
+			if m.filterCfg.MinCoverage > 0.95 {
+				m.filterCfg.MinCoverage = 0.95
 			}
 			m.applyFilter()
 		case "-":
-			m.search.minCoverage -= 0.05
-			if m.search.minCoverage < 0.3 {
-				m.search.minCoverage = 0.3
+			m.filterCfg.MinCoverage -= 0.05
+			if m.filterCfg.MinCoverage < 0.3 {
+				m.filterCfg.MinCoverage = 0.3
 			}
 			m.applyFilter()
 		case "ctrl+c", "q":
@@ -463,19 +462,7 @@ func (m *Model) applyFilter() {
 		base[i] = strings.ToLower(name + "  " + st.Slug + "  " + st.FullSlug)
 	}
 
-	idx := make([]int, 0, len(m.storiesSource))
-	if pref != "" {
-		for i, st := range m.storiesSource {
-			if strings.HasPrefix(strings.ToLower(st.FullSlug), pref) {
-				idx = append(idx, i)
-			}
-		}
-	} else {
-		idx = idx[:0]
-		for i := range m.storiesSource {
-			idx = append(idx, i)
-		}
-	}
+	idx := filterByPrefix(m.storiesSource, pref)
 
 	if q == "" {
 		m.search.filteredIdx = append(m.search.filteredIdx[:0], idx...)
@@ -484,15 +471,7 @@ func (m *Model) applyFilter() {
 		return
 	}
 
-	sub := make([]int, 0, min(m.search.maxResults, len(idx)))
-	for _, i := range idx {
-		if strings.Contains(base[i], q) {
-			sub = append(sub, i)
-			if len(sub) >= m.search.maxResults {
-				break
-			}
-		}
-	}
+	sub := filterBySubstring(q, base, idx, m.filterCfg)
 	if len(sub) > 0 {
 		m.search.filteredIdx = sub
 		m.selection.listIndex, m.selection.listOffset = 0, 0
@@ -500,55 +479,7 @@ func (m *Model) applyFilter() {
 		return
 	}
 
-	subset := make([]string, len(idx))
-	mapBack := make([]int, len(idx))
-	for j, i := range idx {
-		subset[j] = base[i]
-		mapBack[j] = i
-	}
-	matches := fuzzy.Find(q, subset)
-
-	pruned := make([]int, 0, len(matches))
-	for _, mt := range matches {
-		if matchCoverage(q, mt) < m.search.minCoverage {
-			continue
-		}
-		if matchSpread(mt) > m.search.maxSpread {
-			continue
-		}
-		pruned = append(pruned, mapBack[mt.Index])
-		if len(pruned) >= m.search.maxResults {
-			break
-		}
-	}
-	if len(pruned) == 0 {
-		for i := 0; i < len(matches) && i < m.search.maxResults; i++ {
-			pruned = append(pruned, mapBack[matches[i].Index])
-		}
-	}
-
-	m.search.filteredIdx = pruned
+	m.search.filteredIdx = filterByFuzzy(q, base, idx, m.filterCfg)
 	m.selection.listIndex, m.selection.listOffset = 0, 0
 	m.ensureCursorVisible()
-}
-
-func matchCoverage(q string, m fuzzy.Match) float64 {
-	if len(q) == 0 {
-		return 1
-	}
-	return float64(len(m.MatchedIndexes)) / float64(len(q))
-}
-
-func matchSpread(m fuzzy.Match) int {
-	if len(m.MatchedIndexes) == 0 {
-		return 0
-	}
-	return m.MatchedIndexes[len(m.MatchedIndexes)-1] - m.MatchedIndexes[0]
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
