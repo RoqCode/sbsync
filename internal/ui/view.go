@@ -130,21 +130,23 @@ func (m Model) viewBrowseList() string {
 	if srcCount == 0 {
 		b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.") + "\n")
 	} else {
+		// sichtbaren Bereich bestimmen
 		total := m.itemsLen()
-		start := m.listOffset
-		end := min(start+m.listViewport, total)
+		start := m.selection.listOffset
+		end := min(start+m.selection.listViewport, total)
 
+		// Suchleiste (falls aktiv oder Query gesetzt)
 		label := "Suche: "
-		if m.searching {
-			b.WriteString(label + m.searchInput.View() + "  |  ")
+		if m.search.searching {
+			b.WriteString(label + m.search.searchInput.View() + "  |  ")
 		} else {
-			b.WriteString(label + m.query + "  |  ")
+			b.WriteString(label + m.search.query + "  |  ")
 		}
 
-		if m.prefixing {
-			b.WriteString("Prefix: " + m.prefixInput.View() + "\n\n")
+		if m.filter.prefixing {
+			b.WriteString("Prefix: " + m.filter.prefixInput.View() + "\n\n")
 		} else {
-			b.WriteString(subtleStyle.Render("Prefix: "+m.prefix) + "\n\n")
+			b.WriteString(subtleStyle.Render("Prefix:"+m.filter.prefix) + "\n\n")
 		}
 
 		if total == 0 {
@@ -153,17 +155,17 @@ func (m Model) viewBrowseList() string {
 			for i := start; i < end; i++ {
 				st := m.itemAt(i)
 				cursor := "  "
-				if i == m.listIndex {
+				if i == m.selection.listIndex {
 					cursor = "▶ "
 				}
 
 				mark := "[ ]"
-				if m.selected[st.FullSlug] {
+				if m.selection.selected[st.FullSlug] {
 					mark = "[x]"
 				}
 
 				line := fmt.Sprintf("%s%s  %s", cursor, mark, displayStory(st))
-				if i == m.listIndex {
+				if i == m.selection.listIndex {
 					line = selStyle.Render(line)
 				}
 				b.WriteString(line + "\n")
@@ -175,85 +177,10 @@ func (m Model) viewBrowseList() string {
 			shown = end - start
 		}
 
-<<<<<<< HEAD
-	case stateBrowseList:
-		srcCount := len(m.storiesSource)
-		tgtCount := len(m.storiesTarget)
-		b.WriteString(fmt.Sprintf("Browse (Source Stories) – %d Items  |  Target: %d\n\n", srcCount, tgtCount))
-		if srcCount == 0 {
-			b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.") + "\n")
-		} else {
-			// sichtbaren Bereich bestimmen
-			total := m.itemsLen()
-			start := m.selection.listOffset
-			end := min(start+m.selection.listViewport, total)
-
-			// Suchleiste (falls aktiv oder Query gesetzt)
-			label := "Suche: "
-			if m.search.searching {
-				b.WriteString(label + m.search.searchInput.View() + "  |  ")
-			} else {
-				b.WriteString(label + m.search.query + "  |  ")
-			}
-
-			if m.filter.prefixing {
-				b.WriteString("Prefix: " + m.filter.prefixInput.View() + "\n\n")
-			} else {
-				b.WriteString(subtleStyle.Render("Prefix: "+m.filter.prefix) + "\n\n")
-			}
-
-			if total == 0 {
-				b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).") + "\n")
-			} else {
-				for i := start; i < end; i++ {
-					st := m.itemAt(i)
-					cursor := "  "
-					if i == m.selection.listIndex {
-						cursor = "▶ "
-					}
-
-					mark := "[ ]"
-					if m.selection.selected[st.FullSlug] {
-						mark = "[x]"
-					}
-
-					line := fmt.Sprintf("%s%s  %s", cursor, mark, displayStory(st))
-					if i == m.selection.listIndex {
-						line = selStyle.Render(line)
-					}
-					b.WriteString(line + "\n")
-				}
-			}
-
-			shown := 0
-			if end > start {
-				shown = end - start
-			}
-
-			// Anzeige: Filterstatus + Range
-			suffix := ""
-			if m.search.filteredIdx != nil {
-				suffix = fmt.Sprintf("  |  gefiltert: %d", total)
-			}
-			b.WriteString("\n")
-			b.WriteString(subtleStyle.Render(
-				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
-					start+1, end, total, shown, suffix),
-			))
-			b.WriteString("\n")
-
-		}
-		// Footer / Hilfe
-		checked := 0
-		for _, v := range m.selection.selected {
-			if v {
-				checked++
-			}
-=======
+		// Anzeige: Filterstatus + Range
 		suffix := ""
-		if m.filteredIdx != nil {
+		if m.search.filteredIdx != nil {
 			suffix = fmt.Sprintf("  |  gefiltert: %d", total)
->>>>>>> 6fdd57e (refactor ui view into separate state functions)
 		}
 		b.WriteString("\n")
 		b.WriteString(subtleStyle.Render(
@@ -261,10 +188,10 @@ func (m Model) viewBrowseList() string {
 				start+1, end, total, shown, suffix),
 		))
 		b.WriteString("\n")
-
 	}
+	// Footer / Hilfe
 	checked := 0
-	for _, v := range m.selected {
+	for _, v := range m.selection.selected {
 		if v {
 			checked++
 		}
