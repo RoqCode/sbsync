@@ -22,12 +22,12 @@ func (m Model) View() string {
 	case stateWelcome:
 		b.WriteString("Willkommen! Diese App hilft dir, Stories zwischen Spaces zu synchronisieren.\n\n")
 		if m.cfg.Token != "" {
-			b.WriteString(okStyle.Render("✓ Token vorhanden\n"))
+			b.WriteString(okStyle.Render("✓ Token vorhanden") + "\n")
 		} else {
-			b.WriteString(warnStyle.Render("! Kein Token gefunden (~/.sbrc oder SB_TOKEN)\n"))
+			b.WriteString(warnStyle.Render("! Kein Token gefunden (~/.sbrc oder SB_TOKEN)") + "\n")
 		}
 		if m.hasSBRC {
-			b.WriteString(subtleStyle.Render(fmt.Sprintf("Konfiguration gefunden: %s\n", m.sbrcPath)))
+			b.WriteString(subtleStyle.Render(fmt.Sprintf("Konfiguration gefunden: %s", m.sbrcPath)) + "\n")
 		}
 		b.WriteString(subtleStyle.Render(m.statusMsg) + "\n\n")
 		b.WriteString(helpStyle.Render("Tasten: Enter weiter  |  q beenden"))
@@ -50,11 +50,11 @@ func (m Model) View() string {
 		} else {
 			b.WriteString("Spaces (wähle **Target**):\n\n")
 			if m.sourceSpace != nil {
-				b.WriteString(subtleStyle.Render(fmt.Sprintf("Source: %s (%d)\n\n", m.sourceSpace.Name, m.sourceSpace.ID)))
+				b.WriteString(subtleStyle.Render(fmt.Sprintf("Source: %s (%d)", m.sourceSpace.Name, m.sourceSpace.ID)) + "\n\n")
 			}
 		}
 		if len(m.spaces) == 0 {
-			b.WriteString(warnStyle.Render("Keine Spaces gefunden.\n"))
+			b.WriteString(warnStyle.Render("Keine Spaces gefunden.") + "\n")
 		} else {
 			for i, sp := range m.spaces {
 				cursor := "  "
@@ -89,7 +89,7 @@ func (m Model) View() string {
 		tgtCount := len(m.storiesTarget)
 		b.WriteString(fmt.Sprintf("Browse (Source Stories) – %d Items  |  Target: %d\n\n", srcCount, tgtCount))
 		if srcCount == 0 {
-			b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.\n"))
+			b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.") + "\n")
 		} else {
 			// sichtbaren Bereich bestimmen
 			total := m.itemsLen()
@@ -111,7 +111,7 @@ func (m Model) View() string {
 			}
 
 			if total == 0 {
-				b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).\n"))
+				b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).") + "\n")
 			} else {
 				for i := start; i < end; i++ {
 					st := m.itemAt(i)
@@ -160,7 +160,7 @@ func (m Model) View() string {
 		}
 		b.WriteString("\n")
 		b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-		b.WriteString(helpStyle.Render("j/k bewegen  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden\n"))
+		b.WriteString(helpStyle.Render("j/k bewegen  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
 		b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
 
 	}
