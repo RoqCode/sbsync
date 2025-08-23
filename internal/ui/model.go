@@ -1,12 +1,14 @@
 package ui
 
 import (
-	"storyblok-sync/internal/config"
-	"storyblok-sync/internal/sb"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/sb"
 )
 
 // --- UI Styles ---
@@ -23,10 +25,16 @@ var (
 	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("34"))
 
 	// markers for different story types (colored squares)
-	symbolStory  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8942E1")).Render("S")
-	symbolFolder = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA")).Render("F")
-	symbolRoot   = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("R")
+	symbolStory  = fgSymbol("#8942E1", "S")
+	symbolFolder = fgSymbol("#3AC4BA", "F")
+	symbolRoot   = fgSymbol("214", "R")
 )
+
+func fgSymbol(col, ch string) string {
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(col)).Render(ch)
+	const reset = "\x1b[0m"
+	return strings.TrimSuffix(s, reset) + "\x1b[39m"
+}
 
 // --- Model / State ---
 type state int
