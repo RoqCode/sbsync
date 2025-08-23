@@ -78,6 +78,10 @@ type model struct {
 	minCoverage float64 // Anteil der Query, der gematcht wurde (0.0–1.0)
 	maxSpread   int     // max. Abstand zwischen 1. und letzter Match-Position
 	maxResults  int     // harte Obergrenze für Ergebnisliste
+	// prefix-filter
+	prefixing   bool
+	prefixInput textinput.Model
+	prefix      string // z.B. "a__portal/de"
 }
 
 func initialModel() model {
@@ -120,6 +124,14 @@ func initialModel() model {
 	m.maxSpread = 40    // strenger -> kleiner (z.B. 25)
 	m.maxResults = 200  // UI ruhig halten
 
+	// prefix
+	pi := textinput.New()
+	pi.Placeholder = "Slug-Prefix (z.B. a__portal/de)"
+	pi.CharLimit = 200
+	pi.Width = 40
+	m.prefixInput = pi
+	m.prefix = ""
+
 	return m
 }
 
@@ -132,7 +144,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		key := strings.ToLower(msg.String())
+		key := msg.String()
 
 		switch m.state {
 
@@ -219,6 +231,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case stateBrowseList:
+			if m.prefixing {
+				switch key {
+				case "esc":
+					m.prefixInput.Blur()
+					if strings.TrimSpace(m.prefixInput.Value()) == "" {
+						m.prefix = ""
+					}
+					m.prefixing = false
+					m.applyFilter()
+					return m, nil
+				case "enter":
+					m.prefix = strings.TrimSpace(m.prefixInput.Value())
+					m.prefixing = false
+					m.prefixInput.Blur()
+					m.applyFilter()
+					return m, nil
+				case "ctrl+c", "q":
+					return m, tea.Quit
+				default:
+					var cmd tea.Cmd
+					m.prefixInput, cmd = m.prefixInput.Update(msg)
+					return m, cmd
+				}
+			}
+
 			if m.searching {
 				switch key {
 				case "esc":
@@ -274,10 +311,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searchInput.CursorEnd()
 				m.searchInput.Focus()
 				return m, nil
+			case "F":
+				m.query = ""
+				m.searchInput.SetValue("")
+				m.applyFilter()
+				return m, nil
+
+			case "p": // Prefix bearbeiten
+				m.prefixing = true
+				m.prefixInput.SetValue(m.prefix)
+				m.prefixInput.CursorEnd()
+				m.prefixInput.Focus()
+				return m, nil
+			case "P": // Prefix schnell löschen
+				m.prefix = ""
+				m.prefixInput.SetValue("")
+				m.applyFilter()
+				return m, nil
 
 			case "c":
 				m.query = ""
+				m.prefix = ""
 				m.searchInput.SetValue("")
+				m.applyFilter()
+				m.prefixInput.SetValue("")
 				m.applyFilter()
 				return m, nil
 
@@ -332,7 +389,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		// grobe Reserve für Header, Divider, Titel, Footer/Hilfe
-		const chrome = 8
+		const chrome = 12
 		vp := m.height - chrome
 		if vp < 3 {
 			vp = 3
@@ -374,8 +431,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.storiesSource = msg.src
 		m.storiesTarget = msg.tgt
-		m.listIndex = 0
-		m.listOffset = 0
+		m.listIndex, m.listOffset = 0, 0
+		m.applyFilter()
 		if m.selected == nil {
 			m.selected = make(map[string]bool)
 		} else {
@@ -533,13 +590,17 @@ func (m model) View() string {
 			end := min(start+m.listViewport, total)
 
 			// Suchleiste (falls aktiv oder Query gesetzt)
-			if m.searching || strings.TrimSpace(m.query) != "" {
-				label := "Suche: "
-				if m.searching {
-					b.WriteString(label + m.searchInput.View() + "\n\n")
-				} else {
-					b.WriteString(label + m.query + "\n\n")
-				}
+			label := "Suche: "
+			if m.searching {
+				b.WriteString(label + m.searchInput.View() + "  |  ")
+			} else {
+				b.WriteString(label + m.query + "  |  ")
+			}
+
+			if m.prefixing {
+				b.WriteString("Prefix: " + m.prefixInput.View() + "\n\n")
+			} else {
+				b.WriteString(subtleStyle.Render("Prefix: "+m.prefix) + "\n\n")
 			}
 
 			if total == 0 {
@@ -592,7 +653,8 @@ func (m model) View() string {
 		}
 		b.WriteString("\n")
 		b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-		b.WriteString(helpStyle.Render(fmt.Sprintf("j/k bewegen  |  Story markieren  |  f suchen  |  +/- strenger/lockerer (cov=%.2f, spread=%d)  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück  |  r rescan  |  s preflight  |  q beenden", m.minCoverage, m.maxSpread)))
+		b.WriteString(helpStyle.Render("j/k bewegen  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden\n"))
+		b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
 
 	}
 
@@ -685,13 +747,9 @@ func (m *model) itemAt(visIdx int) sb.Story {
 // Fuzzy anwenden (Name, Slug, FullSlug)
 func (m *model) applyFilter() {
 	q := strings.TrimSpace(strings.ToLower(m.query))
-	if q == "" {
-		m.filteredIdx = nil
-		m.listIndex, m.listOffset = 0, 0
-		return
-	}
+	pref := strings.TrimSpace(strings.ToLower(m.prefix))
 
-	// Kandidaten zusammensetzen
+	// Kandidaten-Strings vorbereiten
 	base := make([]string, len(m.storiesSource))
 	for i, st := range m.storiesSource {
 		name := st.Name
@@ -701,10 +759,34 @@ func (m *model) applyFilter() {
 		base[i] = strings.ToLower(name + "  " + st.Slug + "  " + st.FullSlug)
 	}
 
-	// Pass 1: Substring (präzise, schnell)
-	sub := make([]int, 0, 128)
-	for i, s := range base {
-		if strings.Contains(s, q) {
+	// 1) Prefix auf FullSlug anwenden → Indexmenge vorfiltern
+	idx := make([]int, 0, len(m.storiesSource))
+	if pref != "" {
+		for i, st := range m.storiesSource {
+			if strings.HasPrefix(strings.ToLower(st.FullSlug), pref) {
+				idx = append(idx, i)
+			}
+		}
+	} else {
+		// keine Prefix-Einschränkung → alle Indizes
+		idx = idx[:0]
+		for i := range m.storiesSource {
+			idx = append(idx, i)
+		}
+	}
+
+	// Ohne Query? Dann nur Prefix anwenden.
+	if q == "" {
+		m.filteredIdx = append(m.filteredIdx[:0], idx...)
+		m.listIndex, m.listOffset = 0, 0
+		m.ensureCursorVisible()
+		return
+	}
+
+	// 2) Substring pass auf vorgefiltertem Set
+	sub := make([]int, 0, min(m.maxResults, len(idx)))
+	for _, i := range idx {
+		if strings.Contains(base[i], q) {
 			sub = append(sub, i)
 			if len(sub) >= m.maxResults {
 				break
@@ -718,8 +800,16 @@ func (m *model) applyFilter() {
 		return
 	}
 
-	// Pass 2: Fuzzy (Fallback, aber gedrosselt)
-	matches := fuzzy.Find(q, base)
+	// 3) Fuzzy-Fallback auf vorgefiltertem Set
+	//    → baue Teilmenge der Strings
+	subset := make([]string, len(idx))
+	mapBack := make([]int, len(idx))
+	for j, i := range idx {
+		subset[j] = base[i]
+		mapBack[j] = i
+	}
+	matches := fuzzy.Find(q, subset)
+
 	pruned := make([]int, 0, len(matches))
 	for _, mt := range matches {
 		if matchCoverage(q, mt) < m.minCoverage {
@@ -728,18 +818,17 @@ func (m *model) applyFilter() {
 		if matchSpread(mt) > m.maxSpread {
 			continue
 		}
-		pruned = append(pruned, mt.Index)
+		pruned = append(pruned, mapBack[mt.Index])
 		if len(pruned) >= m.maxResults {
 			break
 		}
 	}
-
 	if len(pruned) == 0 {
-		// falls alles zu streng: zeig die Top N rohen Fuzzy-Ergebnisse
 		for i := 0; i < len(matches) && i < m.maxResults; i++ {
-			pruned = append(pruned, matches[i].Index)
+			pruned = append(pruned, mapBack[matches[i].Index])
 		}
 	}
+
 	m.filteredIdx = pruned
 	m.listIndex, m.listOffset = 0, 0
 	m.ensureCursorVisible()
