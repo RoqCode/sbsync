@@ -113,15 +113,17 @@ func (c *Client) ListStories(ctx context.Context, opt ListStoriesOpts) ([]Story,
 			return nil, err
 		}
 
-		defer res.Body.Close()
 		if res.StatusCode != 200 {
+			res.Body.Close()
 			return nil, fmt.Errorf("stories.list status %s", res.Status)
 		}
 
 		var payload storiesResp
 		if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+			res.Body.Close()
 			return nil, err
 		}
+		res.Body.Close()
 
 		all = append(all, payload.Stories...)
 
