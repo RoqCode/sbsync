@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sahilm/fuzzy"
 )
 
 // --- UI Styles ---
@@ -67,6 +68,12 @@ type model struct {
 	listOffset   int
 	listViewport int
 	selected     map[string]bool // key: FullSlug (oder Full Path)
+
+	// searching
+	searching   bool
+	searchInput textinput.Model
+	query       string // aktueller Suchstring
+	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
 }
 
 func initialModel() model {
@@ -96,6 +103,15 @@ func initialModel() model {
 	ti.CharLimit = 200
 	m.ti = ti
 	m.selected = make(map[string]bool)
+
+	// search
+	si := textinput.New()
+	si.Placeholder = "Fuzzy suchen…"
+	si.CharLimit = 200
+	si.Width = 40
+	m.searchInput = si
+	m.query = ""
+	m.filteredIdx = nil
 
 	return m
 }
@@ -196,11 +212,56 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case stateBrowseList:
+			if m.searching {
+				switch key {
+				case "esc":
+					// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
+					if strings.TrimSpace(m.query) == "" {
+						m.searching = false
+						m.searchInput.Blur()
+						return m, nil
+					}
+					m.query = ""
+					m.searchInput.SetValue("")
+					m.applyFilter()
+					return m, nil
+				case "enter":
+					// Enter: Suche schließen, Ergebnis bleibt aktiv
+					m.searching = false
+					m.searchInput.Blur()
+					return m, nil
+				default:
+					var cmd tea.Cmd
+					m.searchInput, cmd = m.searchInput.Update(msg)
+					newQ := m.searchInput.Value()
+					if newQ != m.query {
+						m.query = newQ
+						m.applyFilter()
+					}
+					return m, cmd
+				}
+			}
+
 			switch key {
 			case "ctrl+c", "q":
 				return m, tea.Quit
+				// Suche togglen
+			case "f":
+				m.searching = true
+				m.searchInput.SetValue(m.query)
+				m.searchInput.CursorEnd()
+				m.searchInput.Focus()
+				return m, nil
+
+			case "c":
+				m.query = ""
+				m.searchInput.SetValue("")
+				m.applyFilter()
+				return m, nil
+
+			// Navigation mit aktueller Länge
 			case "j", "down":
-				if m.listIndex < len(m.storiesSource)-1 {
+				if m.listIndex < m.itemsLen()-1 {
 					m.listIndex++
 					m.ensureCursorVisible()
 				}
@@ -209,35 +270,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.listIndex--
 					m.ensureCursorVisible()
 				}
-			case "ctrl+f", "pgdown":
-				if len(m.storiesSource) > 0 {
+			case "ctrl+d", "pgdown":
+				if m.itemsLen() > 0 {
 					m.listIndex += m.listViewport
-					if m.listIndex > len(m.storiesSource)-1 {
-						m.listIndex = len(m.storiesSource) - 1
+					if m.listIndex > m.itemsLen()-1 {
+						m.listIndex = m.itemsLen() - 1
 					}
 					m.ensureCursorVisible()
 				}
-			case "ctrl+b", "pgup":
+			case "ctrl+u", "pgup":
 				m.listIndex -= m.listViewport
 				if m.listIndex < 0 {
 					m.listIndex = 0
 				}
 				m.ensureCursorVisible()
-			case "h", "left":
-				// später für Tabs/Filter – aktuell no-op
-			case "l", "right":
-				// später für Tabs/Filter – aktuell no-op
+
+			// Markieren – beachte filteredIdx beim Zugriff
 			case " ":
-				if len(m.storiesSource) == 0 {
+				if m.itemsLen() == 0 {
 					return m, nil
 				}
+				st := m.itemAt(m.listIndex)
 				if m.selected == nil {
 					m.selected = make(map[string]bool)
 				}
-				st := m.storiesSource[m.listIndex]
 				m.selected[st.FullSlug] = !m.selected[st.FullSlug]
+
+			// Rescan bleibt gleich
 			case "r":
-				// Rescan
 				m.state = stateScanning
 				m.statusMsg = "Rescan…"
 				return m, m.scanStoriesCmd()
@@ -445,37 +505,61 @@ func (m model) View() string {
 		if srcCount == 0 {
 			b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.\n"))
 		} else {
+			// sichtbaren Bereich bestimmen
+			total := m.itemsLen()
 			start := m.listOffset
-			end := min(start+m.listViewport, len(m.storiesSource))
+			end := min(start+m.listViewport, total)
 
-			for i := start; i < end; i++ {
-				st := m.storiesSource[i]
-				cursor := "  "
-				if i == m.listIndex {
-					cursor = "▶ "
+			// Suchleiste (falls aktiv oder Query gesetzt)
+			if m.searching || strings.TrimSpace(m.query) != "" {
+				label := "Suche: "
+				if m.searching {
+					b.WriteString(label + m.searchInput.View() + "\n\n")
+				} else {
+					b.WriteString(label + m.query + "\n\n")
 				}
-				mark := "[ ]"
-				if m.selected[st.FullSlug] {
-					mark = "[x]"
-				}
-				line := fmt.Sprintf("%s%s  %s", cursor, mark, displayStory(st))
-				if i == m.listIndex {
-					line = selStyle.Render(line)
-				}
-				b.WriteString(line + "\n")
 			}
 
-			// Footer (Range/Total)
+			if total == 0 {
+				b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).\n"))
+			} else {
+				for i := start; i < end; i++ {
+					st := m.itemAt(i)
+					cursor := "  "
+					if i == m.listIndex {
+						cursor = "▶ "
+					}
+
+					mark := "[ ]"
+					if m.selected[st.FullSlug] {
+						mark = "[x]"
+					}
+
+					line := fmt.Sprintf("%s%s  %s", cursor, mark, displayStory(st))
+					if i == m.listIndex {
+						line = selStyle.Render(line)
+					}
+					b.WriteString(line + "\n")
+				}
+			}
+
 			shown := 0
 			if end > start {
 				shown = end - start
 			}
+
+			// Anzeige: Filterstatus + Range
+			suffix := ""
+			if m.filteredIdx != nil {
+				suffix = fmt.Sprintf("  |  gefiltert: %d", total)
+			}
 			b.WriteString("\n")
 			b.WriteString(subtleStyle.Render(
-				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)",
-					start+1, end, len(m.storiesSource), shown),
+				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
+					start+1, end, total, shown, suffix),
 			))
 			b.WriteString("\n")
+
 		}
 		// Footer / Hilfe
 		checked := 0
@@ -486,7 +570,7 @@ func (m model) View() string {
 		}
 		b.WriteString("\n")
 		b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-		b.WriteString(helpStyle.Render("j/k bewegen  |  Space markieren  |  r rescan  |  s preflight (T6)  |  q beenden"))
+		b.WriteString(helpStyle.Render("j/k bewegen  |  Story markieren  |  f suchen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück  |  r rescan  |  s preflight  |  q beenden"))
 
 	}
 
@@ -524,16 +608,31 @@ func (m *model) ensureCursorVisible() {
 	if m.listViewport <= 0 {
 		m.listViewport = 10
 	}
-	// nach oben scrollen
+
+	// clamp index gegen aktuelle Länge
+	n := m.itemsLen()
+	if n == 0 {
+		m.listIndex = 0
+		m.listOffset = 0
+		return
+	}
+	if m.listIndex < 0 {
+		m.listIndex = 0
+	}
+	if m.listIndex > n-1 {
+		m.listIndex = n - 1
+	}
+
+	// scroll up/down
 	if m.listIndex < m.listOffset {
 		m.listOffset = m.listIndex
 	}
-	// nach unten scrollen
 	if m.listIndex >= m.listOffset+m.listViewport {
 		m.listOffset = m.listIndex - m.listViewport + 1
 	}
-	// Offset clampen, damit wir nicht über das Ende hinausragen
-	maxStart := len(m.storiesSource) - m.listViewport
+
+	// clamp offset
+	maxStart := n - m.listViewport
 	if maxStart < 0 {
 		maxStart = 0
 	}
@@ -543,6 +642,53 @@ func (m *model) ensureCursorVisible() {
 	if m.listOffset < 0 {
 		m.listOffset = 0
 	}
+}
+
+// Gesamtlänge der aktuell sichtbaren Items (gefiltert oder voll)
+func (m *model) itemsLen() int {
+	if m.filteredIdx != nil {
+		return len(m.filteredIdx)
+	}
+	return len(m.storiesSource)
+}
+
+// original Story für einen sichtbaren Index holen
+func (m *model) itemAt(visIdx int) sb.Story {
+	if m.filteredIdx != nil {
+		return m.storiesSource[m.filteredIdx[visIdx]]
+	}
+	return m.storiesSource[visIdx]
+}
+
+// Fuzzy anwenden (Name, Slug, FullSlug)
+func (m *model) applyFilter() {
+	q := strings.TrimSpace(m.query)
+	if q == "" {
+		m.filteredIdx = nil // Filter aus
+		m.listIndex = 0
+		m.listOffset = 0
+		return
+	}
+	// Suchbasis: kombinierter String pro Story
+	candidates := make([]string, len(m.storiesSource))
+	for i, st := range m.storiesSource {
+		name := st.Name
+		if name == "" {
+			name = st.Slug
+		}
+		candidates[i] = name + "  " + st.Slug + "  " + st.FullSlug
+	}
+	matches := fuzzy.Find(q, candidates)
+
+	// baue Indexliste
+	m.filteredIdx = m.filteredIdx[:0]
+	for _, mt := range matches {
+		m.filteredIdx = append(m.filteredIdx, mt.Index)
+	}
+	// Cursor zurücksetzen & sichtbar halten
+	m.listIndex = 0
+	m.listOffset = 0
+	m.ensureCursorVisible()
 }
 
 // --- main ---
