@@ -266,6 +266,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.spaces = msg.spaces
 		m.statusMsg = fmt.Sprintf("Token ok. %d Spaces gefunden.", len(m.spaces))
+		// check if we have spaces configured and validate if their ids are in m.spaces
+		if m.cfg.SourceSpace != "" && m.cfg.TargetSpace != "" {
+			sourceSpace, sourceIdIsOk := containsSpaceID(m.spaces, m.cfg.SourceSpace)
+			targetSpace, targetIdIsOk := containsSpaceID(m.spaces, m.cfg.TargetSpace)
+
+			if sourceIdIsOk && targetIdIsOk {
+				m.sourceSpace = &sourceSpace
+				m.targetSpace = &targetSpace
+				m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Scanne jetzt Stories…", sourceSpace.Name, sourceSpace.ID)
+				m.state = stateScanning
+				return m, m.scanStoriesCmd()
+			}
+		}
 		m.state = stateSpaceSelect
 		m.selectingSource = true
 		m.selectedIndex = 0
@@ -479,6 +492,17 @@ func (m model) View() string {
 
 	b.WriteString("\n")
 	return b.String()
+}
+
+// ------ utils -------
+
+func containsSpaceID(spacesSlice []sb.Space, spaceID string) (sb.Space, bool) {
+	for _, space := range spacesSlice {
+		if fmt.Sprint(space.ID) == spaceID {
+			return space, true
+		}
+	}
+	return sb.Space{}, false
 }
 
 func displayStory(st sb.Story) string {
