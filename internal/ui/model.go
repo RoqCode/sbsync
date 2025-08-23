@@ -20,10 +20,10 @@ var (
 	focusStyle   = lipgloss.NewStyle().Bold(true)
 	selStyle     = lipgloss.NewStyle().Reverse(true)
 
-	// symbols for different story types
-	symbolStory  = lipgloss.NewStyle().Foreground(lipgloss.Color("111")).Render("•")
-	symbolFolder = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("▸")
-	symbolRoot   = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render("★")
+        // markers for different story types (colored squares)
+        symbolStory  = lipgloss.NewStyle().Background(lipgloss.Color("111")).Render(" ")
+        symbolFolder = lipgloss.NewStyle().Background(lipgloss.Color("214")).Render(" ")
+        symbolRoot   = lipgloss.NewStyle().Background(lipgloss.Color("82")).Render(" ")
 )
 
 // --- Model / State ---
