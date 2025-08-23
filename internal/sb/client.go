@@ -62,12 +62,14 @@ func (c *Client) ListSpaces(ctx context.Context) ([]Space, error) {
 // ---------- Stories (flach) ----------
 
 type Story struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	Slug      string `json:"slug"`
-	FullSlug  string `json:"full_slug"`
-	FolderID  *int   `json:"parent_id"`
-	UpdatedAt string `json:"updated_at"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	FullSlug    string `json:"full_slug"`
+	FolderID    *int   `json:"parent_id"`
+	UpdatedAt   string `json:"updated_at"`
+	IsFolder    bool   `json:"is_folder"`
+	IsStartpage bool   `json:"is_startpage"`
 }
 
 type storiesResp struct {
