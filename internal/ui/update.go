@@ -36,163 +36,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case stateScanning:
 			return m.handleScanningKey(key)
 		case stateBrowseList:
-<<<<<<< HEAD
-			if m.filter.prefixing {
-				switch key {
-				case "esc":
-					m.filter.prefixInput.Blur()
-					if strings.TrimSpace(m.filter.prefixInput.Value()) == "" {
-						m.filter.prefix = ""
-					}
-					m.filter.prefixing = false
-					m.applyFilter()
-					return m, nil
-				case "enter":
-					m.filter.prefix = strings.TrimSpace(m.filter.prefixInput.Value())
-					m.filter.prefixing = false
-					m.filter.prefixInput.Blur()
-					m.applyFilter()
-					return m, nil
-				case "ctrl+c", "q":
-					return m, tea.Quit
-				default:
-					var cmd tea.Cmd
-					m.filter.prefixInput, cmd = m.filter.prefixInput.Update(msg)
-					return m, cmd
-				}
-			}
-
-			if m.search.searching {
-				switch key {
-				case "esc":
-					// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
-					if strings.TrimSpace(m.search.query) == "" {
-						m.search.searching = false
-						m.search.searchInput.Blur()
-						return m, nil
-					}
-					m.search.query = ""
-					m.search.searchInput.SetValue("")
-					m.applyFilter()
-					return m, nil
-				case "enter":
-					// Enter: Suche schließen, Ergebnis bleibt aktiv
-					m.search.searching = false
-					m.search.searchInput.Blur()
-					return m, nil
-					// in stateBrowseList:
-				case "+":
-					m.search.minCoverage += 0.05
-					if m.search.minCoverage > 0.95 {
-						m.search.minCoverage = 0.95
-					}
-					m.applyFilter()
-				case "-":
-					m.search.minCoverage -= 0.05
-					if m.search.minCoverage < 0.3 {
-						m.search.minCoverage = 0.3
-					}
-					m.applyFilter()
-				case "ctrl+c", "q":
-					return m, tea.Quit
-				default:
-					var cmd tea.Cmd
-					m.search.searchInput, cmd = m.search.searchInput.Update(msg)
-					newQ := m.search.searchInput.Value()
-					if newQ != m.search.query {
-						m.search.query = newQ
-						m.applyFilter()
-					}
-					return m, cmd
-				}
-			}
-
-			switch key {
-			case "ctrl+c", "q":
-				return m, tea.Quit
-				// Suche togglen
-			case "f":
-				m.search.searching = true
-				m.search.searchInput.SetValue(m.search.query)
-				m.search.searchInput.CursorEnd()
-				m.search.searchInput.Focus()
-				return m, nil
-			case "F":
-				m.search.query = ""
-				m.search.searchInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-			case "p": // Prefix bearbeiten
-				m.filter.prefixing = true
-				m.filter.prefixInput.SetValue(m.filter.prefix)
-				m.filter.prefixInput.CursorEnd()
-				m.filter.prefixInput.Focus()
-				return m, nil
-			case "P": // Prefix schnell löschen
-				m.filter.prefix = ""
-				m.filter.prefixInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-			case "c":
-				m.search.query = ""
-				m.filter.prefix = ""
-				m.search.searchInput.SetValue("")
-				m.applyFilter()
-				m.filter.prefixInput.SetValue("")
-				m.applyFilter()
-				return m, nil
-
-				// Navigation mit aktueller Länge
-			case "j", "down":
-				if m.selection.listIndex < m.itemsLen()-1 {
-					m.selection.listIndex++
-					m.ensureCursorVisible()
-				}
-			case "k", "up":
-				if m.selection.listIndex > 0 {
-					m.selection.listIndex--
-					m.ensureCursorVisible()
-				}
-			case "ctrl+d", "pgdown":
-				if m.itemsLen() > 0 {
-					m.selection.listIndex += m.selection.listViewport
-					if m.selection.listIndex > m.itemsLen()-1 {
-						m.selection.listIndex = m.itemsLen() - 1
-					}
-					m.ensureCursorVisible()
-				}
-			case "ctrl+u", "pgup":
-				m.selection.listIndex -= m.selection.listViewport
-				if m.selection.listIndex < 0 {
-					m.selection.listIndex = 0
-				}
-				m.ensureCursorVisible()
-
-				// Markieren – beachte filteredIdx beim Zugriff
-			case " ":
-				if m.itemsLen() == 0 {
-					return m, nil
-				}
-				st := m.itemAt(m.selection.listIndex)
-				if m.selection.selected == nil {
-					m.selection.selected = make(map[string]bool)
-				}
-				m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
-
-			// Rescan bleibt gleich
-			case "r":
-				m.state = stateScanning
-				m.statusMsg = "Rescan…"
-				return m, m.scanStoriesCmd()
-			case "s":
-				// Weiter zu Preflight in T6 – hier nur Platzhalter
-				m.statusMsg = "Preflight (T6) folgt …"
-			}
-=======
 			return m.handleBrowseListKey(msg)
->>>>>>> 26d7acb (test: document state handler interactions)
 		}
 
 	case tea.WindowSizeMsg:
@@ -342,65 +186,69 @@ func (m Model) handleScanningKey(key string) (Model, tea.Cmd) {
 func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
-	if m.prefixing {
+	if m.filter.prefixing {
 		switch key {
 		case "esc":
-			m.prefixInput.Blur()
-			if strings.TrimSpace(m.prefixInput.Value()) == "" {
-				m.prefix = ""
+			m.filter.prefixInput.Blur()
+			if strings.TrimSpace(m.filter.prefixInput.Value()) == "" {
+				m.filter.prefix = ""
 			}
-			m.prefixing = false
+			m.filter.prefixing = false
 			m.applyFilter()
 			return m, nil
 		case "enter":
-			m.prefix = strings.TrimSpace(m.prefixInput.Value())
-			m.prefixing = false
-			m.prefixInput.Blur()
+			m.filter.prefix = strings.TrimSpace(m.filter.prefixInput.Value())
+			m.filter.prefixing = false
+			m.filter.prefixInput.Blur()
 			m.applyFilter()
 			return m, nil
+		case "ctrl+c", "q":
+			return m, tea.Quit
 		default:
 			var cmd tea.Cmd
-			m.prefixInput, cmd = m.prefixInput.Update(msg)
+			m.filter.prefixInput, cmd = m.filter.prefixInput.Update(msg)
 			return m, cmd
 		}
 	}
 
-	if m.searching {
+	if m.search.searching {
 		switch key {
 		case "esc":
 			// ESC: wenn Query leer -> Suche schließen, sonst nur löschen
-			if strings.TrimSpace(m.query) == "" {
-				m.searching = false
-				m.searchInput.Blur()
+			if strings.TrimSpace(m.search.query) == "" {
+				m.search.searching = false
+				m.search.searchInput.Blur()
 				return m, nil
 			}
-			m.query = ""
-			m.searchInput.SetValue("")
+			m.search.query = ""
+			m.search.searchInput.SetValue("")
 			m.applyFilter()
 			return m, nil
 		case "enter":
 			// Enter: Suche schließen, Ergebnis bleibt aktiv
-			m.searching = false
-			m.searchInput.Blur()
+			m.search.searching = false
+			m.search.searchInput.Blur()
 			return m, nil
 		case "+":
-			m.minCoverage += 0.05
-			if m.minCoverage > 0.95 {
-				m.minCoverage = 0.95
+			m.search.minCoverage += 0.05
+			if m.search.minCoverage > 0.95 {
+				m.search.minCoverage = 0.95
 			}
 			m.applyFilter()
 		case "-":
-			m.minCoverage -= 0.05
-			if m.minCoverage < 0.3 {
-				m.minCoverage = 0.3
+			m.search.minCoverage -= 0.05
+			if m.search.minCoverage < 0.3 {
+				m.search.minCoverage = 0.3
 			}
 			m.applyFilter()
+		case "ctrl+c", "q":
+			return m, tea.Quit
 		default:
 			var cmd tea.Cmd
-			m.searchInput, cmd = m.searchInput.Update(msg)
-			newQ := m.searchInput.Value()
-			if newQ != m.query {
-				m.query = newQ
+			m.search.searchInput, cmd = m.search.searchInput.Update(msg)
+			newQ := m.search.searchInput.Value()
+			if newQ != m.search.query {
+				m.search.query = newQ
 				m.applyFilter()
 			}
 			return m, cmd
@@ -409,60 +257,60 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	switch key {
 	case "f":
-		m.searching = true
-		m.searchInput.SetValue(m.query)
-		m.searchInput.CursorEnd()
-		m.searchInput.Focus()
+		m.search.searching = true
+		m.search.searchInput.SetValue(m.search.query)
+		m.search.searchInput.CursorEnd()
+		m.search.searchInput.Focus()
 		return m, nil
 	case "F":
-		m.query = ""
-		m.searchInput.SetValue("")
+		m.search.query = ""
+		m.search.searchInput.SetValue("")
 		m.applyFilter()
 		return m, nil
 
 	case "p": // Prefix bearbeiten
-		m.prefixing = true
-		m.prefixInput.SetValue(m.prefix)
-		m.prefixInput.CursorEnd()
-		m.prefixInput.Focus()
+		m.filter.prefixing = true
+		m.filter.prefixInput.SetValue(m.filter.prefix)
+		m.filter.prefixInput.CursorEnd()
+		m.filter.prefixInput.Focus()
 		return m, nil
 	case "P": // Prefix schnell löschen
-		m.prefix = ""
-		m.prefixInput.SetValue("")
+		m.filter.prefix = ""
+		m.filter.prefixInput.SetValue("")
 		m.applyFilter()
 		return m, nil
 
 	case "c":
-		m.query = ""
-		m.prefix = ""
-		m.searchInput.SetValue("")
+		m.search.query = ""
+		m.filter.prefix = ""
+		m.search.searchInput.SetValue("")
 		m.applyFilter()
-		m.prefixInput.SetValue("")
+		m.filter.prefixInput.SetValue("")
 		m.applyFilter()
 		return m, nil
 
 	case "j", "down":
-		if m.listIndex < m.itemsLen()-1 {
-			m.listIndex++
+		if m.selection.listIndex < m.itemsLen()-1 {
+			m.selection.listIndex++
 			m.ensureCursorVisible()
 		}
 	case "k", "up":
-		if m.listIndex > 0 {
-			m.listIndex--
+		if m.selection.listIndex > 0 {
+			m.selection.listIndex--
 			m.ensureCursorVisible()
 		}
 	case "ctrl+d", "pgdown":
 		if m.itemsLen() > 0 {
-			m.listIndex += m.listViewport
-			if m.listIndex > m.itemsLen()-1 {
-				m.listIndex = m.itemsLen() - 1
+			m.selection.listIndex += m.selection.listViewport
+			if m.selection.listIndex > m.itemsLen()-1 {
+				m.selection.listIndex = m.itemsLen() - 1
 			}
 			m.ensureCursorVisible()
 		}
 	case "ctrl+u", "pgup":
-		m.listIndex -= m.listViewport
-		if m.listIndex < 0 {
-			m.listIndex = 0
+		m.selection.listIndex -= m.selection.listViewport
+		if m.selection.listIndex < 0 {
+			m.selection.listIndex = 0
 		}
 		m.ensureCursorVisible()
 
@@ -470,11 +318,11 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if m.itemsLen() == 0 {
 			return m, nil
 		}
-		st := m.itemAt(m.listIndex)
-		if m.selected == nil {
-			m.selected = make(map[string]bool)
+		st := m.itemAt(m.selection.listIndex)
+		if m.selection.selected == nil {
+			m.selection.selected = make(map[string]bool)
 		}
-		m.selected[st.FullSlug] = !m.selected[st.FullSlug]
+		m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
 
 	case "r":
 		m.state = stateScanning
