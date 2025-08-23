@@ -147,7 +147,7 @@ func InitialModel() Model {
 
 	// spinner
 	sp := spinner.New()
-	sp.Spinner = spinner.Dot
+	sp.Spinner = spinner.Line
 	sp.Style = subtleStyle
 	m.spinner = sp
 
