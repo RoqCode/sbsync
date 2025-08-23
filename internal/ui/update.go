@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"storyblok-sync/internal/sb"
-
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"storyblok-sync/internal/sb"
 )
 
 // ---------- Update ----------
@@ -67,7 +68,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.targetSpace = &targetSpace
 				m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Scanne jetzt Stories…", sourceSpace.Name, sourceSpace.ID)
 				m.state = stateScanning
-				return m, m.scanStoriesCmd()
+				return m, tea.Batch(m.spinner.Tick, m.scanStoriesCmd())
 			}
 		}
 		m.state = stateSpaceSelect
@@ -94,6 +95,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = fmt.Sprintf("Scan ok. Source: %d Stories, Target: %d Stories.", len(m.storiesSource), len(m.storiesTarget))
 		m.state = stateBrowseList
 		return m, nil
+
+	case spinner.TickMsg:
+		if m.state == stateValidating || m.state == stateScanning {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -111,7 +120,7 @@ func (m Model) handleWelcomeKey(key string) (Model, tea.Cmd) {
 		}
 		m.state = stateValidating
 		m.statusMsg = "Validiere Token…"
-		return m, m.validateTokenCmd()
+		return m, tea.Batch(m.spinner.Tick, m.validateTokenCmd())
 	}
 	return m, nil
 }
@@ -131,7 +140,7 @@ func (m Model) handleTokenPromptKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.state = stateValidating
 		m.statusMsg = "Validiere Token…"
-		return m, m.validateTokenCmd()
+		return m, tea.Batch(m.spinner.Tick, m.validateTokenCmd())
 	default:
 		var cmd tea.Cmd
 		m.ti, cmd = m.ti.Update(msg)
@@ -171,7 +180,7 @@ func (m Model) handleSpaceSelectKey(key string) (Model, tea.Cmd) {
 			m.targetSpace = &chosen
 			m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Scanne jetzt Stories…", chosen.Name, chosen.ID)
 			m.state = stateScanning
-			return m, m.scanStoriesCmd()
+			return m, tea.Batch(m.spinner.Tick, m.scanStoriesCmd())
 		}
 	}
 	return m, nil
