@@ -20,9 +20,9 @@ var (
 	helpStyle       = lipgloss.NewStyle().Faint(true)
 	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	focusStyle      = lipgloss.NewStyle().Bold(true)
-	cursorLineStyle = lipgloss.NewStyle().Background(lipgloss.Color("236"))
-	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("63"))
-	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("34"))
+	cursorLineStyle = lipgloss.NewStyle().Background(lipgloss.Color("#2A2B3D"))
+	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
+	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
