@@ -11,14 +11,16 @@ import (
 
 // --- UI Styles ---
 var (
-	titleStyle   = lipgloss.NewStyle().Bold(true).Underline(true)
-	subtleStyle  = lipgloss.NewStyle().Faint(true)
-	okStyle      = lipgloss.NewStyle().Bold(true)
-	warnStyle    = lipgloss.NewStyle().Bold(true)
-	helpStyle    = lipgloss.NewStyle().Faint(true)
-	dividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	focusStyle   = lipgloss.NewStyle().Bold(true)
-	selStyle     = lipgloss.NewStyle().Reverse(true)
+	titleStyle      = lipgloss.NewStyle().Bold(true).Underline(true)
+	subtleStyle     = lipgloss.NewStyle().Faint(true)
+	okStyle         = lipgloss.NewStyle().Bold(true)
+	warnStyle       = lipgloss.NewStyle().Bold(true)
+	helpStyle       = lipgloss.NewStyle().Faint(true)
+	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	focusStyle      = lipgloss.NewStyle().Bold(true)
+	cursorLineStyle = lipgloss.NewStyle().Background(lipgloss.Color("236"))
+	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("63"))
+	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("34"))
 
 	// markers for different story types (colored squares)
 	symbolStory  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8942E1")).Render("S")

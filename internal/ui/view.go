@@ -161,23 +161,8 @@ func (m Model) viewBrowseList() string {
 			// Erzeuge Tree-Struktur
 			tr := tree.New()
 			nodes := make(map[int]*tree.Tree, len(stories))
-			for i, st := range stories {
-				cursor := "  "
-				if i == m.selection.listIndex {
-					cursor = "▶ "
-				}
-
-				mark := "[ ]"
-				if m.selection.selected[st.FullSlug] {
-					mark = "[x]"
-				}
-
-				line := fmt.Sprintf("%s%s %s", cursor, mark, displayStory(st))
-				if i == m.selection.listIndex {
-					line = selStyle.Render(line)
-				}
-
-				node := tree.Root(line)
+			for _, st := range stories {
+				node := tree.Root(displayStory(st))
 				nodes[st.ID] = node
 			}
 
@@ -194,6 +179,26 @@ func (m Model) viewBrowseList() string {
 
 			// Begrenze Ausgabe auf sichtbaren Bereich
 			lines := strings.Split(tr.String(), "\n")
+			if len(lines) > 0 && lines[len(lines)-1] == "" {
+				lines = lines[:len(lines)-1]
+			}
+
+			for i, st := range stories {
+				if i >= len(lines) {
+					break
+				}
+				line := lines[i]
+				switch {
+				case i == m.selection.listIndex:
+					line = cursorBarStyle.Render(" ") + cursorLineStyle.Render(line)
+				case m.selection.selected[st.FullSlug]:
+					line = markBarStyle.Render(" ") + line
+				default:
+					line = " " + line
+				}
+				lines[i] = line
+			}
+
 			start := m.selection.listOffset
 			if start > len(lines) {
 				start = len(lines)
