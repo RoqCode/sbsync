@@ -164,7 +164,7 @@ func (m Model) viewBrowseList() string {
 					mark = "[x]"
 				}
 
-				line := fmt.Sprintf("%s%s  %s", cursor, mark, displayStory(st))
+				line := fmt.Sprintf("%s%s %s", cursor, mark, displayStory(st))
 				if i == m.selection.listIndex {
 					line = selStyle.Render(line)
 				}
@@ -208,7 +208,19 @@ func displayStory(st sb.Story) string {
 	if name == "" {
 		name = st.Slug
 	}
-	return fmt.Sprintf("%s  (%s)", name, st.FullSlug)
+	sym := storyTypeSymbol(st)
+	return fmt.Sprintf("%s %s  (%s)", sym, name, st.FullSlug)
+}
+
+func storyTypeSymbol(st sb.Story) string {
+	switch {
+	case st.IsFolder:
+		return symbolFolder
+	case st.IsStartpage:
+		return symbolRoot
+	default:
+		return symbolStory
+	}
 }
 
 func max(a, b int) int {

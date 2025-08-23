@@ -19,6 +19,11 @@ var (
 	dividerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	focusStyle   = lipgloss.NewStyle().Bold(true)
 	selStyle     = lipgloss.NewStyle().Reverse(true)
+
+	// markers for different story types (colored squares)
+	symbolStory  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8942E1")).Render("S")
+	symbolFolder = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA")).Render("F")
+	symbolRoot   = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("R")
 )
 
 // --- Model / State ---
