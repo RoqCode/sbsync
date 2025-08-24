@@ -102,11 +102,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.state == stateValidating || m.state == stateScanning {
+		if m.state == stateValidating || m.state == stateScanning || (m.state == statePreflight && m.syncing) {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
+		return m, nil
+
+	case syncResultMsg:
+		if msg.index < len(m.preflight.items) {
+			m.preflight.items[msg.index].Run = RunDone
+			it := m.preflight.items[msg.index]
+
+			if msg.err != nil {
+				// Add error to report with complete source story
+				m.report.AddError(it.Story.FullSlug, "sync", msg.err.Error(), msg.duration, &it.Story)
+			} else if msg.result != nil {
+				// Add successful sync to report
+				if msg.result.warning != "" {
+					// Success with warning
+					m.report.AddWarning(it.Story.FullSlug, msg.result.operation, msg.result.warning, msg.duration, &it.Story, msg.result.targetStory)
+				} else {
+					// Pure success
+					m.report.AddSuccess(it.Story.FullSlug, msg.result.operation, msg.duration, msg.result.targetStory)
+				}
+			} else {
+				// Fallback for unexpected case
+				m.report.AddSuccess(it.Story.FullSlug, "unknown", msg.duration, nil)
+			}
+		}
+
+		done := 0
+		for _, it := range m.preflight.items {
+			if it.Run == RunDone {
+				done++
+			}
+		}
+		m.syncIndex = done
+		if done < len(m.preflight.items) {
+			return m, m.runNextItem()
+		}
+
+		m.syncing = false
+		m.statusMsg = m.report.GetDisplaySummary()
+		_ = m.report.Save()
 		return m, nil
 	}
 
@@ -396,6 +435,9 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	if m.syncing {
+		return m, nil
+	}
 	key := msg.String()
 	switch key {
 	case "j", "down":
@@ -438,16 +480,29 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.state = stateBrowseList
 		return m, nil
 	case "enter":
-		m.plan = SyncPlan{Items: append([]PreflightItem(nil), m.preflight.items...)}
-		skipped := 0
-		for _, it := range m.preflight.items {
-			if it.Skip {
-				skipped++
-			}
+		m.optimizePreflight()
+		if len(m.preflight.items) == 0 {
+			m.statusMsg = "Keine Items zum Sync"
+			return m, nil
 		}
-		m.statusMsg = fmt.Sprintf("SyncPlan erstellt: %d Items, %d skipped", len(m.preflight.items), skipped)
-		m.state = stateBrowseList
-		return m, nil
+		m.plan = SyncPlan{Items: append([]PreflightItem(nil), m.preflight.items...)}
+		m.syncing = true
+		m.syncIndex = 0
+		m.api = sb.New(m.cfg.Token)
+
+		// Initialize comprehensive report with space information
+		sourceSpaceName := ""
+		targetSpaceName := ""
+		if m.sourceSpace != nil {
+			sourceSpaceName = fmt.Sprintf("%s (%d)", m.sourceSpace.Name, m.sourceSpace.ID)
+		}
+		if m.targetSpace != nil {
+			targetSpaceName = fmt.Sprintf("%s (%d)", m.targetSpace.Name, m.targetSpace.ID)
+		}
+		m.report = *NewReport(sourceSpaceName, targetSpaceName)
+
+		m.statusMsg = fmt.Sprintf("Synchronisiere %d Items…", len(m.preflight.items))
+		return m, tea.Batch(m.spinner.Tick, m.runNextItem())
 	}
 	return m, nil
 }

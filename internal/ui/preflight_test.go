@@ -165,3 +165,40 @@ func TestViewPreflightShowsStateCell(t *testing.T) {
 		t.Fatalf("expected skip state cell")
 	}
 }
+
+func TestOptimizePreflightDedupesFolders(t *testing.T) {
+	folder := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	m := InitialModel()
+	m.preflight.items = []PreflightItem{
+		{Story: folder, Selected: true},
+		{Story: folder, Selected: true},
+	}
+	m.optimizePreflight()
+	if len(m.preflight.items) != 1 {
+		t.Fatalf("expected 1 item after dedupe, got %d", len(m.preflight.items))
+	}
+}
+
+func TestOptimizePreflightStartsWith(t *testing.T) {
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child1 := sb.Story{ID: 2, Name: "one", Slug: "one", FullSlug: "app/one", FolderID: &parent.ID}
+	child2 := sb.Story{ID: 3, Name: "two", Slug: "two", FullSlug: "app/two", FolderID: &parent.ID}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child1, child2}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child1.FullSlug] = true
+	m.selection.selected[child2.FullSlug] = true
+	m.startPreflight()
+	m.optimizePreflight()
+	if len(m.preflight.items) != 1 {
+		t.Fatalf("expected 1 item after optimization, got %d", len(m.preflight.items))
+	}
+	if !m.preflight.items[0].StartsWith {
+		t.Fatalf("expected starts_with flag for folder")
+	}
+}
