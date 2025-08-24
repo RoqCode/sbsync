@@ -102,11 +102,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.state == stateValidating || m.state == stateScanning {
+		if m.state == stateValidating || m.state == stateScanning || (m.state == statePreflight && m.syncing) {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
+		return m, nil
+
+	case syncResultMsg:
+		if msg.index < len(m.preflight.items) {
+			m.preflight.items[msg.index].Run = RunDone
+			it := m.preflight.items[msg.index]
+			if msg.err != nil {
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Error: msg.err.Error()})
+			} else {
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success"})
+			}
+		}
+		done := 0
+		for _, it := range m.preflight.items {
+			if it.Run == RunDone {
+				done++
+			}
+		}
+		m.syncIndex = done
+		if done < len(m.preflight.items) {
+			return m, m.runNextItem()
+		}
+		m.syncing = false
+		succ, warn, fail := m.report.Counts()
+		m.statusMsg = fmt.Sprintf("Sync fertig: %d Erfolg, %d Warnung, %d Fehler", succ, warn, fail)
+		_ = m.report.Save()
 		return m, nil
 	}
 
@@ -396,6 +422,9 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	if m.syncing {
+		return m, nil
+	}
 	key := msg.String()
 	switch key {
 	case "j", "down":
@@ -438,16 +467,18 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.state = stateBrowseList
 		return m, nil
 	case "enter":
-		m.plan = SyncPlan{Items: append([]PreflightItem(nil), m.preflight.items...)}
-		skipped := 0
-		for _, it := range m.preflight.items {
-			if it.Skip {
-				skipped++
-			}
+		m.optimizePreflight()
+		if len(m.preflight.items) == 0 {
+			m.statusMsg = "Keine Items zum Sync"
+			return m, nil
 		}
-		m.statusMsg = fmt.Sprintf("SyncPlan erstellt: %d Items, %d skipped", len(m.preflight.items), skipped)
-		m.state = stateBrowseList
-		return m, nil
+		m.plan = SyncPlan{Items: append([]PreflightItem(nil), m.preflight.items...)}
+		m.syncing = true
+		m.syncIndex = 0
+		m.api = sb.New(m.cfg.Token)
+		m.report = Report{}
+		m.statusMsg = fmt.Sprintf("Synchronisiere %d Items…", len(m.preflight.items))
+		return m, tea.Batch(m.spinner.Tick, m.runNextItem())
 	}
 	return m, nil
 }

@@ -1,6 +1,7 @@
 package sb
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -136,4 +137,94 @@ func (c *Client) ListStories(ctx context.Context, opt ListStoriesOpts) ([]Story,
 		page++
 	}
 	return all, nil
+}
+
+// storyResp is used for create/update/get responses.
+type storyResp struct {
+	Story Story `json:"story"`
+}
+
+// GetStory fetches a single story by ID.
+func (c *Client) GetStory(ctx context.Context, spaceID, storyID int) (Story, error) {
+	if c.token == "" {
+		return Story{}, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
+	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return Story{}, fmt.Errorf("story.get status %s", res.Status)
+	}
+	var payload storyResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return Story{}, err
+	}
+	return payload.Story, nil
+}
+
+// CreateStory creates a new story (or folder) in the target space.
+func (c *Client) CreateStory(ctx context.Context, spaceID int, st Story) (Story, error) {
+	if c.token == "" {
+		return Story{}, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories", spaceID)
+	payload := storyResp{Story: st}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return Story{}, err
+	}
+	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		return Story{}, fmt.Errorf("story.create status %s", res.Status)
+	}
+	var resp storyResp
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return Story{}, err
+	}
+	return resp.Story, nil
+}
+
+// UpdateStory updates an existing story in the target space.
+func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story, error) {
+	if c.token == "" {
+		return Story{}, errors.New("token leer")
+	}
+	if st.ID == 0 {
+		return Story{}, errors.New("story ID fehlt")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, st.ID)
+	payload := storyResp{Story: st}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return Story{}, err
+	}
+	req, _ := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		return Story{}, fmt.Errorf("story.update status %s", res.Status)
+	}
+	var resp storyResp
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return Story{}, err
+	}
+	return resp.Story, nil
 }
