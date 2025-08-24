@@ -1,7 +1,13 @@
 package ui
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"reflect"
+	"strings"
 	"testing"
+	"unsafe"
 
 	"storyblok-sync/internal/sb"
 )
@@ -88,5 +94,65 @@ func TestSyncStartsWithCopiesSubtree(t *testing.T) {
 		if m.storiesTarget[idx].FolderID == nil || *m.storiesTarget[idx].FolderID != folderID {
 			t.Fatalf("child %s does not reference folder", slug)
 		}
+	}
+}
+
+type rtFunc func(*http.Request) (*http.Response, error)
+
+func (f rtFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestSyncStructurePreservesTranslatedSlugs(t *testing.T) {
+	c := sb.New("token")
+	var createdBody []byte
+	httpClient := &http.Client{Transport: rtFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.Method {
+		case http.MethodGet:
+			body := `{"story":{"id":1,"name":"root","slug":"root","full_slug":"root","is_folder":true,"translated_slugs":[{"lang":"en","name":"root","slug":"root","full_slug":"root"},{"lang":"de","name":"wurzel","slug":"wurzel","full_slug":"de/wurzel"}]}}`
+			res := &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
+			return res, nil
+		case http.MethodPost:
+			b, _ := io.ReadAll(req.Body)
+			createdBody = b
+			res := &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"story":{"id":99}}`)), Header: make(http.Header)}
+			return res, nil
+		default:
+			t.Fatalf("unexpected method %s", req.Method)
+		}
+		return nil, nil
+	})}
+	v := reflect.ValueOf(c).Elem().FieldByName("http")
+	reflect.NewAt(v.Type(), unsafe.Pointer(v.UnsafeAddr())).Elem().Set(reflect.ValueOf(httpClient))
+
+	m := InitialModel()
+	m.api = c
+	m.sourceSpace = &sb.Space{ID: 1}
+	m.targetSpace = &sb.Space{ID: 2}
+	root := sb.Story{ID: 1, Name: "root", Slug: "root", FullSlug: "root", IsFolder: true}
+	m.storiesSource = []sb.Story{root}
+
+	if err := m.syncStructure(root); err != nil {
+		t.Fatalf("syncStructure: %v", err)
+	}
+
+	var payload struct {
+		Story sb.Story `json:"story"`
+	}
+	if err := json.Unmarshal(createdBody, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(payload.Story.TranslatedSlugs) != 2 {
+		t.Fatalf("expected 2 translated slugs, got %d", len(payload.Story.TranslatedSlugs))
+	}
+	var found bool
+	for _, ts := range payload.Story.TranslatedSlugs {
+		if ts.Lang == "de" {
+			found = true
+			if ts.Slug != "wurzel" || ts.FullSlug != "de/wurzel" {
+				t.Fatalf("de translation not preserved: %+v", ts)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("de translation missing")
 	}
 }

@@ -111,12 +111,24 @@ func (m *Model) syncStructure(st sb.Story) error {
 			src = sb.Story{Name: p, Slug: p, FullSlug: full, IsFolder: true}
 		}
 		if m.api != nil && m.targetSpace != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			payload := sb.Story{Name: src.Name, Slug: src.Slug, IsFolder: true}
+			var payload sb.Story
+			if src.ID != 0 && m.sourceSpace != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				var err error
+				payload, err = m.api.GetStory(ctx, m.sourceSpace.ID, src.ID)
+				cancel()
+				if err != nil {
+					return err
+				}
+				payload.ID = 0
+			} else {
+				payload = sb.Story{Name: src.Name, Slug: src.Slug, IsFolder: true}
+			}
 			if parentID != nil {
 				id := *parentID
 				payload.FolderID = &id
 			}
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			created, err := m.api.CreateStory(ctx, m.targetSpace.ID, payload)
 			cancel()
 			if err != nil {
