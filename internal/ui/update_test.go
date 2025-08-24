@@ -211,3 +211,52 @@ func TestMarkMovesCursorDown(t *testing.T) {
 		t.Fatalf("expected cursor moved to 1, got %d", m.selection.listIndex)
 	}
 }
+
+func TestPreflightDetectsCollision(t *testing.T) {
+	st := sb.Story{ID: 1, Name: "a", Slug: "a", FullSlug: "a"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st}
+	m.storiesTarget = []sb.Story{st}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	m.selection.selected = map[string]bool{st.FullSlug: true}
+
+	m.buildPreflight()
+	if len(m.syncPlan.Items) != 1 {
+		t.Fatalf("expected 1 item in plan, got %d", len(m.syncPlan.Items))
+	}
+	if !m.syncPlan.Items[0].Collision {
+		t.Fatalf("expected collision detected")
+	}
+
+	m.state = statePreflight
+	m.preflight.listIndex = 0
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if !m.syncPlan.Items[0].Skip {
+		t.Fatalf("expected item marked as skip after x")
+	}
+}
+
+func TestPreflightSkipAllCollisions(t *testing.T) {
+	st1 := sb.Story{ID: 1, Name: "a", Slug: "a", FullSlug: "a"}
+	st2 := sb.Story{ID: 2, Name: "b", Slug: "b", FullSlug: "b"}
+	tgt := sb.Story{ID: 3, Name: "a", Slug: "a", FullSlug: "a"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st1, st2}
+	m.storiesTarget = []sb.Story{tgt}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	m.selection.selected = map[string]bool{st1.FullSlug: true, st2.FullSlug: true}
+
+	m.buildPreflight()
+	m.state = statePreflight
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
+	if !m.syncPlan.Items[0].Skip {
+		t.Fatalf("expected collision item skipped")
+	}
+	if len(m.syncPlan.Items) > 1 && m.syncPlan.Items[1].Skip {
+		t.Fatalf("expected non-collision item not skipped")
+	}
+}
