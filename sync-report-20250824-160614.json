@@ -1,0 +1,19 @@
+{
+  "entries": [
+    {
+      "slug": "a__portal/de/fachportal/",
+      "status": "failure",
+      "error": "story.create status 422 Unprocessable Entity"
+    },
+    {
+      "slug": "a__portal/de/fachportal/config",
+      "status": "failure",
+      "error": "story.create status 422 Unprocessable Entity"
+    },
+    {
+      "slug": "a__portal/h__global_configs/section-registry",
+      "status": "failure",
+      "error": "story.create status 422 Unprocessable Entity"
+    }
+  ]
+}

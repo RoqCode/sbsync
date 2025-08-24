@@ -113,12 +113,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.index < len(m.preflight.items) {
 			m.preflight.items[msg.index].Run = RunDone
 			it := m.preflight.items[msg.index]
+
 			if msg.err != nil {
-				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Error: msg.err.Error()})
+				// Add error to report with complete source story
+				m.report.AddError(it.Story.FullSlug, "sync", msg.err.Error(), msg.duration, &it.Story)
+			} else if msg.result != nil {
+				// Add successful sync to report
+				if msg.result.warning != "" {
+					// Success with warning
+					m.report.AddWarning(it.Story.FullSlug, msg.result.operation, msg.result.warning, msg.duration, &it.Story, msg.result.targetStory)
+				} else {
+					// Pure success
+					m.report.AddSuccess(it.Story.FullSlug, msg.result.operation, msg.duration, msg.result.targetStory)
+				}
 			} else {
-				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success"})
+				// Fallback for unexpected case
+				m.report.AddSuccess(it.Story.FullSlug, "unknown", msg.duration, nil)
 			}
 		}
+
 		done := 0
 		for _, it := range m.preflight.items {
 			if it.Run == RunDone {
@@ -129,9 +142,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if done < len(m.preflight.items) {
 			return m, m.runNextItem()
 		}
+
 		m.syncing = false
-		succ, warn, fail := m.report.Counts()
-		m.statusMsg = fmt.Sprintf("Sync fertig: %d Erfolg, %d Warnung, %d Fehler", succ, warn, fail)
+		m.statusMsg = m.report.GetDisplaySummary()
 		_ = m.report.Save()
 		return m, nil
 	}
@@ -476,7 +489,18 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.syncing = true
 		m.syncIndex = 0
 		m.api = sb.New(m.cfg.Token)
-		m.report = Report{}
+
+		// Initialize comprehensive report with space information
+		sourceSpaceName := ""
+		targetSpaceName := ""
+		if m.sourceSpace != nil {
+			sourceSpaceName = fmt.Sprintf("%s (%d)", m.sourceSpace.Name, m.sourceSpace.ID)
+		}
+		if m.targetSpace != nil {
+			targetSpaceName = fmt.Sprintf("%s (%d)", m.targetSpace.Name, m.targetSpace.ID)
+		}
+		m.report = *NewReport(sourceSpaceName, targetSpaceName)
+
 		m.statusMsg = fmt.Sprintf("Synchronisiere %d Items…", len(m.preflight.items))
 		return m, tea.Batch(m.spinner.Tick, m.runNextItem())
 	}

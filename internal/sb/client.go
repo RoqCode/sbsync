@@ -62,15 +62,30 @@ func (c *Client) ListSpaces(ctx context.Context) ([]Space, error) {
 
 // ---------- Stories (flach) ----------
 
+type TranslatedSlug struct {
+	ID   *int   `json:"id,omitempty"`
+	Lang string `json:"lang"`
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
 type Story struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	FullSlug    string `json:"full_slug"`
-	FolderID    *int   `json:"parent_id"`
-	UpdatedAt   string `json:"updated_at"`
-	IsFolder    bool   `json:"is_folder"`
-	IsStartpage bool   `json:"is_startpage"`
+	ID                        int                    `json:"id,omitempty"`
+	UUID                      string                 `json:"uuid,omitempty"`
+	Name                      string                 `json:"name"`
+	Slug                      string                 `json:"slug"`
+	FullSlug                  string                 `json:"full_slug"`
+	Content                   map[string]interface{} `json:"content,omitempty"`
+	FolderID                  *int                   `json:"parent_id,omitempty"`
+	CreatedAt                 string                 `json:"created_at,omitempty"`
+	UpdatedAt                 string                 `json:"updated_at,omitempty"`
+	Published                 bool                   `json:"published"`
+	IsFolder                  bool                   `json:"is_folder"`
+	IsStartpage               bool                   `json:"is_startpage"`
+	Position                  int                    `json:"position"`
+	TagList                   []string               `json:"tag_list,omitempty"`
+	TranslatedSlugs           []TranslatedSlug       `json:"translated_slugs,omitempty"`
+	TranslatedSlugsAttributes []TranslatedSlug       `json:"translated_slugs_attributes,omitempty"`
 }
 
 type storiesResp struct {
@@ -206,7 +221,13 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 		return Story{}, errors.New("story ID fehlt")
 	}
 	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, st.ID)
-	payload := storyResp{Story: st}
+	payload := map[string]interface{}{
+		"story":        st,
+		"force_update": "1",
+	}
+	if st.Published && !st.IsFolder {
+		payload["publish"] = "1"
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return Story{}, err
@@ -227,4 +248,100 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 		return Story{}, err
 	}
 	return resp.Story, nil
+}
+
+// CreateStoryWithPublish creates a new story with proper payload structure
+func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Story) (Story, error) {
+	if c.token == "" {
+		return Story{}, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories", spaceID)
+	payload := map[string]interface{}{
+		"story":        st,
+		"force_update": "1",
+	}
+	if st.Published && !st.IsFolder {
+		payload["publish"] = "1"
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return Story{}, err
+	}
+	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		return Story{}, fmt.Errorf("story.create status %s", res.Status)
+	}
+	var resp storyResp
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return Story{}, err
+	}
+	return resp.Story, nil
+}
+
+// GetStoriesBySlug finds stories by slug using with_slug parameter
+func (c *Client) GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]Story, error) {
+	if c.token == "" {
+		return nil, errors.New("token leer")
+	}
+	u, _ := url.Parse(base + "/spaces/" + fmt.Sprint(spaceID) + "/stories")
+	q := u.Query()
+	q.Set("with_slug", slug)
+	u.RawQuery = q.Encode()
+
+	req, _ := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("stories.get_by_slug status %s", res.Status)
+	}
+
+	var payload storiesResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	return payload.Stories, nil
+}
+
+// UpdateStoryUUID updates the UUID of a story to maintain identity
+func (c *Client) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error {
+	if c.token == "" {
+		return errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories/%d/update_uuid", spaceID, storyID)
+	payload := map[string]string{"uuid": uuid}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, _ := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		return fmt.Errorf("story.update_uuid status %s", res.Status)
+	}
+	return nil
+}
+
+// GetStoryWithContent fetches a story with complete content data
+func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) (Story, error) {
+	return c.GetStory(ctx, spaceID, storyID)
 }
