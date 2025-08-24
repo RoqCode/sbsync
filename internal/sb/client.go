@@ -355,9 +355,11 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, version string) (Story, error) {
 	var u string
 	if version == "" {
-		u = fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
+		// Include resolve_relations to get full content
+		u = fmt.Sprintf(base+"/spaces/%d/stories/%d?resolve_relations=1", spaceID, storyID)
 	} else {
-		u = fmt.Sprintf(base+"/spaces/%d/stories/%d?version=%s", spaceID, storyID, version)
+		// Include both version and resolve_relations for full content
+		u = fmt.Sprintf(base+"/spaces/%d/stories/%d?version=%s&resolve_relations=1", spaceID, storyID, version)
 	}
 	
 	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)

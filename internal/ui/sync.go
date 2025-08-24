@@ -163,7 +163,10 @@ func (m *Model) optimizePreflight() {
 		selected[it.Story.FullSlug] = it
 	}
 
-	// Process folder optimization
+	// Process folder optimization - DISABLED for debugging
+	// The folder optimization is collapsing hierarchies but not ensuring parent folders exist first
+	// TODO: Fix the optimization to properly handle folder dependencies
+	/*
 	for _, it := range selected {
 		if !it.Story.IsFolder {
 			continue
@@ -187,6 +190,7 @@ func (m *Model) optimizePreflight() {
 			}
 		}
 	}
+	*/
 
 	// Create optimized list
 	optimized := make([]PreflightItem, 0, len(m.preflight.items))
