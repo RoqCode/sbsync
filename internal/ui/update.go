@@ -375,6 +375,10 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		} else {
 			m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
 		}
+		if m.selection.listIndex < m.itemsLen()-1 {
+			m.selection.listIndex++
+			m.ensureCursorVisible()
+		}
 
 	case "r":
 		m.state = stateScanning

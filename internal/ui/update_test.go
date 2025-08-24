@@ -188,3 +188,26 @@ func TestNestedFolderMarkingIndicator(t *testing.T) {
 		t.Fatalf("expected '·' marker for folder with selected descendant")
 	}
 }
+
+func TestMarkMovesCursorDown(t *testing.T) {
+	st1 := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
+	st2 := sb.Story{ID: 2, Name: "two", Slug: "two", FullSlug: "two"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st1, st2}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+
+	if m.selection.listIndex != 0 {
+		t.Fatalf("expected cursor at 0, got %d", m.selection.listIndex)
+	}
+
+	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+
+	if !m.selection.selected[st1.FullSlug] {
+		t.Fatalf("expected first story selected")
+	}
+	if m.selection.listIndex != 1 {
+		t.Fatalf("expected cursor moved to 1, got %d", m.selection.listIndex)
+	}
+}
