@@ -28,6 +28,8 @@ func (m Model) View() string {
 		b.WriteString(m.viewScanning())
 	case stateBrowseList:
 		b.WriteString(m.viewBrowseList())
+	case statePreflight:
+		b.WriteString(m.viewPreflight())
 	}
 	m.renderFooter(&b)
 	return b.String()
@@ -251,6 +253,85 @@ func (m Model) viewBrowseList() string {
 	b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
 	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
 	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
+	return b.String()
+}
+
+func (m Model) viewPreflight() string {
+	var b strings.Builder
+	total := len(m.preflight.items)
+	collisions := 0
+	for _, it := range m.preflight.items {
+		if it.Collision {
+			collisions++
+		}
+	}
+	b.WriteString(fmt.Sprintf("Preflight – %d Items  |  Kollisionen: %d\n\n", total, collisions))
+	if total == 0 {
+		b.WriteString(warnStyle.Render("Keine Stories markiert.") + "\n")
+	} else {
+		tr := tree.New()
+		nodes := make(map[int]*tree.Tree, len(m.preflight.items))
+		for _, it := range m.preflight.items {
+			node := tree.Root(displayStory(it.Story))
+			nodes[it.Story.ID] = node
+		}
+		for _, it := range m.preflight.items {
+			node := nodes[it.Story.ID]
+			if it.Story.FolderID != nil {
+				if parent, ok := nodes[*it.Story.FolderID]; ok {
+					parent.Child(node)
+					continue
+				}
+			}
+			tr.Child(node)
+		}
+		lines := strings.Split(tr.String(), "\n")
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		for i, it := range m.preflight.items {
+			if i >= len(lines) {
+				break
+			}
+			content := lines[i]
+			if it.Collision {
+				content = collisionSign + " " + content
+			} else {
+				content = "  " + content
+			}
+			if it.Skip {
+				content = subtleStyle.Render(content + " [skip]")
+			} else if !it.Selected {
+				content = subtleStyle.Render(content)
+			}
+			if i == m.preflight.listIndex {
+				content = cursorLineStyle.Width(m.width - 2).Render(content)
+			} else {
+				content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
+			}
+			cursorCell := " "
+			if i == m.preflight.listIndex {
+				cursorCell = cursorBarStyle.Render(" ")
+			}
+			skipCell := " "
+			if it.Skip {
+				skipCell = markBarStyle.Render("x")
+			}
+			lines[i] = cursorCell + skipCell + content
+		}
+		start := m.preflight.listOffset
+		if start > len(lines) {
+			start = len(lines)
+		}
+		end := start + m.preflight.listViewport
+		if end > len(lines) {
+			end = len(lines)
+		}
+		b.WriteString(strings.Join(lines[start:end], "\n"))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  Enter OK  |  esc/q zurück"))
 	return b.String()
 }
 
