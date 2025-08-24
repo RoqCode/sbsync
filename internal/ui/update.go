@@ -436,10 +436,12 @@ func (m Model) scanStoriesCmd() tea.Cmd {
 		if err != nil {
 			return scanMsg{err: fmt.Errorf("source scan: %w", err)}
 		}
+		sortStories(src)
 		tgt, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: tgtID, PerPage: 50})
 		if err != nil {
 			return scanMsg{err: fmt.Errorf("target scan: %w", err)}
 		}
+		sortStories(tgt)
 		return scanMsg{src: src, tgt: tgt, err: nil}
 	}
 }
