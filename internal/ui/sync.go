@@ -101,15 +101,25 @@ func (m *Model) syncStructure(st sb.Story) error {
 	for _, p := range parts {
 		path = append(path, p)
 		full := strings.Join(path, "/")
+		src, srcOK := m.findSource(full)
+		if srcOK {
+			if id, ok := m.syncedFolders[src.ID]; ok {
+				parentID = &id
+				continue
+			}
+		}
 		if idx := m.findTarget(full); idx >= 0 {
 			id := m.storiesTarget[idx].ID
 			parentID = &id
+			if srcOK {
+				m.syncedFolders[src.ID] = id
+			}
 			continue
 		}
-		src, ok := m.findSource(full)
-		if !ok {
+		if !srcOK {
 			src = sb.Story{Name: p, Slug: p, FullSlug: full, IsFolder: true}
 		}
+		srcID := src.ID
 		if m.api != nil && m.targetSpace != nil {
 			var payload sb.Story
 			if src.ID != 0 && m.sourceSpace != nil {
@@ -135,6 +145,8 @@ func (m *Model) syncStructure(st sb.Story) error {
 				return err
 			}
 			src.ID = created.ID
+			src.Slug = created.Slug
+			src.FullSlug = created.FullSlug
 		} else {
 			src.ID = m.nextTargetID()
 			if parentID != nil {
@@ -148,6 +160,9 @@ func (m *Model) syncStructure(st sb.Story) error {
 			src.FolderID = &id
 		}
 		m.storiesTarget = append(m.storiesTarget, src)
+		if srcID != 0 {
+			m.syncedFolders[srcID] = src.ID
+		}
 		id := src.ID
 		parentID = &id
 	}

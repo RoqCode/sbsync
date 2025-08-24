@@ -97,6 +97,7 @@ func TestSyncStartsWithCopiesSubtree(t *testing.T) {
 	}
 }
 
+
 type rtFunc func(*http.Request) (*http.Response, error)
 
 func (f rtFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
@@ -154,5 +155,49 @@ func TestSyncStructurePreservesTranslatedSlugs(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("de translation missing")
+  }
+}
+
+func TestSyncStructureTracksChangedSlugs(t *testing.T) {
+	root := sb.Story{ID: 1, Name: "root", Slug: "root", FullSlug: "root", IsFolder: true}
+	child := sb.Story{ID: 2, Name: "child", Slug: "child", FullSlug: "root/child", FolderID: &root.ID, IsFolder: true}
+	grand := sb.Story{ID: 3, Name: "grand", Slug: "grand", FullSlug: "root/child/grand", FolderID: &child.ID, IsFolder: true}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{root, child, grand}
+
+	if err := m.syncStructure(child); err != nil {
+		t.Fatalf("syncStructure(child): %v", err)
+	}
+
+	rIdx := m.findTarget(root.FullSlug)
+	if rIdx < 0 {
+		t.Fatalf("root not created")
+	}
+	cIdx := m.findTarget(child.FullSlug)
+	if cIdx < 0 {
+		t.Fatalf("child not created")
+	}
+	childID := m.storiesTarget[cIdx].ID
+
+	// simulate API slug changes
+	m.storiesTarget[rIdx].Slug = "root-1"
+	m.storiesTarget[rIdx].FullSlug = "root-1"
+	m.storiesTarget[cIdx].Slug = "child-1"
+	m.storiesTarget[cIdx].FullSlug = "root-1/child-1"
+
+	if err := m.syncStructure(grand); err != nil {
+		t.Fatalf("syncStructure(grand): %v", err)
+	}
+
+	if len(m.storiesTarget) != 3 {
+		t.Fatalf("expected 3 folders, got %d", len(m.storiesTarget))
+	}
+	gIdx := m.findTarget(grand.FullSlug)
+	if gIdx < 0 {
+		t.Fatalf("grandchild not created")
+	}
+	if m.storiesTarget[gIdx].FolderID == nil || *m.storiesTarget[gIdx].FolderID != childID {
+		t.Fatalf("grandchild not linked to child")
 	}
 }
