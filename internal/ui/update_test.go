@@ -161,3 +161,30 @@ func TestPartialFolderMarkingIndicator(t *testing.T) {
 		t.Fatalf("expected ':' marker for folder with selected child")
 	}
 }
+
+func TestNestedFolderMarkingIndicator(t *testing.T) {
+	rootID := 1
+	subID := 2
+	childID := 3
+	root := sb.Story{ID: rootID, Name: "root", Slug: "root", FullSlug: "root", IsFolder: true}
+	rootPtr := rootID
+	sub := sb.Story{ID: subID, Name: "sub", Slug: "sub", FullSlug: "root/sub", IsFolder: true, FolderID: &rootPtr}
+	subPtr := subID
+	child := sb.Story{ID: childID, Name: "child", Slug: "child", FullSlug: "root/sub/child", FolderID: &subPtr}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{root, sub, child}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[child.FullSlug] = true
+	m.refreshVisible()
+	m.selection.listViewport = 10
+
+	out := m.viewBrowseList()
+	if !strings.Contains(out, markNestedStyle.Render("·")) {
+		t.Fatalf("expected '·' marker for folder with selected descendant")
+	}
+}
