@@ -30,7 +30,7 @@ Interrupts: `r` to rescan, `q` to abort.
 - [x] **T3 – SpaceSelect Screen:** select source/target spaces in the UI.
 - [x] **T4 – Scan + List View:** scan both spaces and display a flat list of stories.
 - [x] **T5 – Fuzzy Search:** filter stories by name, slug or path.
-- [ ] **T6 – Preflight Collisions:** detect path/slug collisions and let users skip or overwrite.
+- [x] **T6 – Preflight Collisions:** detect path/slug collisions and let users skip or overwrite.
 - [ ] **T7 – Sync Executor:** apply create/update operations with progress and retry logic.
 - [ ] **T8 – Report & Rescan:** final summary and option to rescan or quit.
 - [ ] **T9 – Keybind Help:** context-sensitive shortcut overlay.
