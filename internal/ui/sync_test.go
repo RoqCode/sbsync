@@ -1,6 +1,10 @@
 package ui
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
 	"testing"
 
 	"storyblok-sync/internal/sb"
@@ -28,6 +32,80 @@ func TestSyncStructureCreatesFolders(t *testing.T) {
 		if idx := m.findTarget(slug); idx < 0 {
 			t.Fatalf("folder %s not created", slug)
 		}
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestSyncStructureStoresReturnedSlug(t *testing.T) {
+	type storyResp struct {
+		Story sb.Story `json:"story"`
+	}
+
+	oldTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = oldTransport }()
+
+	id := 0
+	fullByID := make(map[int]string)
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var payload storyResp
+		body, _ := io.ReadAll(req.Body)
+		_ = json.Unmarshal(body, &payload)
+		req.Body.Close()
+
+		slug := payload.Story.Slug
+		if slug == "shop" {
+			slug = "shop-1"
+		}
+
+		id++
+		full := slug
+		if payload.Story.FolderID != nil {
+			full = fullByID[*payload.Story.FolderID] + "/" + slug
+		}
+		fullByID[id] = full
+
+		resp := storyResp{Story: sb.Story{
+			ID:       id,
+			Name:     payload.Story.Name,
+			Slug:     slug,
+			FullSlug: full,
+			FolderID: payload.Story.FolderID,
+			IsFolder: true,
+		}}
+		b, _ := json.Marshal(resp)
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(bytes.NewReader(b)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	m := InitialModel()
+	m.api = sb.New("token")
+	m.targetSpace = &sb.Space{ID: 1}
+
+	root := sb.Story{ID: 1, Name: "a__portal", Slug: "a__portal", FullSlug: "a__portal", IsFolder: true}
+	de := sb.Story{ID: 2, Name: "de", Slug: "de", FullSlug: "a__portal/de", FolderID: &root.ID, IsFolder: true}
+	shop := sb.Story{ID: 3, Name: "shop", Slug: "shop", FullSlug: "a__portal/de/shop", FolderID: &de.ID, IsFolder: true}
+	detail := sb.Story{ID: 4, Name: "detail", Slug: "detail", FullSlug: "a__portal/de/shop/detail", FolderID: &shop.ID, IsFolder: true}
+	item := sb.Story{ID: 5, Name: "item1", Slug: "item1", FullSlug: "a__portal/de/shop/detail/item1", FolderID: &detail.ID}
+
+	m.storiesSource = []sb.Story{root, de, shop, detail, item}
+
+	if err := m.syncStructure(item); err != nil {
+		t.Fatalf("syncStructure returned error: %v", err)
+	}
+
+	if idx := m.findTarget("a__portal/de/shop-1"); idx < 0 {
+		t.Fatalf("new slug not stored")
+	}
+	if idx := m.findTarget("a__portal/de/shop"); idx >= 0 {
+		t.Fatalf("old slug still present")
 	}
 }
 

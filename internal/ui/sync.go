@@ -122,16 +122,12 @@ func (m *Model) syncStructure(st sb.Story) error {
 			if err != nil {
 				return err
 			}
-			src.ID = created.ID
+			src = created
 		} else {
 			src.ID = m.nextTargetID()
-			if parentID != nil {
-				id := *parentID
-				src.FolderID = &id
-			}
 		}
 		src.IsFolder = true
-		if parentID != nil && src.FolderID == nil {
+		if parentID != nil {
 			id := *parentID
 			src.FolderID = &id
 		}
