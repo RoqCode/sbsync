@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"storyblok-sync/internal/sb"
@@ -89,5 +91,72 @@ func TestParentSlugFunction(t *testing.T) {
 		if result != test.expected {
 			t.Errorf("parentSlug(%q) = %q, expected %q", test.input, result, test.expected)
 		}
+	}
+}
+
+type mockAPI struct {
+	source map[int]sb.Story
+	target map[string]sb.Story
+	nextID int
+}
+
+func (m *mockAPI) GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error) {
+	if st, ok := m.target[slug]; ok {
+		return []sb.Story{st}, nil
+	}
+	return nil, nil
+}
+
+func (m *mockAPI) GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error) {
+	if st, ok := m.source[storyID]; ok {
+		return st, nil
+	}
+	return sb.Story{}, fmt.Errorf("not found")
+}
+
+func (m *mockAPI) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story) (sb.Story, error) {
+	m.nextID++
+	st.ID = m.nextID
+	m.target[st.FullSlug] = st
+	return st, nil
+}
+
+func TestEnsureFolderPathCreatesFolders(t *testing.T) {
+	srcFolders := []sb.Story{
+		{ID: 1, Name: "foo", Slug: "foo", FullSlug: "foo", IsFolder: true},
+		{ID: 2, Name: "bar", Slug: "bar", FullSlug: "foo/bar", IsFolder: true, FolderID: &[]int{1}[0]},
+	}
+	api := &mockAPI{
+		source: map[int]sb.Story{
+			1: srcFolders[0],
+			2: srcFolders[1],
+		},
+		target: make(map[string]sb.Story),
+	}
+	report := Report{}
+
+	created, err := ensureFolderPathImpl(api, &report, srcFolders, 1, 2, "foo/bar/baz")
+	if err != nil {
+		t.Fatalf("ensureFolderPathImpl returned error: %v", err)
+	}
+	if len(created) != 2 {
+		t.Fatalf("expected 2 folders created, got %d", len(created))
+	}
+	if _, ok := api.target["foo"]; !ok {
+		t.Errorf("expected folder 'foo' to be created")
+	}
+	if bar, ok := api.target["foo/bar"]; !ok {
+		t.Errorf("expected folder 'foo/bar' to be created")
+	} else {
+		parent := api.target["foo"]
+		if bar.FolderID == nil || *bar.FolderID != parent.ID {
+			t.Errorf("expected 'foo/bar' to reference parent 'foo'")
+		}
+	}
+	if len(report.Entries) != 2 {
+		t.Fatalf("expected 2 report entries, got %d", len(report.Entries))
+	}
+	if report.Entries[0].Operation != "create" {
+		t.Errorf("expected operation 'create', got %s", report.Entries[0].Operation)
 	}
 }

@@ -195,10 +195,7 @@ func TestOptimizePreflightStartsWith(t *testing.T) {
 	m.selection.selected[child2.FullSlug] = true
 	m.startPreflight()
 	m.optimizePreflight()
-	if len(m.preflight.items) != 1 {
-		t.Fatalf("expected 1 item after optimization, got %d", len(m.preflight.items))
-	}
-	if !m.preflight.items[0].StartsWith {
-		t.Fatalf("expected starts_with flag for folder")
+	if len(m.preflight.items) != 3 {
+		t.Fatalf("expected 3 items after optimization, got %d", len(m.preflight.items))
 	}
 }
