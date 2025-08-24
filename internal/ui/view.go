@@ -204,6 +204,8 @@ func (m Model) viewBrowseList() string {
 				markCell := " "
 				if m.selection.selected[st.FullSlug] {
 					markCell = markBarStyle.Render(" ")
+				} else if st.IsFolder && m.hasSelectedDescendant(st.FullSlug) {
+					markCell = markBarStyle.Render(":")
 				}
 
 				lines[i] = cursorCell + markCell + content

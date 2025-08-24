@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -108,5 +109,56 @@ func TestSearchExpandsAndCollapses(t *testing.T) {
 	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
 	if !m.folderCollapsed[folderID] {
 		t.Fatalf("expected folder collapsed after clearing search")
+	}
+}
+
+func TestMarkingFolderMarksDescendants(t *testing.T) {
+	folderID := 1
+	child1ID := 2
+	child2ID := 3
+	folder := sb.Story{ID: folderID, Name: "folder", Slug: "folder", FullSlug: "folder", IsFolder: true}
+	folderPtr := folderID
+	child1 := sb.Story{ID: child1ID, Name: "c1", Slug: "c1", FullSlug: "folder/c1", FolderID: &folderPtr}
+	child2 := sb.Story{ID: child2ID, Name: "c2", Slug: "c2", FullSlug: "folder/c2", FolderID: &folderPtr}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{folder, child1, child2}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+
+	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+
+	if !m.selection.selected[folder.FullSlug] || !m.selection.selected[child1.FullSlug] || !m.selection.selected[child2.FullSlug] {
+		t.Fatalf("expected folder and children selected")
+	}
+
+	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+
+	if m.selection.selected[folder.FullSlug] || m.selection.selected[child1.FullSlug] || m.selection.selected[child2.FullSlug] {
+		t.Fatalf("expected folder and children unselected after toggle")
+	}
+}
+
+func TestPartialFolderMarkingIndicator(t *testing.T) {
+	folderID := 1
+	childID := 2
+	folder := sb.Story{ID: folderID, Name: "folder", Slug: "folder", FullSlug: "folder", IsFolder: true}
+	folderPtr := folderID
+	child := sb.Story{ID: childID, Name: "child", Slug: "child", FullSlug: "folder/child", FolderID: &folderPtr}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{folder, child}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[child.FullSlug] = true
+	m.refreshVisible()
+	m.selection.listViewport = 10
+
+	out := m.viewBrowseList()
+	if !strings.Contains(out, markBarStyle.Render(":")) {
+		t.Fatalf("expected ':' marker for folder with selected child")
 	}
 }

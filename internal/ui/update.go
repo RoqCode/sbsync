@@ -370,7 +370,11 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if m.selection.selected == nil {
 			m.selection.selected = make(map[string]bool)
 		}
-		m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
+		if st.IsFolder {
+			m.toggleFolderSelection(st)
+		} else {
+			m.selection.selected[st.FullSlug] = !m.selection.selected[st.FullSlug]
+		}
 
 	case "r":
 		m.state = stateScanning
@@ -606,4 +610,24 @@ func (m *Model) visibleIndexByID(id int) int {
 		}
 	}
 	return -1
+}
+
+func (m *Model) toggleFolderSelection(st sb.Story) {
+	mark := !m.selection.selected[st.FullSlug]
+	prefix := st.FullSlug
+	for _, story := range m.storiesSource {
+		if story.FullSlug == prefix || strings.HasPrefix(story.FullSlug, prefix+"/") {
+			m.selection.selected[story.FullSlug] = mark
+		}
+	}
+}
+
+func (m Model) hasSelectedDescendant(slug string) bool {
+	prefix := slug + "/"
+	for s, v := range m.selection.selected {
+		if v && strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
 }
