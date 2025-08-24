@@ -78,3 +78,45 @@ func TestListStoriesPagination(t *testing.T) {
 		t.Fatalf("expected 2 calls, got %d", calls)
 	}
 }
+
+func TestCreateAndUpdateStory(t *testing.T) {
+	c := New("token")
+	calls := 0
+	c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if req.Header.Get("Authorization") != "token" {
+			t.Fatalf("missing token header")
+		}
+		switch req.Method {
+		case http.MethodPost:
+			if !strings.Contains(req.URL.Path, "/stories") {
+				t.Fatalf("unexpected POST url %s", req.URL.Path)
+			}
+			body := `{"story":{"id":1,"name":"a"}}`
+			res := &http.Response{StatusCode: http.StatusCreated, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
+			return res, nil
+		case http.MethodPut:
+			if !strings.Contains(req.URL.Path, "/stories/1") {
+				t.Fatalf("unexpected PUT url %s", req.URL.Path)
+			}
+			body := `{"story":{"id":1,"name":"b"}}`
+			res := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
+			return res, nil
+		default:
+			t.Fatalf("unexpected method %s", req.Method)
+		}
+		return nil, nil
+	})}
+
+	st, err := c.CreateStory(context.Background(), 1, Story{Name: "a"})
+	if err != nil || st.Name != "a" {
+		t.Fatalf("CreateStory failed: %v, %+v", err, st)
+	}
+	st2, err := c.UpdateStory(context.Background(), 1, Story{ID: 1, Name: "b"})
+	if err != nil || st2.Name != "b" {
+		t.Fatalf("UpdateStory failed: %v, %+v", err, st2)
+	}
+	if calls != 2 {
+		t.Fatalf("expected 2 calls, got %d", calls)
+	}
+}
