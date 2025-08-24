@@ -38,7 +38,7 @@ func TestStartPreflightDetectsCollisions(t *testing.T) {
 	}
 }
 
-func TestPreflightIgnoresCollisionsForUnselectedFolders(t *testing.T) {
+func TestPreflightMarksUnselectedFoldersSkipped(t *testing.T) {
 	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
 	child := sb.Story{ID: 2, Name: "child", Slug: "child", FullSlug: "app/child", FolderID: &parent.ID}
 	tgt := sb.Story{ID: 3, Name: "app", Slug: "app", FullSlug: "app"}
@@ -66,11 +66,14 @@ func TestPreflightIgnoresCollisionsForUnselectedFolders(t *testing.T) {
 	if folderItem == nil {
 		t.Fatalf("folder not found in preflight items")
 	}
-	if folderItem.Collision {
-		t.Fatalf("expected no collision for unselected folder")
+	if !folderItem.Collision {
+		t.Fatalf("expected collision for unselected folder")
 	}
-	if folderItem.State != StateCreate {
-		t.Fatalf("expected state create for unselected folder, got %v", folderItem.State)
+	if !folderItem.Skip {
+		t.Fatalf("expected unselected folder to be skipped")
+	}
+	if folderItem.State != StateSkip {
+		t.Fatalf("expected state skip for unselected folder, got %v", folderItem.State)
 	}
 }
 
@@ -151,14 +154,14 @@ func TestViewPreflightShowsStateCell(t *testing.T) {
 	m.startPreflight()
 
 	out := m.viewPreflight()
-	if !strings.Contains(out, markBarStyle.Render(string(StateCreate))) {
+	if !strings.Contains(out, stateStyles[StateCreate].Render(string(StateCreate))) {
 		t.Fatalf("expected create state cell")
 	}
 
 	m.preflight.items[0].Skip = true
 	m.preflight.items[0].RecalcState()
 	out = m.viewPreflight()
-	if !strings.Contains(out, markBarStyle.Render(string(StateSkip))) {
+	if !strings.Contains(out, stateStyles[StateSkip].Render(string(StateSkip))) {
 		t.Fatalf("expected skip state cell")
 	}
 }

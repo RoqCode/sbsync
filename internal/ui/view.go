@@ -294,7 +294,7 @@ func (m Model) viewPreflight() string {
 				break
 			}
 			content := lines[i]
-			if it.Collision && it.Selected {
+			if it.Collision {
 				content = collisionSign + " " + content
 			} else {
 				content = "  " + content
@@ -313,7 +313,11 @@ func (m Model) viewPreflight() string {
 			}
 			stateCell := " "
 			if it.State != "" {
-				stateCell = markBarStyle.Render(string(it.State))
+				if st, ok := stateStyles[it.State]; ok {
+					stateCell = st.Render(string(it.State))
+				} else {
+					stateCell = string(it.State)
+				}
 			}
 			lines[i] = cursorCell + stateCell + content
 		}
