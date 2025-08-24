@@ -2,9 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"strings"
-
 	"storyblok-sync/internal/sb"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	tree "github.com/charmbracelet/lipgloss/tree"
@@ -205,7 +204,7 @@ func (m Model) viewBrowseList() string {
 				if m.selection.selected[st.FullSlug] {
 					markCell = markBarStyle.Render(" ")
 				} else if st.IsFolder && m.hasSelectedDescendant(st.FullSlug) {
-					markCell = markBarStyle.Render(":")
+					markCell = markNestedStyle.Render(":")
 				}
 
 				lines[i] = cursorCell + markCell + content

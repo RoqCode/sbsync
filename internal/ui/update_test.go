@@ -1,12 +1,11 @@
 package ui
 
 import (
+	"storyblok-sync/internal/sb"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"storyblok-sync/internal/sb"
 )
 
 // TestHandleWelcomeKey verifies state transitions from the welcome screen.
@@ -158,7 +157,7 @@ func TestPartialFolderMarkingIndicator(t *testing.T) {
 	m.selection.listViewport = 10
 
 	out := m.viewBrowseList()
-	if !strings.Contains(out, markBarStyle.Render(":")) {
+	if !strings.Contains(out, markNestedStyle.Render(":")) {
 		t.Fatalf("expected ':' marker for folder with selected child")
 	}
 }
