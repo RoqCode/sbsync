@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -231,7 +232,14 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		return Story{}, fmt.Errorf("story.update status %s", res.Status)
+		bodyBytes, _ := io.ReadAll(res.Body)
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &apiErr); err == nil && apiErr.Error != "" {
+			return Story{}, errors.New(apiErr.Error)
+		}
+		return Story{}, fmt.Errorf("story.update status %s: %s", res.Status, strings.TrimSpace(string(bodyBytes)))
 	}
 	var resp storyResp
 	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
@@ -301,14 +309,18 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		// DEBUG: Read and log the error response body for 422 errors
+		bodyBytes, _ := io.ReadAll(res.Body)
+		// DEBUG: log body for troubleshooting
 		if res.StatusCode == 422 {
-			bodyBytes, err := io.ReadAll(res.Body)
-			if err == nil {
-				log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
-			}
+			log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
 		}
-		return Story{}, fmt.Errorf("story.create status %s", res.Status)
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &apiErr); err == nil && apiErr.Error != "" {
+			return Story{}, errors.New(apiErr.Error)
+		}
+		return Story{}, fmt.Errorf("story.create status %s: %s", res.Status, strings.TrimSpace(string(bodyBytes)))
 	}
 	var resp storyResp
 	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {

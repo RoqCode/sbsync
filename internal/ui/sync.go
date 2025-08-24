@@ -323,6 +323,58 @@ func isRateLimited(err error) bool {
 	return strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "429")
 }
 
+func isDevModePublishLimit(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "development mode") && strings.Contains(msg, "Publishing is limited")
+}
+
+type updateAPI interface {
+	UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+}
+
+type createAPI interface {
+	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+}
+
+func updateStoryWithPublishRetry(ctx context.Context, api updateAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		updated, err := api.UpdateStory(ctx, spaceID, st, publish)
+		if err == nil {
+			return updated, nil
+		}
+		lastErr = err
+		if publish && isDevModePublishLimit(err) {
+			log.Printf("Publish limit reached, retrying without publish for %s", st.FullSlug)
+			publish = false
+			continue
+		}
+		return sb.Story{}, err
+	}
+	return sb.Story{}, lastErr
+}
+
+func createStoryWithPublishRetry(ctx context.Context, api createAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		created, err := api.CreateStoryWithPublish(ctx, spaceID, st, publish)
+		if err == nil {
+			return created, nil
+		}
+		lastErr = err
+		if publish && isDevModePublishLimit(err) {
+			log.Printf("Publish limit reached, retrying without publish for %s", st.FullSlug)
+			publish = false
+			continue
+		}
+		return sb.Story{}, err
+	}
+	return sb.Story{}, lastErr
+}
+
 type folderAPI interface {
 	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
 	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
@@ -385,8 +437,14 @@ func ensureFolderPathImpl(api folderAPI, report *Report, sourceStories []sb.Stor
 		folder.CreatedAt = ""
 		folder.UpdatedAt = ""
 		folder.FolderID = parentID
+		ct := folder.ContentType
+		folder.ContentType = ""
 		if folder.Content == nil {
 			folder.Content = map[string]interface{}{}
+		}
+		if _, ok := folder.Content["content_types"]; !ok && ct != "" {
+			folder.Content["content_types"] = []string{ct}
+			folder.Content["lock_subfolders_content_types"] = false
 		}
 
 		ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
@@ -413,7 +471,7 @@ func (m *Model) ensureFolderPath(slug string) ([]sb.Story, error) {
 }
 
 func (m *Model) shouldPublish() bool {
-	return m.targetSpace == nil || m.targetSpace.PlanLevel != 999
+	return true
 }
 
 // syncFolder handles folder synchronization with proper parent resolution
@@ -427,6 +485,15 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 	fullFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
 	if err != nil {
 		return err
+	}
+	ct := fullFolder.ContentType
+	fullFolder.ContentType = ""
+	if fullFolder.Content == nil {
+		fullFolder.Content = map[string]interface{}{}
+	}
+	if _, ok := fullFolder.Content["content_types"]; !ok && ct != "" {
+		fullFolder.Content["content_types"] = []string{ct}
+		fullFolder.Content["lock_subfolders_content_types"] = false
 	}
 
 	// Check if folder already exists in target
@@ -512,6 +579,15 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 		log.Printf("Failed to get source folder content for %s (ID: %d): %v", sourceFolder.FullSlug, sourceFolder.ID, err)
 		logExtendedErrorContext(err)
 		return nil, err
+	}
+	ct := fullFolder.ContentType
+	fullFolder.ContentType = ""
+	if fullFolder.Content == nil {
+		fullFolder.Content = map[string]interface{}{}
+	}
+	if _, ok := fullFolder.Content["content_types"]; !ok && ct != "" {
+		fullFolder.Content["content_types"] = []string{ct}
+		fullFolder.Content["lock_subfolders_content_types"] = false
 	}
 
 	// Check if folder already exists in target
@@ -652,7 +728,7 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Update existing story
 		existingStory := existing[0]
 		fullStory.ID = existingStory.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullStory, m.shouldPublish())
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -681,7 +757,7 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 			}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullStory, m.shouldPublish())
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -752,7 +828,7 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 		// Update existing story
 		existingStory := existing[0]
 		fullStory.ID = existingStory.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullStory, m.shouldPublish())
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return nil, err
 		}
@@ -788,7 +864,7 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 			}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullStory, m.shouldPublish())
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return nil, err
 		}

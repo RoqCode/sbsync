@@ -125,8 +125,8 @@ func (m *mockAPI) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb
 
 func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 	srcFolders := []sb.Story{
-		{ID: 1, Name: "foo", Slug: "foo", FullSlug: "foo", IsFolder: true, ContentType: "page"},
-		{ID: 2, Name: "bar", Slug: "bar", FullSlug: "foo/bar", IsFolder: true, FolderID: &[]int{1}[0], ContentType: "page"},
+		{ID: 1, Name: "foo", Slug: "foo", FullSlug: "foo", IsFolder: true, Content: map[string]interface{}{"content_types": []string{"page"}, "lock_subfolders_content_types": false}},
+		{ID: 2, Name: "bar", Slug: "bar", FullSlug: "foo/bar", IsFolder: true, FolderID: &[]int{1}[0], Content: map[string]interface{}{"content_types": []string{"page"}, "lock_subfolders_content_types": false}},
 	}
 	api := &mockAPI{
 		source: map[int]sb.Story{
@@ -146,8 +146,11 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 	}
 	if foo, ok := api.target["foo"]; !ok {
 		t.Errorf("expected folder 'foo' to be created")
-	} else if foo.ContentType != "page" {
-		t.Errorf("expected folder 'foo' to keep content type 'page'")
+	} else {
+		cts, _ := foo.Content["content_types"].([]string)
+		if len(cts) != 1 || cts[0] != "page" {
+			t.Errorf("expected folder 'foo' to keep content type 'page'")
+		}
 	}
 	if bar, ok := api.target["foo/bar"]; !ok {
 		t.Errorf("expected folder 'foo/bar' to be created")
@@ -156,7 +159,8 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 		if bar.FolderID == nil || *bar.FolderID != parent.ID {
 			t.Errorf("expected 'foo/bar' to reference parent 'foo'")
 		}
-		if bar.ContentType != "page" {
+		cts, _ := bar.Content["content_types"].([]string)
+		if len(cts) != 1 || cts[0] != "page" {
 			t.Errorf("expected folder 'foo/bar' to keep content type 'page'")
 		}
 	}
@@ -171,14 +175,56 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 	}
 }
 
-func TestShouldPublishByPlanLevel(t *testing.T) {
-	m := InitialModel()
-	m.targetSpace = &sb.Space{PlanLevel: 999}
-	if m.shouldPublish() {
-		t.Error("expected publish to be false for plan level 999")
+type publishLimitCreateMock struct {
+	calls []bool
+}
+
+func (m *publishLimitCreateMock) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	m.calls = append(m.calls, publish)
+	if len(m.calls) == 1 {
+		return sb.Story{}, errors.New("This space is in the development mode. Publishing is limited to 3 publishes per day. Please upgrade the space.")
 	}
-	m.targetSpace.PlanLevel = 100
-	if !m.shouldPublish() {
-		t.Error("expected publish to be true for plan level 100")
+	st.ID = 1
+	return st, nil
+}
+
+func TestCreateStoryWithPublishRetryDevMode(t *testing.T) {
+	mock := &publishLimitCreateMock{}
+	st := sb.Story{Slug: "foo", FullSlug: "foo"}
+	ctx := context.Background()
+	created, err := createStoryWithPublishRetry(ctx, mock, 1, st, true)
+	if err != nil {
+		t.Fatalf("expected success after retry, got %v", err)
+	}
+	if len(mock.calls) != 2 || !mock.calls[0] || mock.calls[1] {
+		t.Errorf("expected first publish true then false, got %v", mock.calls)
+	}
+	if created.ID != 1 {
+		t.Errorf("expected created story ID to be 1")
+	}
+}
+
+type publishLimitUpdateMock struct {
+	calls []bool
+}
+
+func (m *publishLimitUpdateMock) UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	m.calls = append(m.calls, publish)
+	if len(m.calls) == 1 {
+		return sb.Story{}, errors.New("This space is in the development mode. Publishing is limited to 3 publishes per day. Please upgrade the space.")
+	}
+	return st, nil
+}
+
+func TestUpdateStoryWithPublishRetryDevMode(t *testing.T) {
+	mock := &publishLimitUpdateMock{}
+	st := sb.Story{ID: 1, Slug: "foo", FullSlug: "foo"}
+	ctx := context.Background()
+	_, err := updateStoryWithPublishRetry(ctx, mock, 1, st, true)
+	if err != nil {
+		t.Fatalf("expected success after retry, got %v", err)
+	}
+	if len(mock.calls) != 2 || !mock.calls[0] || mock.calls[1] {
+		t.Errorf("expected first publish true then false, got %v", mock.calls)
 	}
 }
