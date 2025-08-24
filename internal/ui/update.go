@@ -412,19 +412,23 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if len(m.preflight.items) > 0 {
 			it := &m.preflight.items[m.preflight.listIndex]
 			if it.Collision {
-				it.Skip = !it.Skip
+				if it.State == stateSkip {
+					it.State = stateUpdate
+				} else {
+					it.State = stateSkip
+				}
 			}
 		}
 	case "X":
 		for i := range m.preflight.items {
 			if m.preflight.items[i].Collision {
-				m.preflight.items[i].Skip = true
+				m.preflight.items[i].State = stateSkip
 			}
 		}
 	case "c":
 		removed := false
 		for _, it := range m.preflight.items {
-			if it.Skip {
+			if it.State == stateSkip {
 				delete(m.selection.selected, it.Story.FullSlug)
 				removed = true
 			}
@@ -439,7 +443,7 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.plan = SyncPlan{Items: append([]PreflightItem(nil), m.preflight.items...)}
 		skipped := 0
 		for _, it := range m.preflight.items {
-			if it.Skip {
+			if it.State == stateSkip {
 				skipped++
 			}
 		}
@@ -488,7 +492,12 @@ func (m *Model) startPreflight() {
 	walk = func(idx int) {
 		st := m.storiesSource[idx]
 		sel := m.selection.selected[st.FullSlug]
-		it := PreflightItem{Story: st, Collision: sel && target[st.FullSlug], Selected: sel}
+		collision := sel && target[st.FullSlug]
+		state := stateCreate
+		if collision {
+			state = stateUpdate
+		}
+		it := PreflightItem{Story: st, Collision: collision, Selected: sel, State: state}
 		items = append(items, it)
 		for _, ch := range children[idx] {
 			walk(ch)

@@ -82,12 +82,12 @@ func TestPreflightSkipToggleAndGlobal(t *testing.T) {
 	m.startPreflight()
 
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
-	if !m.preflight.items[0].Skip {
+	if m.preflight.items[0].State != stateSkip {
 		t.Fatalf("expected item skipped after x")
 	}
-	m.preflight.items[0].Skip = false
+	m.preflight.items[0].State = stateUpdate
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
-	if !m.preflight.items[0].Skip {
+	if m.preflight.items[0].State != stateSkip {
 		t.Fatalf("expected item skipped after X")
 	}
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
@@ -117,7 +117,7 @@ func TestDisplayPreflightItemDimsSlug(t *testing.T) {
 		t.Fatalf("expected dimmed slug and name when unselected: %q", s)
 	}
 	it.Selected = true
-	it.Skip = true
+	it.State = stateSkip
 	s = displayPreflightItem(it)
 	if s != expected {
 		t.Fatalf("expected dimmed slug and name when skipped: %q", s)

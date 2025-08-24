@@ -75,11 +75,32 @@ type SearchState struct {
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
 }
 
+type syncState int
+
+const (
+	stateCreate syncState = iota
+	stateUpdate
+	stateSkip
+)
+
+func (s syncState) String() string {
+	switch s {
+	case stateCreate:
+		return "C"
+	case stateUpdate:
+		return "U"
+	case stateSkip:
+		return "S"
+	default:
+		return "?"
+	}
+}
+
 type PreflightItem struct {
 	Story     sb.Story
 	Collision bool
-	Skip      bool
 	Selected  bool
+	State     syncState
 }
 
 type PreflightState struct {
