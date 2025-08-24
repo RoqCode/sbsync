@@ -91,8 +91,11 @@ func TestPreflightSkipToggleAndGlobal(t *testing.T) {
 		t.Fatalf("expected item skipped after X")
 	}
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if m.preflight.items[0].Skip {
-		t.Fatalf("expected item unskipped after c")
+	if m.selection.selected[st.FullSlug] {
+		t.Fatalf("expected selection removed after c")
+	}
+	if len(m.preflight.items) != 0 {
+		t.Fatalf("expected preflight list cleared after c, got %d", len(m.preflight.items))
 	}
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if m.state != stateBrowseList {

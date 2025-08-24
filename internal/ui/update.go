@@ -422,8 +422,15 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 	case "c":
-		for i := range m.preflight.items {
-			m.preflight.items[i].Skip = false
+		removed := false
+		for _, it := range m.preflight.items {
+			if it.Skip {
+				delete(m.selection.selected, it.Story.FullSlug)
+				removed = true
+			}
+		}
+		if removed {
+			m.startPreflight()
 		}
 	case "esc", "q":
 		m.state = stateBrowseList
@@ -458,6 +465,7 @@ func (m *Model) startPreflight() {
 		}
 	}
 	if len(included) == 0 {
+		m.preflight = PreflightState{listViewport: m.selection.listViewport}
 		m.statusMsg = "Keine Stories markiert."
 		return
 	}
