@@ -28,6 +28,7 @@ var (
 	stateCreateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 	stateUpdateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	stateSkipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	stateDoneStyle   = lipgloss.NewStyle().Background(lipgloss.Color("10")).Foreground(lipgloss.Color("0")).Bold(true)
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
@@ -94,12 +95,23 @@ var stateStyles = map[SyncState]lipgloss.Style{
 	StateSkip:   stateSkipStyle,
 }
 
+// RunState marks the execution state of a sync item.
+type RunState int
+
+const (
+	RunPending RunState = iota
+	RunRunning
+	RunDone
+)
+
 type PreflightItem struct {
-	Story     sb.Story
-	Collision bool
-	Skip      bool
-	Selected  bool
-	State     SyncState
+	Story      sb.Story
+	Collision  bool
+	Skip       bool
+	Selected   bool
+	State      SyncState
+	StartsWith bool
+	Run        RunState
 }
 
 func (it *PreflightItem) RecalcState() {
@@ -134,7 +146,9 @@ type Model struct {
 	width, height int
 
 	// spinner for loading states
-	spinner spinner.Model
+	spinner   spinner.Model
+	syncing   bool
+	syncIndex int
 
 	// token input
 	ti textinput.Model

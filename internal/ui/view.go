@@ -312,11 +312,18 @@ func (m Model) viewPreflight() string {
 				cursorCell = cursorBarStyle.Render(" ")
 			}
 			stateCell := " "
-			if it.State != "" {
-				if st, ok := stateStyles[it.State]; ok {
-					stateCell = st.Render(string(it.State))
-				} else {
-					stateCell = string(it.State)
+			switch it.Run {
+			case RunRunning:
+				stateCell = m.spinner.View()
+			case RunDone:
+				stateCell = stateDoneStyle.Render(string(it.State))
+			default:
+				if it.State != "" {
+					if st, ok := stateStyles[it.State]; ok {
+						stateCell = st.Render(string(it.State))
+					} else {
+						stateCell = string(it.State)
+					}
 				}
 			}
 			lines[i] = cursorCell + stateCell + content
@@ -333,6 +340,10 @@ func (m Model) viewPreflight() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
+	if m.syncing {
+		b.WriteString(renderProgress(m.syncIndex, len(m.preflight.items), m.width-2))
+		b.WriteString("\n\n")
+	}
 	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"))
 	return b.String()
 }
@@ -349,6 +360,20 @@ func displayPreflightItem(it PreflightItem) string {
 	}
 	sym := storyTypeSymbol(it.Story)
 	return fmt.Sprintf("%s %s  %s", sym, name, slug)
+}
+
+func renderProgress(done, total, width int) string {
+	if total <= 0 {
+		return ""
+	}
+	if width <= 0 {
+		width = 20
+	}
+	filled := int(float64(done) / float64(total) * float64(width))
+	if filled > width {
+		filled = width
+	}
+	return "[" + strings.Repeat("#", filled) + strings.Repeat("-", width-filled) + fmt.Sprintf("] %d/%d", done, total)
 }
 
 func displayStory(st sb.Story) string {
