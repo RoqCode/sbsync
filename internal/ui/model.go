@@ -103,6 +103,13 @@ type Model struct {
 	filter    FilterState
 	search    SearchState
 	filterCfg FilterConfig // Konfiguration für Such- und Filterparameter
+
+	// tree state
+	treeRoots []*storyNode
+	flatNodes []*storyNode
+	collapsed map[int]bool
+	indexByID map[int]int
+	treeLines []string
 }
 
 func InitialModel() Model {
@@ -165,3 +172,9 @@ func InitialModel() Model {
 }
 
 func (m Model) Init() tea.Cmd { return nil }
+
+type storyNode struct {
+	story    sb.Story
+	parent   *storyNode
+	children []*storyNode
+}

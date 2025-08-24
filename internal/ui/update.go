@@ -10,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"storyblok-sync/internal/sb"
+
+	tree "github.com/charmbracelet/lipgloss/tree"
 )
 
 // ---------- Update ----------
@@ -307,6 +309,49 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.selection.listIndex--
 			m.ensureCursorVisible()
 		}
+	case "l":
+		if m.itemsLen() == 0 {
+			return m, nil
+		}
+		node := m.currentNode()
+		if node != nil && node.story.IsFolder {
+			if m.collapsed[node.story.ID] {
+				m.collapsed[node.story.ID] = false
+				m.rebuildVisible()
+			}
+		}
+	case "h":
+		if m.itemsLen() == 0 {
+			return m, nil
+		}
+		node := m.currentNode()
+		if node == nil {
+			return m, nil
+		}
+		if node.story.IsFolder {
+			if !m.collapsed[node.story.ID] {
+				m.collapsed[node.story.ID] = true
+				m.rebuildVisible()
+			} else if node.parent != nil {
+				m.collapsed[node.parent.story.ID] = true
+				m.rebuildVisible()
+				if idx, ok := m.indexByID[node.parent.story.ID]; ok {
+					m.selection.listIndex = idx
+					m.ensureCursorVisible()
+				}
+			}
+		} else if node.parent != nil {
+			m.collapsed[node.parent.story.ID] = true
+			m.rebuildVisible()
+			if idx, ok := m.indexByID[node.parent.story.ID]; ok {
+				m.selection.listIndex = idx
+				m.ensureCursorVisible()
+			}
+		}
+	case "L":
+		m.expandAll()
+	case "H":
+		m.collapseAll()
 	case "ctrl+d", "pgdown":
 		if m.itemsLen() > 0 {
 			m.selection.listIndex += m.selection.listViewport
@@ -445,17 +490,14 @@ func (m *Model) ensureCursorVisible() {
 }
 
 func (m *Model) itemsLen() int {
-	if m.search.filteredIdx != nil {
-		return len(m.search.filteredIdx)
-	}
-	return len(m.storiesSource)
+	return len(m.flatNodes)
 }
 
 func (m *Model) itemAt(visIdx int) sb.Story {
-	if m.search.filteredIdx != nil {
-		return m.storiesSource[m.search.filteredIdx[visIdx]]
+	if visIdx < 0 || visIdx >= len(m.flatNodes) {
+		return sb.Story{}
 	}
-	return m.storiesSource[visIdx]
+	return m.flatNodes[visIdx].story
 }
 
 func (m *Model) applyFilter() {
@@ -473,22 +515,105 @@ func (m *Model) applyFilter() {
 
 	idx := filterByPrefix(m.storiesSource, pref)
 
-	if q == "" {
-		m.search.filteredIdx = append(m.search.filteredIdx[:0], idx...)
-		m.selection.listIndex, m.selection.listOffset = 0, 0
-		m.ensureCursorVisible()
-		return
+	if q != "" {
+		sub := filterBySubstring(q, base, idx, m.filterCfg)
+		if len(sub) == 0 {
+			sub = filterByFuzzy(q, base, idx, m.filterCfg)
+		}
+		idx = sub
 	}
 
-	sub := filterBySubstring(q, base, idx, m.filterCfg)
-	if len(sub) > 0 {
-		m.search.filteredIdx = sub
-		m.selection.listIndex, m.selection.listOffset = 0, 0
-		m.ensureCursorVisible()
-		return
+	m.search.filteredIdx = append(m.search.filteredIdx[:0], idx...)
+
+	stories := make([]sb.Story, len(idx))
+	for i, id := range idx {
+		stories[i] = m.storiesSource[id]
 	}
 
-	m.search.filteredIdx = filterByFuzzy(q, base, idx, m.filterCfg)
+	m.buildStoryTree(stories)
+	if q != "" {
+		m.expandAll()
+	} else {
+		m.collapseAll()
+	}
 	m.selection.listIndex, m.selection.listOffset = 0, 0
 	m.ensureCursorVisible()
+}
+
+func (m *Model) buildStoryTree(stories []sb.Story) {
+	nodes := make(map[int]*storyNode, len(stories))
+	for i := range stories {
+		st := stories[i]
+		nodes[st.ID] = &storyNode{story: st}
+	}
+	var roots []*storyNode
+	for _, n := range nodes {
+		if n.story.FolderID != nil {
+			if p, ok := nodes[*n.story.FolderID]; ok {
+				n.parent = p
+				p.children = append(p.children, n)
+				continue
+			}
+		}
+		roots = append(roots, n)
+	}
+	m.treeRoots = roots
+	m.flatNodes = nil
+	m.indexByID = make(map[int]int)
+	m.collapsed = make(map[int]bool)
+	for _, n := range nodes {
+		if n.story.IsFolder {
+			m.collapsed[n.story.ID] = true
+		}
+	}
+}
+
+func (m *Model) rebuildVisible() {
+	m.flatNodes = m.flatNodes[:0]
+	tr := tree.New()
+	for _, r := range m.treeRoots {
+		m.addVisibleNode(tr, r)
+	}
+	lines := strings.Split(tr.String(), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	m.treeLines = lines
+	m.indexByID = make(map[int]int, len(m.flatNodes))
+	for i, n := range m.flatNodes {
+		m.indexByID[n.story.ID] = i
+	}
+	m.ensureCursorVisible()
+}
+
+func (m *Model) addVisibleNode(parent *tree.Tree, n *storyNode) {
+	tNode := tree.Root(displayStory(n.story))
+	parent.Child(tNode)
+	m.flatNodes = append(m.flatNodes, n)
+	if n.story.IsFolder && !m.collapsed[n.story.ID] {
+		for _, ch := range n.children {
+			m.addVisibleNode(tNode, ch)
+		}
+	}
+}
+
+func (m *Model) expandAll() {
+	for id := range m.collapsed {
+		m.collapsed[id] = false
+	}
+	m.rebuildVisible()
+}
+
+func (m *Model) collapseAll() {
+	for id := range m.collapsed {
+		m.collapsed[id] = true
+	}
+	m.rebuildVisible()
+}
+
+func (m *Model) currentNode() *storyNode {
+	if m.selection.listIndex < 0 || m.selection.listIndex >= len(m.flatNodes) {
+		return nil
+	}
+	return m.flatNodes[m.selection.listIndex]
 }

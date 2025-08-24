@@ -7,7 +7,6 @@ import (
 	"storyblok-sync/internal/sb"
 
 	"github.com/charmbracelet/lipgloss"
-	tree "github.com/charmbracelet/lipgloss/tree"
 )
 
 func (m Model) View() string {
@@ -153,42 +152,13 @@ func (m Model) viewBrowseList() string {
 		if total == 0 {
 			b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).") + "\n")
 		} else {
-			// Sammle sichtbare Stories
-			stories := make([]sb.Story, total)
-			for i := 0; i < total; i++ {
-				stories[i] = m.itemAt(i)
-			}
-
-			// Erzeuge Tree-Struktur
-			tr := tree.New()
-			nodes := make(map[int]*tree.Tree, len(stories))
-			for _, st := range stories {
-				node := tree.Root(displayStory(st))
-				nodes[st.ID] = node
-			}
-
-			for _, st := range stories {
-				node := nodes[st.ID]
-				if st.FolderID != nil {
-					if parent, ok := nodes[*st.FolderID]; ok {
-						parent.Child(node)
-						continue
-					}
-				}
-				tr.Child(node)
-			}
-
-			// Begrenze Ausgabe auf sichtbaren Bereich
-			lines := strings.Split(tr.String(), "\n")
-			if len(lines) > 0 && lines[len(lines)-1] == "" {
-				lines = lines[:len(lines)-1]
-			}
-
-			for i, st := range stories {
+			lines := m.treeLines
+			nodes := m.flatNodes
+			for i, n := range nodes {
 				if i >= len(lines) {
 					break
 				}
-
+				st := n.story
 				content := lines[i]
 				if i == m.selection.listIndex {
 					content = cursorLineStyle.Width(m.width - 2).Render(content)
@@ -210,14 +180,14 @@ func (m Model) viewBrowseList() string {
 			}
 
 			start := m.selection.listOffset
-			if start > len(lines) {
-				start = len(lines)
+			if start > len(m.treeLines) {
+				start = len(m.treeLines)
 			}
 			end := start + m.selection.listViewport
-			if end > len(lines) {
-				end = len(lines)
+			if end > len(m.treeLines) {
+				end = len(m.treeLines)
 			}
-			b.WriteString(strings.Join(lines[start:end], "\n"))
+			b.WriteString(strings.Join(m.treeLines[start:end], "\n"))
 			b.WriteString("\n")
 
 			shown := end - start
@@ -244,7 +214,7 @@ func (m Model) viewBrowseList() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-	b.WriteString(helpStyle.Render("j/k bewegen  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
+	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l klappen  |  H/L alle klappen  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
 	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
 	return b.String()
 }

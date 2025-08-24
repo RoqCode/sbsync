@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"storyblok-sync/internal/sb"
 )
 
 // TestHandleWelcomeKey verifies state transitions from the welcome screen.
@@ -44,5 +46,35 @@ func TestUpdateGlobalQuit(t *testing.T) {
 		t.Fatalf("expected quit msg")
 	} else if _, ok := msg.(tea.QuitMsg); !ok {
 		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
+// TestTreeFolding ensures that folders can be expanded and collapsed via key bindings.
+func TestTreeFolding(t *testing.T) {
+	folderID := 1
+	stories := []sb.Story{
+		{ID: folderID, Name: "folder", FullSlug: "folder", IsFolder: true},
+		{ID: 2, Name: "child", FullSlug: "folder/child", FolderID: &folderID},
+	}
+	m := Model{}
+	m.storiesSource = stories
+	m.applyFilter()
+
+	if l := m.itemsLen(); l != 1 {
+		t.Fatalf("expected 1 visible item, got %d", l)
+	}
+
+	m.expandAll()
+	if l := m.itemsLen(); l != 2 {
+		t.Fatalf("expected 2 items after expandAll, got %d", l)
+	}
+
+	m.selection.listIndex = 1
+	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if l := m.itemsLen(); l != 1 {
+		t.Fatalf("expected 1 item after collapsing parent, got %d", l)
+	}
+	if m.selection.listIndex != 0 {
+		t.Fatalf("expected cursor at parent, got %d", m.selection.listIndex)
 	}
 }
