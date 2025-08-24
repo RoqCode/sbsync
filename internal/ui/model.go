@@ -24,6 +24,8 @@ var (
 	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
 	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
 	markNestedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA"))
+	fadedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	collisionSymbol = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Render("⚠")
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
@@ -78,6 +80,8 @@ type PreflightState struct {
 	listIndex    int
 	listOffset   int
 	listViewport int
+	lineMap      []int
+	lineCount    int
 }
 
 type PlanItem struct {

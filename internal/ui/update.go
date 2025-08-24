@@ -420,6 +420,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		})
 		m.syncPlan = SyncPlan{Items: items}
 		m.preflight.listIndex, m.preflight.listOffset = 0, 0
+		m.rebuildPreflightTree()
 		m.state = statePreflight
 	}
 	return m, nil
@@ -593,6 +594,13 @@ func (m *Model) preflightItemAt(idx int) *PlanItem {
 	return &m.syncPlan.Items[idx]
 }
 
+func (m *Model) rebuildPreflightTree() {
+	lines, lineMap := m.preflightLines()
+	m.preflight.lineMap = lineMap
+	m.preflight.lineCount = len(lines)
+	m.preflightEnsureCursorVisible()
+}
+
 func (m *Model) preflightEnsureCursorVisible() {
 	if m.preflight.listViewport <= 0 {
 		m.preflight.listViewport = 10
@@ -611,14 +619,20 @@ func (m *Model) preflightEnsureCursorVisible() {
 		m.preflight.listIndex = n - 1
 	}
 
-	if m.preflight.listIndex < m.preflight.listOffset {
-		m.preflight.listOffset = m.preflight.listIndex
+	if len(m.preflight.lineMap) != n {
+		lines, lineMap := m.preflightLines()
+		m.preflight.lineMap = lineMap
+		m.preflight.lineCount = len(lines)
 	}
-	if m.preflight.listIndex >= m.preflight.listOffset+m.preflight.listViewport {
-		m.preflight.listOffset = m.preflight.listIndex - m.preflight.listViewport + 1
+	lineIdx := m.preflight.lineMap[m.preflight.listIndex]
+	if lineIdx < m.preflight.listOffset {
+		m.preflight.listOffset = lineIdx
+	}
+	if lineIdx >= m.preflight.listOffset+m.preflight.listViewport {
+		m.preflight.listOffset = lineIdx - m.preflight.listViewport + 1
 	}
 
-	maxStart := n - m.preflight.listViewport
+	maxStart := m.preflight.lineCount - m.preflight.listViewport
 	if maxStart < 0 {
 		maxStart = 0
 	}

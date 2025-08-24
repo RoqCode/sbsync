@@ -269,3 +269,44 @@ func TestPreflightSkipAllCollisions(t *testing.T) {
 		}
 	}
 }
+
+func TestPreflightLinesIncludeAncestorsAndCollision(t *testing.T) {
+	folder := sb.Story{ID: 10, Name: "folder", Slug: "folder", FullSlug: "folder", IsFolder: true}
+	child := sb.Story{ID: 11, Name: "child", Slug: "child", FullSlug: "folder/child", FolderID: &folder.ID}
+	tgt := sb.Story{ID: 12, Name: "child", Slug: "child", FullSlug: "folder/child"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{folder, child}
+	m.storiesTarget = []sb.Story{tgt}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[child.FullSlug] = true
+
+	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+
+	lines, _ := m.preflightLines()
+	var folderLine, childLine string
+	for _, l := range lines {
+		if strings.Contains(l, "folder") {
+			folderLine = l
+		}
+		if strings.Contains(l, "child") {
+			childLine = l
+		}
+	}
+	if folderLine == "" {
+		t.Fatalf("expected ancestor folder in preflight lines")
+	}
+	if !strings.Contains(folderLine, "38;5;240m") {
+		t.Fatalf("expected folder line to be faded, got %q", folderLine)
+	}
+	if childLine == "" {
+		t.Fatalf("expected child line in preflight lines")
+	}
+	if !strings.Contains(childLine, "⚠") {
+		t.Fatalf("expected collision symbol in child line: %q", childLine)
+	}
+}

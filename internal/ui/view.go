@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"storyblok-sync/internal/sb"
 	"strings"
 
@@ -266,26 +267,18 @@ func (m Model) viewPreflight() string {
 		b.WriteString(helpStyle.Render("esc/q zurück"))
 		return b.String()
 	}
-
-	lines := make([]string, total)
-	for i, it := range m.syncPlan.Items {
-		skip := " "
-		if it.Skip {
-			skip = "x"
-		}
-		col := " "
-		if it.Collision {
-			col = "!"
-		}
-		content := fmt.Sprintf("[%s] %s %s", skip, col, it.Story.FullSlug)
-		if i == m.preflight.listIndex {
-			content = cursorLineStyle.Width(m.width - 2).Render(content)
-		} else {
-			content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
-		}
-		lines[i] = content
+	lines, _ := m.preflightLines()
+	selLine := 0
+	if m.preflight.listIndex < len(m.preflight.lineMap) {
+		selLine = m.preflight.lineMap[m.preflight.listIndex]
 	}
-
+	for i, line := range lines {
+		if i == selLine {
+			lines[i] = cursorLineStyle.Width(m.width - 2).Render(line)
+		} else {
+			lines[i] = lipgloss.NewStyle().Width(m.width - 2).Render(line)
+		}
+	}
 	start := m.preflight.listOffset
 	if start > len(lines) {
 		start = len(lines)
@@ -298,6 +291,83 @@ func (m Model) viewPreflight() string {
 	b.WriteString("\n\n")
 	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  a alle Kollisionen skippen  |  esc/q zurück"))
 	return b.String()
+}
+
+func (m Model) preflightLines() ([]string, []int) {
+	storySet := make(map[int]sb.Story)
+	itemByID := make(map[int]*PlanItem)
+	for i := range m.syncPlan.Items {
+		it := &m.syncPlan.Items[i]
+		storySet[it.Story.ID] = it.Story
+		itemByID[it.Story.ID] = it
+		pid := it.Story.FolderID
+		for pid != nil {
+			idx, ok := m.storyIdx[*pid]
+			if !ok {
+				break
+			}
+			pst := m.storiesSource[idx]
+			if _, exists := storySet[pst.ID]; exists {
+				pid = pst.FolderID
+				continue
+			}
+			storySet[pst.ID] = pst
+			pid = pst.FolderID
+		}
+	}
+
+	stories := make([]sb.Story, 0, len(storySet))
+	for _, st := range storySet {
+		stories = append(stories, st)
+	}
+	sort.Slice(stories, func(i, j int) bool { return stories[i].FullSlug < stories[j].FullSlug })
+
+	tr := tree.New()
+	nodes := make(map[int]*tree.Tree, len(stories))
+	for _, st := range stories {
+		label := displayStory(st)
+		if it, ok := itemByID[st.ID]; ok {
+			skip := " "
+			if it.Skip {
+				skip = "x"
+			}
+			warn := " "
+			if it.Collision {
+				warn = collisionSymbol
+			}
+			label = fmt.Sprintf("[%s] %s %s", skip, warn, label)
+		} else if st.IsFolder {
+			label = fadedStyle.Render(label)
+		}
+		node := tree.Root(label)
+		nodes[st.ID] = node
+	}
+
+	for _, st := range stories {
+		node := nodes[st.ID]
+		if st.FolderID != nil {
+			if parent, ok := nodes[*st.FolderID]; ok {
+				parent.Child(node)
+				continue
+			}
+		}
+		tr.Child(node)
+	}
+
+	lines := strings.Split(tr.String(), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	idToLine := make(map[int]int, len(stories))
+	for i, st := range stories {
+		idToLine[st.ID] = i
+	}
+	lineMap := make([]int, len(m.syncPlan.Items))
+	for i, it := range m.syncPlan.Items {
+		lineMap[i] = idToLine[it.Story.ID]
+	}
+	return lines, lineMap
 }
 
 func displayStory(st sb.Story) string {
