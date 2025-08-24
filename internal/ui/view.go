@@ -28,6 +28,8 @@ func (m Model) View() string {
 		b.WriteString(m.viewScanning())
 	case stateBrowseList:
 		b.WriteString(m.viewBrowseList())
+	case statePreflight:
+		b.WriteString(m.viewPreflight())
 	}
 	m.renderFooter(&b)
 	return b.String()
@@ -251,6 +253,50 @@ func (m Model) viewBrowseList() string {
 	b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
 	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
 	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
+	return b.String()
+}
+
+func (m Model) viewPreflight() string {
+	var b strings.Builder
+	b.WriteString("Preflight – Übersicht der markierten Stories\n\n")
+	total := len(m.syncPlan.Items)
+	if total == 0 {
+		b.WriteString(warnStyle.Render("Keine Auswahl.") + "\n")
+		b.WriteString("\n")
+		b.WriteString(helpStyle.Render("esc/q zurück"))
+		return b.String()
+	}
+
+	lines := make([]string, total)
+	for i, it := range m.syncPlan.Items {
+		skip := " "
+		if it.Skip {
+			skip = "x"
+		}
+		col := " "
+		if it.Collision {
+			col = "!"
+		}
+		content := fmt.Sprintf("[%s] %s %s", skip, col, it.Story.FullSlug)
+		if i == m.preflight.listIndex {
+			content = cursorLineStyle.Width(m.width - 2).Render(content)
+		} else {
+			content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
+		}
+		lines[i] = content
+	}
+
+	start := m.preflight.listOffset
+	if start > len(lines) {
+		start = len(lines)
+	}
+	end := start + m.preflight.listViewport
+	if end > len(lines) {
+		end = len(lines)
+	}
+	b.WriteString(strings.Join(lines[start:end], "\n"))
+	b.WriteString("\n\n")
+	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  a alle Kollisionen skippen  |  esc/q zurück"))
 	return b.String()
 }
 

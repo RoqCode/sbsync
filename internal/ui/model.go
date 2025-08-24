@@ -47,6 +47,7 @@ const (
 	stateSpaceSelect
 	stateScanning
 	stateBrowseList
+	statePreflight
 	stateQuit
 )
 
@@ -71,6 +72,22 @@ type SearchState struct {
 	searchInput textinput.Model
 	query       string // aktueller Suchstring
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
+}
+
+type PreflightState struct {
+	listIndex    int
+	listOffset   int
+	listViewport int
+}
+
+type PlanItem struct {
+	Story     sb.Story
+	Collision bool
+	Skip      bool
+}
+
+type SyncPlan struct {
+	Items []PlanItem
 }
 
 type Model struct {
@@ -107,6 +124,8 @@ type Model struct {
 	selection SelectionState
 	filter    FilterState
 	search    SearchState
+	preflight PreflightState
+	syncPlan  SyncPlan
 	filterCfg FilterConfig // Konfiguration für Such- und Filterparameter
 }
 

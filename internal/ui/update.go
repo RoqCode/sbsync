@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,6 +38,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleScanningKey(key)
 		case stateBrowseList:
 			return m.handleBrowseListKey(msg)
+		case statePreflight:
+			return m.handlePreflightKey(msg)
 		}
 
 	case tea.WindowSizeMsg:
@@ -48,6 +51,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			vp = 3
 		}
 		m.selection.listViewport = vp
+		m.preflight.listViewport = vp
 
 	case validateMsg:
 		if msg.err != nil {
@@ -385,9 +389,85 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.statusMsg = "Rescan…"
 		return m, m.scanStoriesCmd()
 	case "s":
-		// Weiter zu Preflight in T6 – hier nur Platzhalter
-		m.statusMsg = "Preflight (T6) folgt …"
+		if len(m.selection.selected) == 0 {
+			return m, nil
+		}
+		// build target slug map
+		tgt := make(map[string]bool, len(m.storiesTarget))
+		for _, st := range m.storiesTarget {
+			tgt[st.FullSlug] = true
+		}
+		items := make([]PlanItem, 0, len(m.selection.selected))
+		for slug, sel := range m.selection.selected {
+			if !sel {
+				continue
+			}
+			var st sb.Story
+			for _, s := range m.storiesSource {
+				if s.FullSlug == slug {
+					st = s
+					break
+				}
+			}
+			it := PlanItem{Story: st}
+			if tgt[slug] {
+				it.Collision = true
+			}
+			items = append(items, it)
+		}
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].Story.FullSlug < items[j].Story.FullSlug
+		})
+		m.syncPlan = SyncPlan{Items: items}
+		m.preflight.listIndex, m.preflight.listOffset = 0, 0
+		m.state = statePreflight
 	}
+	return m, nil
+}
+
+func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	key := msg.String()
+
+	switch key {
+	case "esc", "q":
+		m.state = stateBrowseList
+		return m, nil
+	case "j", "down":
+		if m.preflight.listIndex < m.preflightItemsLen()-1 {
+			m.preflight.listIndex++
+			m.preflightEnsureCursorVisible()
+		}
+	case "k", "up":
+		if m.preflight.listIndex > 0 {
+			m.preflight.listIndex--
+			m.preflightEnsureCursorVisible()
+		}
+	case "ctrl+d", "pgdown":
+		if m.preflightItemsLen() > 0 {
+			m.preflight.listIndex += m.preflight.listViewport
+			if m.preflight.listIndex > m.preflightItemsLen()-1 {
+				m.preflight.listIndex = m.preflightItemsLen() - 1
+			}
+			m.preflightEnsureCursorVisible()
+		}
+	case "ctrl+u", "pgup":
+		m.preflight.listIndex -= m.preflight.listViewport
+		if m.preflight.listIndex < 0 {
+			m.preflight.listIndex = 0
+		}
+		m.preflightEnsureCursorVisible()
+	case "x":
+		if it := m.preflightItemAt(m.preflight.listIndex); it != nil {
+			it.Skip = !it.Skip
+		}
+	case "a":
+		for i := range m.syncPlan.Items {
+			if m.syncPlan.Items[i].Collision {
+				m.syncPlan.Items[i].Skip = true
+			}
+		}
+	}
+
 	return m, nil
 }
 
@@ -500,6 +580,54 @@ func (m *Model) itemsLen() int {
 
 func (m *Model) itemAt(visIdx int) sb.Story {
 	return m.storiesSource[m.visibleIdx[visIdx]]
+}
+
+func (m *Model) preflightItemsLen() int {
+	return len(m.syncPlan.Items)
+}
+
+func (m *Model) preflightItemAt(idx int) *PlanItem {
+	if idx < 0 || idx >= len(m.syncPlan.Items) {
+		return nil
+	}
+	return &m.syncPlan.Items[idx]
+}
+
+func (m *Model) preflightEnsureCursorVisible() {
+	if m.preflight.listViewport <= 0 {
+		m.preflight.listViewport = 10
+	}
+
+	n := m.preflightItemsLen()
+	if n == 0 {
+		m.preflight.listIndex = 0
+		m.preflight.listOffset = 0
+		return
+	}
+	if m.preflight.listIndex < 0 {
+		m.preflight.listIndex = 0
+	}
+	if m.preflight.listIndex > n-1 {
+		m.preflight.listIndex = n - 1
+	}
+
+	if m.preflight.listIndex < m.preflight.listOffset {
+		m.preflight.listOffset = m.preflight.listIndex
+	}
+	if m.preflight.listIndex >= m.preflight.listOffset+m.preflight.listViewport {
+		m.preflight.listOffset = m.preflight.listIndex - m.preflight.listViewport + 1
+	}
+
+	maxStart := n - m.preflight.listViewport
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if m.preflight.listOffset > maxStart {
+		m.preflight.listOffset = maxStart
+	}
+	if m.preflight.listOffset < 0 {
+		m.preflight.listOffset = 0
+	}
 }
 
 func (m *Model) applyFilter() {

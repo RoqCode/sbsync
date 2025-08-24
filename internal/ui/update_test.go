@@ -211,3 +211,61 @@ func TestMarkMovesCursorDown(t *testing.T) {
 		t.Fatalf("expected cursor moved to 1, got %d", m.selection.listIndex)
 	}
 }
+
+func TestPreflightPlanAndCollisions(t *testing.T) {
+	src1 := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
+	src2 := sb.Story{ID: 2, Name: "two", Slug: "two", FullSlug: "two"}
+	tgt1 := sb.Story{ID: 3, Name: "one", Slug: "one", FullSlug: "one"} // collision with src1
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{src1, src2}
+	m.storiesTarget = []sb.Story{tgt1}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[src1.FullSlug] = true
+	m.selection.selected[src2.FullSlug] = true
+
+	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+
+	if m.state != statePreflight {
+		t.Fatalf("expected statePreflight, got %v", m.state)
+	}
+	if len(m.syncPlan.Items) != 2 {
+		t.Fatalf("expected 2 plan items, got %d", len(m.syncPlan.Items))
+	}
+	if !m.syncPlan.Items[0].Collision {
+		t.Fatalf("expected first item to have collision")
+	}
+	if m.syncPlan.Items[1].Collision {
+		t.Fatalf("expected second item without collision")
+	}
+}
+
+func TestPreflightSkipAllCollisions(t *testing.T) {
+	src1 := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
+	src2 := sb.Story{ID: 2, Name: "two", Slug: "two", FullSlug: "two"}
+	tgt1 := sb.Story{ID: 3, Name: "one", Slug: "one", FullSlug: "one"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{src1, src2}
+	m.storiesTarget = []sb.Story{tgt1}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[src1.FullSlug] = true
+	m.selection.selected[src2.FullSlug] = true
+
+	m, _ = m.handleBrowseListKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+
+	for _, it := range m.syncPlan.Items {
+		if it.Collision && !it.Skip {
+			t.Fatalf("expected collision item skipped")
+		}
+	}
+}
