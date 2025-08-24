@@ -47,6 +47,7 @@ const (
 	stateSpaceSelect
 	stateScanning
 	stateBrowseList
+	statePreflight
 	stateQuit
 )
 
@@ -71,6 +72,12 @@ type SearchState struct {
 	searchInput textinput.Model
 	query       string // aktueller Suchstring
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
+}
+
+type PreflightState struct {
+	plan       SyncPlan
+	listIndex  int
+	listOffset int
 }
 
 type Model struct {
@@ -108,6 +115,8 @@ type Model struct {
 	filter    FilterState
 	search    SearchState
 	filterCfg FilterConfig // Konfiguration für Such- und Filterparameter
+
+	preflight PreflightState
 }
 
 func InitialModel() Model {

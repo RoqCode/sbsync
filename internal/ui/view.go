@@ -28,6 +28,8 @@ func (m Model) View() string {
 		b.WriteString(m.viewScanning())
 	case stateBrowseList:
 		b.WriteString(m.viewBrowseList())
+	case statePreflight:
+		b.WriteString(m.viewPreflight())
 	}
 	m.renderFooter(&b)
 	return b.String()
@@ -251,6 +253,57 @@ func (m Model) viewBrowseList() string {
 	b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
 	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
 	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
+	return b.String()
+}
+
+func (m Model) viewPreflight() string {
+	var b strings.Builder
+	total := len(m.preflight.plan.Items)
+	b.WriteString(fmt.Sprintf("Preflight – %d markierte Items\n\n", total))
+	if total == 0 {
+		b.WriteString(warnStyle.Render("Keine Items ausgewählt.") + "\n")
+		b.WriteString(helpStyle.Render("esc zurück"))
+		return b.String()
+	}
+
+	lines := make([]string, total)
+	for i, it := range m.preflight.plan.Items {
+		name := it.Story.Name
+		if name == "" {
+			name = it.Story.Slug
+		}
+		coll := " "
+		if it.Collision {
+			coll = warnStyle.Render("!")
+		}
+		skip := " "
+		if it.Skip {
+			skip = markBarStyle.Render("x")
+		}
+		content := fmt.Sprintf("%s %s %s (%s)", skip, coll, name, it.Story.FullSlug)
+		if i == m.preflight.listIndex {
+			content = cursorLineStyle.Width(m.width - 2).Render(content)
+		} else {
+			content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
+		}
+		cursor := " "
+		if i == m.preflight.listIndex {
+			cursor = cursorBarStyle.Render(" ")
+		}
+		lines[i] = cursor + content
+	}
+
+	start := m.preflight.listOffset
+	if start > len(lines) {
+		start = len(lines)
+	}
+	end := start + m.selection.listViewport
+	if end > len(lines) {
+		end = len(lines)
+	}
+	b.WriteString(strings.Join(lines[start:end], "\n"))
+	b.WriteString("\n\n")
+	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  a alle skippen  |  esc/q zurück"))
 	return b.String()
 }
 

@@ -211,3 +211,61 @@ func TestMarkMovesCursorDown(t *testing.T) {
 		t.Fatalf("expected cursor moved to 1, got %d", m.selection.listIndex)
 	}
 }
+
+func TestBuildSyncPlanDetectsCollisions(t *testing.T) {
+	st1 := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
+	st2 := sb.Story{ID: 2, Name: "two", Slug: "two", FullSlug: "two"}
+	tgt := sb.Story{ID: 3, Name: "two", Slug: "two", FullSlug: "two"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st1, st2}
+	m.storiesTarget = []sb.Story{tgt}
+	m.selection.selected = map[string]bool{st1.FullSlug: true, st2.FullSlug: true}
+
+	plan := m.buildSyncPlan()
+	if len(plan.Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(plan.Items))
+	}
+	coll := 0
+	for _, it := range plan.Items {
+		if it.Collision {
+			coll++
+			if it.Story.FullSlug != st2.FullSlug {
+				t.Fatalf("collision flagged wrong item")
+			}
+		}
+	}
+	if coll != 1 {
+		t.Fatalf("expected 1 collision, got %d", coll)
+	}
+}
+
+func TestPreflightKeyHandlers(t *testing.T) {
+	st1 := sb.Story{ID: 1, Slug: "one", FullSlug: "one"}
+	st2 := sb.Story{ID: 2, Slug: "two", FullSlug: "two"}
+	m := InitialModel()
+	m.preflight.plan = SyncPlan{Items: []SyncPlanItem{{Story: st1}, {Story: st2, Collision: true}}}
+	m.state = statePreflight
+
+	// mark all collisions
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	if !m.preflight.plan.Items[1].Skip {
+		t.Fatalf("expected second item skipped")
+	}
+	if m.preflight.plan.Items[0].Skip {
+		t.Fatalf("expected first item unaffected")
+	}
+
+	// toggle skip on first item
+	m.preflight.listIndex = 0
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if !m.preflight.plan.Items[0].Skip {
+		t.Fatalf("expected first item toggled to skip")
+	}
+
+	// quit back to browse list
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if m.state != stateBrowseList {
+		t.Fatalf("expected stateBrowseList, got %v", m.state)
+	}
+}

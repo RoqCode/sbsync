@@ -20,7 +20,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 
 		// global shortcuts
-		if key == "ctrl+c" || key == "q" {
+		if key == "ctrl+c" {
+			return m, tea.Quit
+		}
+		if key == "q" && m.state != statePreflight {
 			return m, tea.Quit
 		}
 
@@ -37,6 +40,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleScanningKey(key)
 		case stateBrowseList:
 			return m.handleBrowseListKey(msg)
+		case statePreflight:
+			return m.handlePreflightKey(msg)
 		}
 
 	case tea.WindowSizeMsg:
@@ -385,8 +390,45 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.statusMsg = "Rescan…"
 		return m, m.scanStoriesCmd()
 	case "s":
-		// Weiter zu Preflight in T6 – hier nur Platzhalter
-		m.statusMsg = "Preflight (T6) folgt …"
+		if len(m.selection.selected) == 0 {
+			return m, nil
+		}
+		m.preflight.plan = m.buildSyncPlan()
+		m.preflight.listIndex, m.preflight.listOffset = 0, 0
+		m.ensurePreflightCursorVisible()
+		m.state = statePreflight
+	}
+	return m, nil
+}
+
+func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	key := msg.String()
+	items := len(m.preflight.plan.Items)
+	switch key {
+	case "esc", "q":
+		m.state = stateBrowseList
+		return m, nil
+	case "j", "down":
+		if m.preflight.listIndex < items-1 {
+			m.preflight.listIndex++
+			m.ensurePreflightCursorVisible()
+		}
+	case "k", "up":
+		if m.preflight.listIndex > 0 {
+			m.preflight.listIndex--
+			m.ensurePreflightCursorVisible()
+		}
+	case "x":
+		if items > 0 {
+			it := &m.preflight.plan.Items[m.preflight.listIndex]
+			it.Skip = !it.Skip
+		}
+	case "a":
+		for i := range m.preflight.plan.Items {
+			if m.preflight.plan.Items[i].Collision {
+				m.preflight.plan.Items[i].Skip = true
+			}
+		}
 	}
 	return m, nil
 }
