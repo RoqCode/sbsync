@@ -1,15 +1,14 @@
 package ui
 
 import (
+	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/sb"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-
-	"storyblok-sync/internal/config"
-	"storyblok-sync/internal/sb"
 )
 
 // --- UI Styles ---
@@ -24,6 +23,7 @@ var (
 	cursorLineStyle = lipgloss.NewStyle().Background(lipgloss.Color("#2A2B3D"))
 	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
 	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
+	markNestedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA"))
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
