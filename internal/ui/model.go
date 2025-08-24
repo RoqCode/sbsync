@@ -25,9 +25,9 @@ var (
 	markBarStyle     = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
 	markNestedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA"))
 	collisionSign    = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("!")
-	stateCreateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("10"))
-	stateUpdateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("11"))
-	stateSkipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("8"))
+	stateCreateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	stateUpdateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	stateSkipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
