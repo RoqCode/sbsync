@@ -228,3 +228,20 @@ func TestUpdateStoryWithPublishRetryDevMode(t *testing.T) {
 		t.Errorf("expected first publish true then false, got %v", mock.calls)
 	}
 }
+
+func TestShouldPublishChecksPlanLevel(t *testing.T) {
+	m := InitialModel()
+	if !m.shouldPublish() {
+		t.Errorf("expected default shouldPublish to be true")
+	}
+
+	m.targetSpace = &sb.Space{PlanLevel: 999}
+	if m.shouldPublish() {
+		t.Errorf("expected shouldPublish false for plan level 999")
+	}
+
+	m.targetSpace.PlanLevel = 1
+	if !m.shouldPublish() {
+		t.Errorf("expected shouldPublish true for plan level 1")
+	}
+}

@@ -471,6 +471,9 @@ func (m *Model) ensureFolderPath(slug string) ([]sb.Story, error) {
 }
 
 func (m *Model) shouldPublish() bool {
+	if m.targetSpace != nil && m.targetSpace.PlanLevel == 999 {
+		return false
+	}
 	return true
 }
 
