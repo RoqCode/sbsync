@@ -161,26 +161,8 @@ type storyResp struct {
 
 // GetStory fetches a single story by ID.
 func (c *Client) GetStory(ctx context.Context, spaceID, storyID int) (Story, error) {
-	if c.token == "" {
-		return Story{}, errors.New("token leer")
-	}
-	u := fmt.Sprintf(base+"/spaces/%d/stories/%d?version=draft", spaceID, storyID)
-	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
-	req.Header.Set("Authorization", c.token)
-	req.Header.Add("Content-Type", "application/json")
-	res, err := c.http.Do(req)
-	if err != nil {
-		return Story{}, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return Story{}, fmt.Errorf("story.get status %s", res.Status)
-	}
-	var payload storyResp
-	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
-		return Story{}, err
-	}
-	return payload.Story, nil
+	// Use the same fallback logic as GetStoryWithContent
+	return c.GetStoryWithContent(ctx, spaceID, storyID)
 }
 
 // CreateStory creates a new story (or folder) in the target space.
@@ -343,5 +325,55 @@ func (c *Client) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid
 
 // GetStoryWithContent fetches a story with complete content data
 func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) (Story, error) {
-	return c.GetStory(ctx, spaceID, storyID)
+	if c.token == "" {
+		return Story{}, errors.New("token leer")
+	}
+	
+	// Try published version first (most stories are published)
+	story, err := c.getStoryWithVersion(ctx, spaceID, storyID, "published")
+	if err == nil {
+		return story, nil
+	}
+	
+	// If published fails, try draft
+	story, err = c.getStoryWithVersion(ctx, spaceID, storyID, "draft")
+	if err == nil {
+		return story, nil
+	}
+	
+	// If both fail, try without version parameter (basic story data)
+	story, err = c.getStoryWithVersion(ctx, spaceID, storyID, "")
+	if err == nil {
+		return story, nil
+	}
+	
+	// If all versions fail, return the original error
+	return Story{}, fmt.Errorf("unable to fetch story %d from space %d: all version attempts failed", storyID, spaceID)
+}
+
+// getStoryWithVersion fetches story with specific version parameter
+func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, version string) (Story, error) {
+	var u string
+	if version == "" {
+		u = fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
+	} else {
+		u = fmt.Sprintf(base+"/spaces/%d/stories/%d?version=%s", spaceID, storyID, version)
+	}
+	
+	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return Story{}, fmt.Errorf("story.get status %s", res.Status)
+	}
+	var payload storyResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return Story{}, err
+	}
+	return payload.Story, nil
 }

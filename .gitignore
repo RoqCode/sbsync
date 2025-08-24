@@ -1,1 +1,3 @@
 .sbrc
+debug.log
+sync-report-*.json
