@@ -415,13 +415,46 @@ func ensureFolderPathImpl(api folderAPI, report *Report, sourceStories []sb.Stor
 
 		var folder sb.Story
 		if source != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			full, err := api.GetStoryWithContent(ctx, srcSpaceID, source.ID)
-			cancel()
-			if err != nil {
-				return created, err
+			// Use the source folder data directly to preserve content
+			folder = *source
+			
+			// DEBUG: Log content preservation for folder structure creation
+			log.Printf("DEBUG: ensureFolderPath for %s - source has content: %t", path, source.Content != nil)
+			if source.Content != nil {
+				contentKeys := make([]string, 0, len(source.Content))
+				for k := range source.Content {
+					contentKeys = append(contentKeys, k)
+				}
+				log.Printf("DEBUG: ensureFolderPath source content keys: %v", contentKeys)
 			}
-			folder = full
+			
+			// If the source folder doesn't have content, try to fetch it from API
+			if folder.Content == nil {
+				log.Printf("DEBUG: ensureFolderPath fetching content for %s (ID: %d)", path, source.ID)
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				full, err := api.GetStoryWithContent(ctx, srcSpaceID, source.ID)
+				cancel()
+				if err != nil {
+					log.Printf("DEBUG: ensureFolderPath failed to fetch content for %s: %v", path, err)
+					return created, err
+				}
+				// Preserve any content that came from the API
+				if full.Content != nil {
+					folder.Content = full.Content
+					log.Printf("DEBUG: ensureFolderPath got content from API for %s", path)
+					if full.Content != nil {
+						contentKeys := make([]string, 0, len(full.Content))
+						for k := range full.Content {
+							contentKeys = append(contentKeys, k)
+						}
+						log.Printf("DEBUG: ensureFolderPath API content keys: %v", contentKeys)
+					}
+				} else {
+					// Create minimal content structure for folders
+					folder.Content = map[string]interface{}{}
+					log.Printf("DEBUG: ensureFolderPath API returned nil content for %s, using empty content", path)
+				}
+			}
 		} else {
 			name := parts[i]
 			folder = sb.Story{
@@ -481,19 +514,40 @@ func (m *Model) shouldPublish() bool {
 func (m *Model) syncFolder(sourceFolder sb.Story) error {
 	log.Printf("Syncing folder: %s", sourceFolder.FullSlug)
 
-	// Get full folder data from source
+	// Use the sourceFolder data directly, which should already have content
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	fullFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
-	if err != nil {
-		return err
+	fullFolder := sourceFolder
+	
+	// DEBUG: Log content preservation
+	log.Printf("DEBUG: Source folder %s has content: %t", sourceFolder.FullSlug, sourceFolder.Content != nil)
+	if sourceFolder.Content != nil {
+		contentKeys := make([]string, 0, len(sourceFolder.Content))
+		for k := range sourceFolder.Content {
+			contentKeys = append(contentKeys, k)
+		}
+		log.Printf("DEBUG: Source folder content keys: %v", contentKeys)
 	}
+	
+	// If the source folder doesn't have content, try to fetch it from API
+	if fullFolder.Content == nil {
+		apiFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
+		if err != nil {
+			return err
+		}
+		// Preserve any content that came from the API
+		if apiFolder.Content != nil {
+			fullFolder.Content = apiFolder.Content
+		} else {
+			// Create minimal content structure for folders
+			fullFolder.Content = map[string]interface{}{}
+		}
+	}
+	
+	// Handle ContentType migration to Content
 	ct := fullFolder.ContentType
 	fullFolder.ContentType = ""
-	if fullFolder.Content == nil {
-		fullFolder.Content = map[string]interface{}{}
-	}
 	if _, ok := fullFolder.Content["content_types"]; !ok && ct != "" {
 		fullFolder.Content["content_types"] = []string{ct}
 		fullFolder.Content["lock_subfolders_content_types"] = false
@@ -573,21 +627,42 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, error) {
 	log.Printf("Syncing folder: %s", sourceFolder.FullSlug)
 
-	// Get full folder data from source
+	// Use the sourceFolder data directly, which should already have content
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	fullFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
-	if err != nil {
-		log.Printf("Failed to get source folder content for %s (ID: %d): %v", sourceFolder.FullSlug, sourceFolder.ID, err)
-		logExtendedErrorContext(err)
-		return nil, err
+	fullFolder := sourceFolder
+	
+	// DEBUG: Log content preservation
+	log.Printf("DEBUG: Source folder %s has content: %t", sourceFolder.FullSlug, sourceFolder.Content != nil)
+	if sourceFolder.Content != nil {
+		contentKeys := make([]string, 0, len(sourceFolder.Content))
+		for k := range sourceFolder.Content {
+			contentKeys = append(contentKeys, k)
+		}
+		log.Printf("DEBUG: Source folder content keys: %v", contentKeys)
 	}
+	
+	// If the source folder doesn't have content, try to fetch it from API
+	if fullFolder.Content == nil {
+		apiFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
+		if err != nil {
+			log.Printf("Failed to get source folder content for %s (ID: %d): %v", sourceFolder.FullSlug, sourceFolder.ID, err)
+			logExtendedErrorContext(err)
+			return nil, err
+		}
+		// Preserve any content that came from the API
+		if apiFolder.Content != nil {
+			fullFolder.Content = apiFolder.Content
+		} else {
+			// Create minimal content structure for folders
+			fullFolder.Content = map[string]interface{}{}
+		}
+	}
+	
+	// Handle ContentType migration to Content
 	ct := fullFolder.ContentType
 	fullFolder.ContentType = ""
-	if fullFolder.Content == nil {
-		fullFolder.Content = map[string]interface{}{}
-	}
 	if _, ok := fullFolder.Content["content_types"]; !ok && ct != "" {
 		fullFolder.Content["content_types"] = []string{ct}
 		fullFolder.Content["lock_subfolders_content_types"] = false
