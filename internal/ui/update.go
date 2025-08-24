@@ -631,3 +631,16 @@ func (m Model) hasSelectedDescendant(slug string) bool {
 	}
 	return false
 }
+
+func (m Model) hasSelectedDirectChild(slug string) bool {
+	prefix := slug + "/"
+	for s, v := range m.selection.selected {
+		if v && strings.HasPrefix(s, prefix) {
+			rest := strings.TrimPrefix(s, prefix)
+			if !strings.Contains(rest, "/") {
+				return true
+			}
+		}
+	}
+	return false
+}
