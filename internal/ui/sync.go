@@ -14,6 +14,18 @@ import (
 	"storyblok-sync/internal/sb"
 )
 
+// getContentKeys extracts keys from content map for debugging
+func getContentKeys(content map[string]interface{}) []string {
+	if content == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(content))
+	for k := range content {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 type syncItemResult struct {
 	operation   string    // create|update|skip
 	targetStory *sb.Story // created/updated story

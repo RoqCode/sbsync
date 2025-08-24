@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -245,9 +246,31 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	if st.Published && !st.IsFolder {
 		payload["publish"] = "1"
 	}
+	
+	// DEBUG: Log the payload before marshalling
+	log.Printf("DEBUG: Creating story - Before marshal:")
+	log.Printf("DEBUG: Story has content: %t", st.Content != nil)
+	if st.Content != nil {
+		contentKeys := make([]string, 0, len(st.Content))
+		for k := range st.Content {
+			contentKeys = append(contentKeys, k)
+		}
+		log.Printf("DEBUG: Content keys: %v", contentKeys)
+	}
+	log.Printf("DEBUG: Story is folder: %t", st.IsFolder)
+	log.Printf("DEBUG: Story published: %t", st.Published)
+	
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return Story{}, err
+	}
+	
+	// DEBUG: Log the actual JSON being sent
+	log.Printf("DEBUG: JSON payload being sent (%d bytes):", len(body))
+	if len(body) < 2000 {
+		log.Printf("DEBUG: Full JSON: %s", string(body))
+	} else {
+		log.Printf("DEBUG: JSON too large, truncated: %s...", string(body[:2000]))
 	}
 	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	req.Header.Set("Authorization", c.token)
@@ -329,26 +352,40 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 		return Story{}, errors.New("token leer")
 	}
 	
-	// Try published version first (most stories are published)
-	story, err := c.getStoryWithVersion(ctx, spaceID, storyID, "published")
-	if err == nil {
-		return story, nil
+	// Based on Storyblok CLI: just fetch by ID without version parameter
+	// The CLI does: client.get(`spaces/${spaceId}/stories/${storyId}`)
+	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
+	
+	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return Story{}, fmt.Errorf("story.get status %s", res.Status)
+	}
+	var payload storyResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return Story{}, err
 	}
 	
-	// If published fails, try draft
-	story, err = c.getStoryWithVersion(ctx, spaceID, storyID, "draft")
-	if err == nil {
-		return story, nil
+	// DEBUG: Log what we received from the API
+	story := payload.Story
+	log.Printf("DEBUG: Fetched story %d (%s) - Content present: %t", story.ID, story.FullSlug, story.Content != nil)
+	if story.Content != nil {
+		contentKeys := make([]string, 0, len(story.Content))
+		for k := range story.Content {
+			contentKeys = append(contentKeys, k)
+		}
+		log.Printf("DEBUG: Fetched content keys: %v", contentKeys)
+	} else {
+		log.Printf("DEBUG: Story content is nil - this is likely the issue!")
 	}
 	
-	// If both fail, try without version parameter (basic story data)
-	story, err = c.getStoryWithVersion(ctx, spaceID, storyID, "")
-	if err == nil {
-		return story, nil
-	}
-	
-	// If all versions fail, return the original error
-	return Story{}, fmt.Errorf("unable to fetch story %d from space %d: all version attempts failed", storyID, spaceID)
+	return story, nil
 }
 
 // getStoryWithVersion fetches story with specific version parameter
