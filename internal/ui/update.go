@@ -18,6 +18,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+		if m.state == statePreflight {
+			return m.handlePreflightKey(msg)
+		}
 
 		// global shortcuts
 		if key == "ctrl+c" || key == "q" {
@@ -48,6 +51,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			vp = 3
 		}
 		m.selection.listViewport = vp
+		m.preflight.listViewport = vp
 
 	case validateMsg:
 		if msg.err != nil {
@@ -385,10 +389,185 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.statusMsg = "Rescan…"
 		return m, m.scanStoriesCmd()
 	case "s":
-		// Weiter zu Preflight in T6 – hier nur Platzhalter
-		m.statusMsg = "Preflight (T6) folgt …"
+		m.startPreflight()
+		return m, nil
 	}
 	return m, nil
+}
+
+func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "j", "down":
+		if m.preflight.listIndex < len(m.preflight.items)-1 {
+			m.preflight.listIndex++
+			m.ensurePreflightCursorVisible()
+		}
+	case "k", "up":
+		if m.preflight.listIndex > 0 {
+			m.preflight.listIndex--
+			m.ensurePreflightCursorVisible()
+		}
+	case "x":
+		if len(m.preflight.items) > 0 {
+			it := &m.preflight.items[m.preflight.listIndex]
+			if it.Collision {
+				it.Skip = !it.Skip
+			}
+		}
+	case "X":
+		for i := range m.preflight.items {
+			if m.preflight.items[i].Collision {
+				m.preflight.items[i].Skip = true
+			}
+		}
+	case "c":
+		removed := false
+		for _, it := range m.preflight.items {
+			if it.Skip {
+				delete(m.selection.selected, it.Story.FullSlug)
+				removed = true
+			}
+		}
+		if removed {
+			m.startPreflight()
+		}
+	case "esc", "q":
+		m.state = stateBrowseList
+		return m, nil
+	case "enter":
+		m.plan = SyncPlan{Items: append([]PreflightItem(nil), m.preflight.items...)}
+		skipped := 0
+		for _, it := range m.preflight.items {
+			if it.Skip {
+				skipped++
+			}
+		}
+		m.statusMsg = fmt.Sprintf("SyncPlan erstellt: %d Items, %d skipped", len(m.preflight.items), skipped)
+		m.state = stateBrowseList
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) startPreflight() {
+	target := make(map[string]bool, len(m.storiesTarget))
+	for _, st := range m.storiesTarget {
+		target[st.FullSlug] = true
+	}
+	included := make(map[int]bool)
+	for slug, v := range m.selection.selected {
+		if !v {
+			continue
+		}
+		if idx := m.indexBySlug(slug); idx >= 0 {
+			m.includeAncestors(idx, included)
+		}
+	}
+	if len(included) == 0 {
+		m.preflight = PreflightState{listViewport: m.selection.listViewport}
+		m.statusMsg = "Keine Stories markiert."
+		return
+	}
+	children := make(map[int][]int)
+	roots := make([]int, 0)
+	for i, st := range m.storiesSource {
+		if !included[i] {
+			continue
+		}
+		if st.FolderID != nil {
+			if pIdx, ok := m.storyIdx[*st.FolderID]; ok && included[pIdx] {
+				children[pIdx] = append(children[pIdx], i)
+				continue
+			}
+		}
+		roots = append(roots, i)
+	}
+	items := make([]PreflightItem, 0, len(included))
+	var walk func(int)
+	walk = func(idx int) {
+		st := m.storiesSource[idx]
+		sel := m.selection.selected[st.FullSlug]
+		it := PreflightItem{Story: st, Collision: sel && target[st.FullSlug], Selected: sel}
+		items = append(items, it)
+		for _, ch := range children[idx] {
+			walk(ch)
+		}
+	}
+	for _, r := range roots {
+		walk(r)
+	}
+	m.preflight = PreflightState{items: items, listIndex: 0, listOffset: 0, listViewport: m.selection.listViewport}
+	m.state = statePreflight
+	collisions := 0
+	for _, it := range items {
+		if it.Collision {
+			collisions++
+		}
+	}
+	m.statusMsg = fmt.Sprintf("Preflight: %d Items, %d Kollisionen", len(items), collisions)
+}
+
+func (m *Model) indexBySlug(slug string) int {
+	for i, st := range m.storiesSource {
+		if st.FullSlug == slug {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *Model) includeAncestors(idx int, inc map[int]bool) {
+	for {
+		if inc[idx] {
+			return
+		}
+		inc[idx] = true
+		st := m.storiesSource[idx]
+		if st.FolderID == nil {
+			return
+		}
+		pIdx, ok := m.storyIdx[*st.FolderID]
+		if !ok {
+			return
+		}
+		idx = pIdx
+	}
+}
+
+func (m *Model) ensurePreflightCursorVisible() {
+	vp := m.preflight.listViewport
+	if vp <= 0 {
+		vp = 10
+	}
+	n := len(m.preflight.items)
+	if n == 0 {
+		m.preflight.listIndex = 0
+		m.preflight.listOffset = 0
+		return
+	}
+	if m.preflight.listIndex < 0 {
+		m.preflight.listIndex = 0
+	}
+	if m.preflight.listIndex > n-1 {
+		m.preflight.listIndex = n - 1
+	}
+	if m.preflight.listIndex < m.preflight.listOffset {
+		m.preflight.listOffset = m.preflight.listIndex
+	}
+	if m.preflight.listIndex >= m.preflight.listOffset+vp {
+		m.preflight.listOffset = m.preflight.listIndex - vp + 1
+	}
+	maxStart := n - vp
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if m.preflight.listOffset > maxStart {
+		m.preflight.listOffset = maxStart
+	}
+	if m.preflight.listOffset < 0 {
+		m.preflight.listOffset = 0
+	}
 }
 
 // ---------- Messages / Cmds ----------

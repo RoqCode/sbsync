@@ -28,6 +28,8 @@ func (m Model) View() string {
 		b.WriteString(m.viewScanning())
 	case stateBrowseList:
 		b.WriteString(m.viewBrowseList())
+	case statePreflight:
+		b.WriteString(m.viewPreflight())
 	}
 	m.renderFooter(&b)
 	return b.String()
@@ -252,6 +254,100 @@ func (m Model) viewBrowseList() string {
 	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
 	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
 	return b.String()
+}
+
+func (m Model) viewPreflight() string {
+	var b strings.Builder
+	total := len(m.preflight.items)
+	collisions := 0
+	for _, it := range m.preflight.items {
+		if it.Collision {
+			collisions++
+		}
+	}
+	b.WriteString(fmt.Sprintf("Preflight – %d Items  |  Kollisionen: %d\n\n", total, collisions))
+	if total == 0 {
+		b.WriteString(warnStyle.Render("Keine Stories markiert.") + "\n")
+	} else {
+		tr := tree.New()
+		nodes := make(map[int]*tree.Tree, len(m.preflight.items))
+		for _, it := range m.preflight.items {
+			node := tree.Root(displayPreflightItem(it))
+			nodes[it.Story.ID] = node
+		}
+		for _, it := range m.preflight.items {
+			node := nodes[it.Story.ID]
+			if it.Story.FolderID != nil {
+				if parent, ok := nodes[*it.Story.FolderID]; ok {
+					parent.Child(node)
+					continue
+				}
+			}
+			tr.Child(node)
+		}
+		lines := strings.Split(tr.String(), "\n")
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		for i, it := range m.preflight.items {
+			if i >= len(lines) {
+				break
+			}
+			content := lines[i]
+			if it.Collision && it.Selected {
+				content = collisionSign + " " + content
+			} else {
+				content = "  " + content
+			}
+			if it.Skip {
+				content += " [skip]"
+			}
+			lineStyle := lipgloss.NewStyle().Width(m.width - 2)
+			if i == m.preflight.listIndex {
+				lineStyle = cursorLineStyle.Copy().Width(m.width - 2)
+			}
+			if it.Skip {
+				lineStyle = lineStyle.Faint(true)
+			}
+			content = lineStyle.Render(content)
+			cursorCell := " "
+			if i == m.preflight.listIndex {
+				cursorCell = cursorBarStyle.Render(" ")
+			}
+			skipCell := " "
+			if it.Skip {
+				skipCell = markBarStyle.Render("x")
+			}
+			lines[i] = cursorCell + skipCell + content
+		}
+		start := m.preflight.listOffset
+		if start > len(lines) {
+			start = len(lines)
+		}
+		end := start + m.preflight.listViewport
+		if end > len(lines) {
+			end = len(lines)
+		}
+		b.WriteString(strings.Join(lines[start:end], "\n"))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"))
+	return b.String()
+}
+
+func displayPreflightItem(it PreflightItem) string {
+	name := it.Story.Name
+	if name == "" {
+		name = it.Story.Slug
+	}
+	slug := "(" + it.Story.FullSlug + ")"
+	if !it.Selected || it.Skip {
+		name = subtleStyle.Render(name)
+		slug = subtleStyle.Render(slug)
+	}
+	sym := storyTypeSymbol(it.Story)
+	return fmt.Sprintf("%s %s  %s", sym, name, slug)
 }
 
 func displayStory(st sb.Story) string {

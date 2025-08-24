@@ -24,6 +24,7 @@ var (
 	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
 	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
 	markNestedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA"))
+	collisionSign   = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("!")
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
@@ -47,6 +48,7 @@ const (
 	stateSpaceSelect
 	stateScanning
 	stateBrowseList
+	statePreflight
 	stateQuit
 )
 
@@ -71,6 +73,24 @@ type SearchState struct {
 	searchInput textinput.Model
 	query       string // aktueller Suchstring
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
+}
+
+type PreflightItem struct {
+	Story     sb.Story
+	Collision bool
+	Skip      bool
+	Selected  bool
+}
+
+type PreflightState struct {
+	items        []PreflightItem
+	listIndex    int
+	listOffset   int
+	listViewport int
+}
+
+type SyncPlan struct {
+	Items []PreflightItem
 }
 
 type Model struct {
@@ -108,6 +128,9 @@ type Model struct {
 	filter    FilterState
 	search    SearchState
 	filterCfg FilterConfig // Konfiguration für Such- und Filterparameter
+
+	preflight PreflightState
+	plan      SyncPlan
 }
 
 func InitialModel() Model {
