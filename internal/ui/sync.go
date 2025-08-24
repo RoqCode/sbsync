@@ -175,35 +175,6 @@ func (m *Model) optimizePreflight() {
 		selected[it.Story.FullSlug] = it
 	}
 
-	// Process folder optimization - DISABLED for debugging
-	// The folder optimization is collapsing hierarchies but not ensuring parent folders exist first
-	// TODO: Fix the optimization to properly handle folder dependencies
-	/*
-	for _, it := range selected {
-		if !it.Story.IsFolder {
-			continue
-		}
-		prefix := it.Story.FullSlug + "/"
-		all := true
-		for _, st := range m.storiesSource {
-			if strings.HasPrefix(st.FullSlug, prefix) {
-				if _, ok := selected[st.FullSlug]; !ok {
-					all = false
-					break
-				}
-			}
-		}
-		if all {
-			it.StartsWith = true
-			for slug, ch := range selected {
-				if slug != it.Story.FullSlug && strings.HasPrefix(slug, prefix) {
-					ch.Skip = true
-				}
-			}
-		}
-	}
-	*/
-
 	// Create optimized list
 	optimized := make([]PreflightItem, 0, len(m.preflight.items))
 	for _, it := range m.preflight.items {
@@ -352,6 +323,160 @@ func isRateLimited(err error) bool {
 	return strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "429")
 }
 
+func isDevModePublishLimit(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "development mode") && strings.Contains(msg, "Publishing is limited")
+}
+
+type updateAPI interface {
+	UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+}
+
+type createAPI interface {
+	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+}
+
+func updateStoryWithPublishRetry(ctx context.Context, api updateAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		updated, err := api.UpdateStory(ctx, spaceID, st, publish)
+		if err == nil {
+			return updated, nil
+		}
+		lastErr = err
+		if publish && isDevModePublishLimit(err) {
+			log.Printf("Publish limit reached, retrying without publish for %s", st.FullSlug)
+			publish = false
+			continue
+		}
+		return sb.Story{}, err
+	}
+	return sb.Story{}, lastErr
+}
+
+func createStoryWithPublishRetry(ctx context.Context, api createAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		created, err := api.CreateStoryWithPublish(ctx, spaceID, st, publish)
+		if err == nil {
+			return created, nil
+		}
+		lastErr = err
+		if publish && isDevModePublishLimit(err) {
+			log.Printf("Publish limit reached, retrying without publish for %s", st.FullSlug)
+			publish = false
+			continue
+		}
+		return sb.Story{}, err
+	}
+	return sb.Story{}, lastErr
+}
+
+type folderAPI interface {
+	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
+	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
+	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+}
+
+func ensureFolderPathImpl(api folderAPI, report *Report, sourceStories []sb.Story, srcSpaceID, tgtSpaceID int, slug string, publish bool) ([]sb.Story, error) {
+	parts := strings.Split(slug, "/")
+	if len(parts) <= 1 {
+		return nil, nil
+	}
+
+	var created []sb.Story
+	var parentID *int
+
+	for i := 0; i < len(parts)-1; i++ {
+		path := strings.Join(parts[:i+1], "/")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		existing, err := api.GetStoriesBySlug(ctx, tgtSpaceID, path)
+		cancel()
+		if err != nil {
+			return created, err
+		}
+		if len(existing) > 0 {
+			id := existing[0].ID
+			parentID = &id
+			continue
+		}
+
+		var source *sb.Story
+		for j := range sourceStories {
+			if sourceStories[j].FullSlug == path {
+				source = &sourceStories[j]
+				break
+			}
+		}
+
+		var folder sb.Story
+		if source != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			full, err := api.GetStoryWithContent(ctx, srcSpaceID, source.ID)
+			cancel()
+			if err != nil {
+				return created, err
+			}
+			folder = full
+		} else {
+			name := parts[i]
+			folder = sb.Story{
+				Name:     name,
+				Slug:     name,
+				FullSlug: path,
+				IsFolder: true,
+				Content:  map[string]interface{}{},
+			}
+		}
+
+		folder.ID = 0
+		folder.CreatedAt = ""
+		folder.UpdatedAt = ""
+		folder.FolderID = parentID
+		ct := folder.ContentType
+		folder.ContentType = ""
+		if folder.Content == nil {
+			folder.Content = map[string]interface{}{}
+		}
+		if _, ok := folder.Content["content_types"]; !ok && ct != "" {
+			folder.Content["content_types"] = []string{ct}
+			folder.Content["lock_subfolders_content_types"] = false
+		}
+
+		ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
+		createdFolder, err := createStoryWithPublishRetry(ctx, api.(createAPI), tgtSpaceID, folder, publish)
+		cancel()
+		if err != nil {
+			return created, err
+		}
+
+		if report != nil {
+			report.AddSuccess(createdFolder.FullSlug, "create", 0, &createdFolder)
+		}
+
+		created = append(created, createdFolder)
+		id := createdFolder.ID
+		parentID = &id
+	}
+
+	return created, nil
+}
+
+func (m *Model) ensureFolderPath(slug string) ([]sb.Story, error) {
+	return ensureFolderPathImpl(m.api, &m.report, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, slug, m.shouldPublish())
+}
+
+func (m *Model) shouldPublish() bool {
+	if m.targetSpace != nil && m.targetSpace.PlanLevel == 999 {
+		return false
+	}
+	return true
+}
+
 // syncFolder handles folder synchronization with proper parent resolution
 func (m *Model) syncFolder(sourceFolder sb.Story) error {
 	log.Printf("Syncing folder: %s", sourceFolder.FullSlug)
@@ -363,6 +488,15 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 	fullFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
 	if err != nil {
 		return err
+	}
+	ct := fullFolder.ContentType
+	fullFolder.ContentType = ""
+	if fullFolder.Content == nil {
+		fullFolder.Content = map[string]interface{}{}
+	}
+	if _, ok := fullFolder.Content["content_types"]; !ok && ct != "" {
+		fullFolder.Content["content_types"] = []string{ct}
+		fullFolder.Content["lock_subfolders_content_types"] = false
 	}
 
 	// Check if folder already exists in target
@@ -390,7 +524,7 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Update existing folder
 		existingFolder := existing[0]
 		fullFolder.ID = existingFolder.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullFolder)
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -408,16 +542,16 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullFolder.ID = 0
 		fullFolder.CreatedAt = ""
-		fullFolder.UpdatedAt = ""    // This was causing 422!
-		
+		fullFolder.UpdatedAt = "" // This was causing 422!
+
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
-		
+
 		// Ensure folders have proper content structure
 		if fullFolder.IsFolder && fullFolder.Content == nil {
 			fullFolder.Content = map[string]interface{}{}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullFolder)
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -448,6 +582,15 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 		log.Printf("Failed to get source folder content for %s (ID: %d): %v", sourceFolder.FullSlug, sourceFolder.ID, err)
 		logExtendedErrorContext(err)
 		return nil, err
+	}
+	ct := fullFolder.ContentType
+	fullFolder.ContentType = ""
+	if fullFolder.Content == nil {
+		fullFolder.Content = map[string]interface{}{}
+	}
+	if _, ok := fullFolder.Content["content_types"]; !ok && ct != "" {
+		fullFolder.Content["content_types"] = []string{ct}
+		fullFolder.Content["lock_subfolders_content_types"] = false
 	}
 
 	// Check if folder already exists in target
@@ -482,7 +625,7 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 		// Update existing folder
 		existingFolder := existing[0]
 		fullFolder.ID = existingFolder.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullFolder)
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			log.Printf("Failed to update target folder %s (ID: %d): %v", fullFolder.FullSlug, fullFolder.ID, err)
 			logExtendedErrorContext(err)
@@ -509,16 +652,16 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullFolder.ID = 0
 		fullFolder.CreatedAt = ""
-		fullFolder.UpdatedAt = ""    // This was causing 422!
-		
+		fullFolder.UpdatedAt = "" // This was causing 422!
+
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
-		
+
 		// Ensure folders have proper content structure
 		if fullFolder.IsFolder && fullFolder.Content == nil {
 			fullFolder.Content = map[string]interface{}{}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullFolder)
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			log.Printf("Failed to create target folder %s: %v", fullFolder.FullSlug, err)
 			logExtendedErrorContext(err)
@@ -588,7 +731,7 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Update existing story
 		existingStory := existing[0]
 		fullStory.ID = existingStory.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullStory)
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -606,10 +749,10 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullStory.ID = 0
 		fullStory.CreatedAt = ""
-		fullStory.UpdatedAt = ""    // This was causing 422!
-		
+		fullStory.UpdatedAt = "" // This was causing 422!
+
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
-		
+
 		// Ensure stories have content (required for Storyblok API)
 		if !fullStory.IsFolder && fullStory.Content == nil {
 			fullStory.Content = map[string]interface{}{
@@ -617,7 +760,7 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 			}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullStory)
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -638,6 +781,11 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 // syncStoryContentDetailed handles story synchronization and returns detailed results
 func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult, error) {
 	log.Printf("Syncing story: %s", sourceStory.FullSlug)
+	if _, err := m.ensureFolderPath(sourceStory.FullSlug); err != nil {
+		log.Printf("Failed to ensure folder path for %s: %v", sourceStory.FullSlug, err)
+		logExtendedErrorContext(err)
+		return nil, err
+	}
 
 	// Get full story content from source
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -683,7 +831,7 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 		// Update existing story
 		existingStory := existing[0]
 		fullStory.ID = existingStory.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullStory)
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return nil, err
 		}
@@ -708,10 +856,10 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullStory.ID = 0
 		fullStory.CreatedAt = ""
-		fullStory.UpdatedAt = ""    // This was causing 422!
-		
+		fullStory.UpdatedAt = "" // This was causing 422!
+
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
-		
+
 		// Ensure stories have content (required for Storyblok API)
 		if !fullStory.IsFolder && fullStory.Content == nil {
 			fullStory.Content = map[string]interface{}{
@@ -719,7 +867,7 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 			}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullStory)
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
 		if err != nil {
 			return nil, err
 		}

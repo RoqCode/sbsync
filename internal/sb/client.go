@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -29,8 +30,9 @@ func New(token string) *Client {
 
 // ---------- Spaces ----------
 type Space struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	PlanLevel int    `json:"plan_level"`
 }
 
 type spacesResp struct {
@@ -78,6 +80,7 @@ type Story struct {
 	Slug                      string                 `json:"slug"`
 	FullSlug                  string                 `json:"full_slug"`
 	Content                   map[string]interface{} `json:"content,omitempty"`
+	ContentType               string                 `json:"content_type,omitempty"`
 	FolderID                  *int                   `json:"parent_id,omitempty"`
 	CreatedAt                 string                 `json:"created_at,omitempty"`
 	UpdatedAt                 string                 `json:"updated_at,omitempty"`
@@ -197,7 +200,7 @@ func (c *Client) CreateStory(ctx context.Context, spaceID int, st Story) (Story,
 }
 
 // UpdateStory updates an existing story in the target space.
-func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story, error) {
+func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish bool) (Story, error) {
 	if c.token == "" {
 		return Story{}, errors.New("token leer")
 	}
@@ -209,8 +212,8 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 		"story":        st,
 		"force_update": "1",
 	}
-	if st.Published && !st.IsFolder {
-		// payload["publish"] = "1"
+	if !st.IsFolder && publish {
+		payload["publish"] = 1
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -225,7 +228,14 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		return Story{}, fmt.Errorf("story.update status %s", res.Status)
+		bodyBytes, _ := io.ReadAll(res.Body)
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &apiErr); err == nil && apiErr.Error != "" {
+			return Story{}, errors.New(apiErr.Error)
+		}
+		return Story{}, fmt.Errorf("story.update status %s: %s", res.Status, strings.TrimSpace(string(bodyBytes)))
 	}
 	var resp storyResp
 	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
@@ -235,7 +245,7 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 }
 
 // CreateStoryWithPublish creates a new story with proper payload structure
-func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Story) (Story, error) {
+func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Story, publish bool) (Story, error) {
 	if c.token == "" {
 		return Story{}, errors.New("token leer")
 	}
@@ -244,8 +254,8 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 		"story":        st,
 		"force_update": "1",
 	}
-	if st.Published && !st.IsFolder {
-		// payload["publish"] = "1"
+	if !st.IsFolder && publish {
+		payload["publish"] = 1
 	}
 
 	// DEBUG: Log the payload before marshalling
@@ -291,14 +301,18 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		// DEBUG: Read and log the error response body for 422 errors
+		bodyBytes, _ := io.ReadAll(res.Body)
+		// DEBUG: log body for troubleshooting
 		if res.StatusCode == 422 {
-			bodyBytes, err := io.ReadAll(res.Body)
-			if err == nil {
-				log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
-			}
+			log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
 		}
-		return Story{}, fmt.Errorf("story.create status %s", res.Status)
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(bodyBytes, &apiErr); err == nil && apiErr.Error != "" {
+			return Story{}, errors.New(apiErr.Error)
+		}
+		return Story{}, fmt.Errorf("story.create status %s: %s", res.Status, strings.TrimSpace(string(bodyBytes)))
 	}
 	var resp storyResp
 	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {

@@ -2,6 +2,7 @@ package sb
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -76,5 +77,93 @@ func TestListStoriesPagination(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("expected 2 calls, got %d", calls)
+	}
+}
+
+func TestPublishFlagNumericUpdateStory(t *testing.T) {
+	tests := []struct {
+		publish bool
+		want    *float64 // Use pointer to distinguish between 1, 0, and nil (omitted)
+	}{
+		{true, func() *float64 { v := float64(1); return &v }()},
+		{false, nil}, // When publish=false, field should be omitted
+	}
+	for _, tt := range tests {
+		c := New("token")
+		c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			bodyBytes, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("read body: %v", err)
+			}
+			var payload map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+				t.Fatalf("unmarshal body: %v", err)
+			}
+			val, ok := payload["publish"].(float64)
+			if tt.want == nil {
+				// Expect publish field to be omitted
+				if ok {
+					t.Fatalf("expected publish field to be omitted, but found: %v", val)
+				}
+			} else {
+				// Expect publish field to be present with specific value
+				if !ok {
+					t.Fatalf("publish field missing or not number: %#v", payload["publish"])
+				}
+				if val != *tt.want {
+					t.Fatalf("expected publish %v, got %v", *tt.want, val)
+				}
+			}
+			resBody := `{"story":{"id":1}}`
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(resBody)), Header: make(http.Header)}, nil
+		})}
+		_, err := c.UpdateStory(context.Background(), 1, Story{ID: 1}, tt.publish)
+		if err != nil {
+			t.Fatalf("UpdateStory returned error: %v", err)
+		}
+	}
+}
+
+func TestPublishFlagNumericCreateStory(t *testing.T) {
+	tests := []struct {
+		publish bool
+		want    *float64 // Use pointer to distinguish between 1, 0, and nil (omitted)
+	}{
+		{true, func() *float64 { v := float64(1); return &v }()},
+		{false, nil}, // When publish=false, field should be omitted
+	}
+	for _, tt := range tests {
+		c := New("token")
+		c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			bodyBytes, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("read body: %v", err)
+			}
+			var payload map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+				t.Fatalf("unmarshal body: %v", err)
+			}
+			val, ok := payload["publish"].(float64)
+			if tt.want == nil {
+				// Expect publish field to be omitted
+				if ok {
+					t.Fatalf("expected publish field to be omitted, but found: %v", val)
+				}
+			} else {
+				// Expect publish field to be present with specific value
+				if !ok {
+					t.Fatalf("publish field missing or not number: %#v", payload["publish"])
+				}
+				if val != *tt.want {
+					t.Fatalf("expected publish %v, got %v", *tt.want, val)
+				}
+			}
+			resBody := `{"story":{"id":1}}`
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(resBody)), Header: make(http.Header)}, nil
+		})}
+		_, err := c.CreateStoryWithPublish(context.Background(), 1, Story{}, tt.publish)
+		if err != nil {
+			t.Fatalf("CreateStoryWithPublish returned error: %v", err)
+		}
 	}
 }
