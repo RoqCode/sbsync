@@ -184,7 +184,7 @@ func TestNestedFolderMarkingIndicator(t *testing.T) {
 	m.selection.listViewport = 10
 
 	out := m.viewBrowseList()
-	if !strings.Contains(out, markNestedStyle.Render("•")) {
-		t.Fatalf("expected '•' marker for folder with selected descendant")
+	if !strings.Contains(out, markNestedStyle.Render("·")) {
+		t.Fatalf("expected '·' marker for folder with selected descendant")
 	}
 }

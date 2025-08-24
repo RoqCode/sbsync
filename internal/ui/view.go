@@ -207,7 +207,7 @@ func (m Model) viewBrowseList() string {
 					if m.hasSelectedDirectChild(st.FullSlug) {
 						markCell = markNestedStyle.Render(":")
 					} else if m.hasSelectedDescendant(st.FullSlug) {
-						markCell = markNestedStyle.Render("•")
+						markCell = markNestedStyle.Render("·")
 					}
 				}
 
