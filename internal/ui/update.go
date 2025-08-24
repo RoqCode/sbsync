@@ -85,6 +85,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.storiesSource = msg.src
 		m.storiesTarget = msg.tgt
 		m.selection.listIndex, m.selection.listOffset = 0, 0
+		m.rebuildStoryIndex()
 		m.applyFilter()
 		if m.selection.selected == nil {
 			m.selection.selected = make(map[string]bool)
@@ -226,10 +227,12 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if strings.TrimSpace(m.search.query) == "" {
 				m.search.searching = false
 				m.search.searchInput.Blur()
+				m.collapseAllFolders()
 				return m, nil
 			}
 			m.search.query = ""
 			m.search.searchInput.SetValue("")
+			m.collapseAllFolders()
 			m.applyFilter()
 			return m, nil
 		case "enter":
@@ -256,6 +259,12 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.search.searchInput, cmd = m.search.searchInput.Update(msg)
 			newQ := m.search.searchInput.Value()
 			if newQ != m.search.query {
+				if m.search.query == "" && newQ != "" {
+					m.expandAllFolders()
+				}
+				if m.search.query != "" && newQ == "" {
+					m.collapseAllFolders()
+				}
 				m.search.query = newQ
 				m.applyFilter()
 			}
@@ -273,6 +282,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "F":
 		m.search.query = ""
 		m.search.searchInput.SetValue("")
+		m.collapseAllFolders()
 		m.applyFilter()
 		return m, nil
 
@@ -292,11 +302,41 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.search.query = ""
 		m.filter.prefix = ""
 		m.search.searchInput.SetValue("")
-		m.applyFilter()
 		m.filter.prefixInput.SetValue("")
+		m.collapseAllFolders()
 		m.applyFilter()
 		return m, nil
 
+	case "l":
+		if m.itemsLen() == 0 {
+			return m, nil
+		}
+		st := m.itemAt(m.selection.listIndex)
+		if st.IsFolder {
+			m.folderCollapsed[st.ID] = false
+			m.refreshVisible()
+		}
+	case "h":
+		if m.itemsLen() == 0 {
+			return m, nil
+		}
+		st := m.itemAt(m.selection.listIndex)
+		if st.IsFolder {
+			m.folderCollapsed[st.ID] = true
+			m.refreshVisible()
+		} else if st.FolderID != nil {
+			pid := *st.FolderID
+			m.folderCollapsed[pid] = true
+			m.refreshVisible()
+			if vis := m.visibleIndexByID(pid); vis >= 0 {
+				m.selection.listIndex = vis
+				m.ensureCursorVisible()
+			}
+		}
+	case "H":
+		m.collapseAllFolders()
+	case "L":
+		m.expandAllFolders()
 	case "j", "down":
 		if m.selection.listIndex < m.itemsLen()-1 {
 			m.selection.listIndex++
@@ -445,17 +485,11 @@ func (m *Model) ensureCursorVisible() {
 }
 
 func (m *Model) itemsLen() int {
-	if m.search.filteredIdx != nil {
-		return len(m.search.filteredIdx)
-	}
-	return len(m.storiesSource)
+	return len(m.visibleIdx)
 }
 
 func (m *Model) itemAt(visIdx int) sb.Story {
-	if m.search.filteredIdx != nil {
-		return m.storiesSource[m.search.filteredIdx[visIdx]]
-	}
-	return m.storiesSource[visIdx]
+	return m.storiesSource[m.visibleIdx[visIdx]]
 }
 
 func (m *Model) applyFilter() {
@@ -476,7 +510,7 @@ func (m *Model) applyFilter() {
 	if q == "" {
 		m.search.filteredIdx = append(m.search.filteredIdx[:0], idx...)
 		m.selection.listIndex, m.selection.listOffset = 0, 0
-		m.ensureCursorVisible()
+		m.refreshVisible()
 		return
 	}
 
@@ -484,11 +518,92 @@ func (m *Model) applyFilter() {
 	if len(sub) > 0 {
 		m.search.filteredIdx = sub
 		m.selection.listIndex, m.selection.listOffset = 0, 0
-		m.ensureCursorVisible()
+		m.refreshVisible()
 		return
 	}
 
 	m.search.filteredIdx = filterByFuzzy(q, base, idx, m.filterCfg)
 	m.selection.listIndex, m.selection.listOffset = 0, 0
+	m.refreshVisible()
+}
+
+func (m *Model) rebuildStoryIndex() {
+	m.storyIdx = make(map[int]int, len(m.storiesSource))
+	m.folderCollapsed = make(map[int]bool)
+	for i, st := range m.storiesSource {
+		m.storyIdx[st.ID] = i
+		if st.IsFolder {
+			m.folderCollapsed[st.ID] = true
+		}
+	}
+}
+
+func (m *Model) refreshVisible() {
+	base := m.search.filteredIdx
+	if base == nil {
+		base = make([]int, len(m.storiesSource))
+		for i := range m.storiesSource {
+			base[i] = i
+		}
+	}
+
+	included := make(map[int]bool, len(base))
+	for _, idx := range base {
+		included[idx] = true
+	}
+
+	children := make(map[int][]int)
+	roots := make([]int, 0)
+	for _, idx := range base {
+		st := m.storiesSource[idx]
+		if st.FolderID != nil {
+			if pIdx, ok := m.storyIdx[*st.FolderID]; ok && included[pIdx] {
+				children[pIdx] = append(children[pIdx], idx)
+				continue
+			}
+		}
+		roots = append(roots, idx)
+	}
+
+	m.visibleIdx = m.visibleIdx[:0]
+	var walk func(int)
+	walk = func(idx int) {
+		m.visibleIdx = append(m.visibleIdx, idx)
+		st := m.storiesSource[idx]
+		if st.IsFolder && m.folderCollapsed[st.ID] {
+			return
+		}
+		for _, ch := range children[idx] {
+			walk(ch)
+		}
+	}
+	for _, r := range roots {
+		walk(r)
+	}
 	m.ensureCursorVisible()
+}
+
+func (m *Model) collapseAllFolders() {
+	for id := range m.folderCollapsed {
+		m.folderCollapsed[id] = true
+	}
+	m.refreshVisible()
+}
+
+func (m *Model) expandAllFolders() {
+	for id := range m.folderCollapsed {
+		m.folderCollapsed[id] = false
+	}
+	m.refreshVisible()
+}
+
+func (m *Model) visibleIndexByID(id int) int {
+	if idx, ok := m.storyIdx[id]; ok {
+		for i, v := range m.visibleIdx {
+			if v == idx {
+				return i
+			}
+		}
+	}
+	return -1
 }
