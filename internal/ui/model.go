@@ -166,6 +166,9 @@ type Model struct {
 	storiesSource []sb.Story
 	storiesTarget []sb.Story
 
+	// track created folders: source ID -> target ID
+	syncedFolders map[int]int
+
 	// tree state
 	storyIdx        map[int]int  // Story ID -> index in storiesSource
 	folderCollapsed map[int]bool // Folder ID -> collapsed?
@@ -209,6 +212,7 @@ func InitialModel() Model {
 	m.selection.selected = make(map[string]bool)
 	m.folderCollapsed = make(map[int]bool)
 	m.storyIdx = make(map[int]int)
+	m.syncedFolders = make(map[int]int)
 
 	// search
 	si := textinput.New()
