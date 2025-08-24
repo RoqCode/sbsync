@@ -1,80 +1,155 @@
-debug 2025/08/24 18:09:04 Optimizing preflight with 7 items
-debug 2025/08/24 18:09:04 Optimized to 3 items, sync order: folders first, then stories
-debug 2025/08/24 18:09:04 Starting sync for item 0: a__portal/h__global_configs/section-registry (folder: false)
-debug 2025/08/24 18:09:04 Syncing story: a__portal/h__global_configs/section-registry
-debug 2025/08/24 18:09:04 Warning: parent folder a__portal/h__global_configs not found for story a__portal/h__global_configs/section-registry
-debug 2025/08/24 18:09:04 Sync attempt 1 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:04   Will retry in 500ms (attempt 2/3)
-debug 2025/08/24 18:09:05 Syncing story: a__portal/h__global_configs/section-registry
-debug 2025/08/24 18:09:05 Warning: parent folder a__portal/h__global_configs not found for story a__portal/h__global_configs/section-registry
-debug 2025/08/24 18:09:05 Sync attempt 2 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:05   Will retry in 500ms (attempt 3/3)
-debug 2025/08/24 18:09:05 Syncing story: a__portal/h__global_configs/section-registry
-debug 2025/08/24 18:09:06 Warning: parent folder a__portal/h__global_configs not found for story a__portal/h__global_configs/section-registry
-debug 2025/08/24 18:09:06 Sync attempt 3 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:06   Max retries (3) exceeded, giving up
-debug 2025/08/24 18:09:06 RETRY FAILED: Operation failed after 3 attempts, final error: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:06   HTTP Error Details: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:06 ERROR: sync failed for a__portal/h__global_configs/section-registry: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:06 ERROR CONTEXT for a__portal/h__global_configs/section-registry:
-debug 2025/08/24 18:09:06   Story ID: 74434753163194
-debug 2025/08/24 18:09:06   Story UUID: 5c829a98-128a-40ce-833c-ca0e38e1bd9d
-debug 2025/08/24 18:09:06   Story Name: Section Registry
-debug 2025/08/24 18:09:06   Full Slug: a__portal/h__global_configs/section-registry
-debug 2025/08/24 18:09:06   Is Folder: false
-debug 2025/08/24 18:09:06   Published: true
-debug 2025/08/24 18:09:06   Parent ID: 74432899497127
-debug 2025/08/24 18:09:06   Full Story JSON: {"id":74434753163194,"uuid":"5c829a98-128a-40ce-833c-ca0e38e1bd9d","name":"Section Registry","slug":"section-registry","full_slug":"a__portal/h__global_configs/section-registry","parent_id":74432899497127,"created_at":"2025-07-30T07:55:47.153Z","updated_at":"2025-07-31T12:51:18.952Z","published":true,"is_folder":false,"is_startpage":false,"position":0}
-debug 2025/08/24 18:09:06   HTTP Error Details: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:06 Starting sync for item 1: a__portal/de/fachportal/ (folder: false)
-debug 2025/08/24 18:09:06 Syncing story: a__portal/de/fachportal/
-debug 2025/08/24 18:09:06 Warning: parent folder a__portal/de/fachportal not found for story a__portal/de/fachportal/
-debug 2025/08/24 18:09:06 Sync attempt 1 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:06   Will retry in 500ms (attempt 2/3)
-debug 2025/08/24 18:09:07 Syncing story: a__portal/de/fachportal/
-debug 2025/08/24 18:09:07 Warning: parent folder a__portal/de/fachportal not found for story a__portal/de/fachportal/
-debug 2025/08/24 18:09:07 Sync attempt 2 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:07   Will retry in 500ms (attempt 3/3)
-debug 2025/08/24 18:09:08 Syncing story: a__portal/de/fachportal/
-debug 2025/08/24 18:09:08 Warning: parent folder a__portal/de/fachportal not found for story a__portal/de/fachportal/
-debug 2025/08/24 18:09:08 Sync attempt 3 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:08   Max retries (3) exceeded, giving up
-debug 2025/08/24 18:09:08 RETRY FAILED: Operation failed after 3 attempts, final error: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:08   HTTP Error Details: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:08 ERROR: sync failed for a__portal/de/fachportal/: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:08 ERROR CONTEXT for a__portal/de/fachportal/:
-debug 2025/08/24 18:09:08   Story ID: 639937787
-debug 2025/08/24 18:09:08   Story UUID: f1de86e4-86e2-4402-9939-44dac8fb546f
-debug 2025/08/24 18:09:08   Story Name: Home
-debug 2025/08/24 18:09:08   Full Slug: a__portal/de/fachportal/
-debug 2025/08/24 18:09:08   Is Folder: false
-debug 2025/08/24 18:09:08   Published: true
-debug 2025/08/24 18:09:08   Parent ID: 611539194
-debug 2025/08/24 18:09:08   Full Story JSON: {"id":639937787,"uuid":"f1de86e4-86e2-4402-9939-44dac8fb546f","name":"Home","slug":"fachportal","full_slug":"a__portal/de/fachportal/","parent_id":611539194,"created_at":"2025-03-13T15:43:48.029Z","updated_at":"2025-07-29T07:02:15.458Z","published":true,"is_folder":false,"is_startpage":true,"position":-340}
-debug 2025/08/24 18:09:08   HTTP Error Details: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:08 Starting sync for item 2: a__portal/de/fachportal/config (folder: false)
-debug 2025/08/24 18:09:08 Syncing story: a__portal/de/fachportal/config
-debug 2025/08/24 18:09:08 Warning: parent folder a__portal/de/fachportal not found for story a__portal/de/fachportal/config
-debug 2025/08/24 18:09:08 Sync attempt 1 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:08   Will retry in 500ms (attempt 2/3)
-debug 2025/08/24 18:09:09 Syncing story: a__portal/de/fachportal/config
-debug 2025/08/24 18:09:09 Warning: parent folder a__portal/de/fachportal not found for story a__portal/de/fachportal/config
-debug 2025/08/24 18:09:09 Sync attempt 2 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:09   Will retry in 500ms (attempt 3/3)
-debug 2025/08/24 18:09:10 Syncing story: a__portal/de/fachportal/config
-debug 2025/08/24 18:09:10 Warning: parent folder a__portal/de/fachportal not found for story a__portal/de/fachportal/config
-debug 2025/08/24 18:09:10 Sync attempt 3 failed: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:10   Max retries (3) exceeded, giving up
-debug 2025/08/24 18:09:10 RETRY FAILED: Operation failed after 3 attempts, final error: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:10   HTTP Error Details: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:10 ERROR: sync failed for a__portal/de/fachportal/config: story.create status 422 Unprocessable Entity
-debug 2025/08/24 18:09:10 ERROR CONTEXT for a__portal/de/fachportal/config:
-debug 2025/08/24 18:09:10   Story ID: 643018032
-debug 2025/08/24 18:09:10   Story UUID: b7a23a26-7221-4f43-8fdb-d8e7fd236f8c
-debug 2025/08/24 18:09:10   Story Name: Config
-debug 2025/08/24 18:09:10   Full Slug: a__portal/de/fachportal/config
-debug 2025/08/24 18:09:10   Is Folder: false
-debug 2025/08/24 18:09:10   Published: true
-debug 2025/08/24 18:09:10   Parent ID: 611539194
-debug 2025/08/24 18:09:10   Full Story JSON: {"id":643018032,"uuid":"b7a23a26-7221-4f43-8fdb-d8e7fd236f8c","name":"Config","slug":"config","full_slug":"a__portal/de/fachportal/config","parent_id":611539194,"created_at":"2025-03-20T09:24:50.529Z","updated_at":"2025-07-18T14:20:20.401Z","published":true,"is_folder":false,"is_startpage":false,"position":190}
-debug 2025/08/24 18:09:10   HTTP Error Details: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:54 Optimizing preflight with 6 items
+debug 2025/08/24 18:16:54 Optimized to 3 items, sync order: folders first, then stories
+debug 2025/08/24 18:16:54 Starting sync for item 0: a__portal/de/ (folder: false)
+debug 2025/08/24 18:16:54 Syncing story: a__portal/de/
+debug 2025/08/24 18:16:55 DEBUG: Fetched story 592393375 (a__portal/de/) - Content present: true
+debug 2025/08/24 18:16:55 DEBUG: Fetched content keys: [_uid component footerBgColor headerBgColor body AI_SEO header canonicalLink extendedHeader disableHeaderStrip seo]
+debug 2025/08/24 18:16:55 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:55 DEBUG: Story has content: true
+debug 2025/08/24 18:16:55 DEBUG: Content keys: [footerBgColor headerBgColor body AI_SEO header canonicalLink extendedHeader disableHeaderStrip seo _uid component]
+debug 2025/08/24 18:16:55 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:55 DEBUG: Story published: true
+debug 2025/08/24 18:16:55 DEBUG: JSON payload being sent (13508 bytes):
+debug 2025/08/24 18:16:55 DEBUG: JSON too large, truncated: {"force_update":"1","publish":"1","story":{"uuid":"8ddf19fb-fe2a-4ecc-a2f9-4c23f767dceb","name":"Home","slug":"de","full_slug":"a__portal/de/","content":{"AI_SEO":"","_uid":"35c1cec5-c967-4146-9a97-80c81fa50307","body":[{"_uid":"54283cff-64ea-4ccc-9cf1-820dceb97353","button":[{"_uid":"25042645-b655-40a0-97df-a75cd6890c08","component":"ButtonLink","disabled":false,"hasIcon":true,"link":{"cached_url":"a__plattform/de/teaser/health-family-story","fieldtype":"multilink","id":"c6cc69d8-5984-40d8-a1dc-cd30aca6d2d6","linktype":"story","url":""},"text":"Unsere Health Family Story"}],"component":"TopStory","headline":"Wir sind die MEDICE Health Family","image":{"alt":"","copyright":"","fieldtype":"asset","filename":"https://a.storyblok.com/f/276854/1541x1521/2f69748e45/gf-innen-neu.jpg","focus":"","id":16630409,"is_external_url":false,"meta_data":{},"name":"","source":"","title":""},"subheadline":"Zusammen für eine gesündere Welt","text":{"content":[{"content":[{"marks":[{"attrs":{"color":""},"type":"textStyle"}],"text":"Die MEDICE Health Family entwickelt und vertreibt innovative und vielfältige Gesundheitslösungen. Von der Entstehung bis hin zur akuten Symptomatik werden für jede Stufe der Erkrankung geeignete Präventions- oder Behandlungskonzepte geschaffen, in denen pharmazeutische, digitale und ernährungsbezogene Kompetenzen ineinandergreifen und miteinander verwoben werden.","type":"text"}],"type":"paragraph"}],"type":"doc"}},{"_uid":"81eb1a88-5db1-4fd6-a7f9-419a284d49f3","button":[{"_uid":"13b431e2-35fb-434c-add2-8367598f4c6c","component":"ButtonLink","disabled":false,"hasIcon":false,"link":{"cached_url":"a__plattform/de/teaser/let-s-take-care","fieldtype":"multilink","id":"749a75fc-4b0f-4084-9374-0b39d683b967","linktype":"story","url":""},"text":"Mehr zu Let's take Care!"}],"component":"TeaserElement","headline":"Wir möchten uns um die Menschen kümmern ","imageRight":true,"layout":"standard","marginDesktop":false,"media":{"alt":"","copyright":"","fieldtype":...
+debug 2025/08/24 18:16:55 Sync attempt 1 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:55   Will retry in 500ms (attempt 2/3)
+debug 2025/08/24 18:16:55 Syncing story: a__portal/de/
+debug 2025/08/24 18:16:55 DEBUG: Fetched story 592393375 (a__portal/de/) - Content present: true
+debug 2025/08/24 18:16:55 DEBUG: Fetched content keys: [canonicalLink extendedHeader _uid header footerBgColor headerBgColor disableHeaderStrip seo body AI_SEO component]
+debug 2025/08/24 18:16:55 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:55 DEBUG: Story has content: true
+debug 2025/08/24 18:16:55 DEBUG: Content keys: [canonicalLink extendedHeader _uid header footerBgColor headerBgColor disableHeaderStrip seo body AI_SEO component]
+debug 2025/08/24 18:16:55 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:55 DEBUG: Story published: true
+debug 2025/08/24 18:16:55 DEBUG: JSON payload being sent (13508 bytes):
+debug 2025/08/24 18:16:55 DEBUG: JSON too large, truncated: {"force_update":"1","publish":"1","story":{"uuid":"8ddf19fb-fe2a-4ecc-a2f9-4c23f767dceb","name":"Home","slug":"de","full_slug":"a__portal/de/","content":{"AI_SEO":"","_uid":"35c1cec5-c967-4146-9a97-80c81fa50307","body":[{"_uid":"54283cff-64ea-4ccc-9cf1-820dceb97353","button":[{"_uid":"25042645-b655-40a0-97df-a75cd6890c08","component":"ButtonLink","disabled":false,"hasIcon":true,"link":{"cached_url":"a__plattform/de/teaser/health-family-story","fieldtype":"multilink","id":"c6cc69d8-5984-40d8-a1dc-cd30aca6d2d6","linktype":"story","url":""},"text":"Unsere Health Family Story"}],"component":"TopStory","headline":"Wir sind die MEDICE Health Family","image":{"alt":"","copyright":"","fieldtype":"asset","filename":"https://a.storyblok.com/f/276854/1541x1521/2f69748e45/gf-innen-neu.jpg","focus":"","id":16630409,"is_external_url":false,"meta_data":{},"name":"","source":"","title":""},"subheadline":"Zusammen für eine gesündere Welt","text":{"content":[{"content":[{"marks":[{"attrs":{"color":""},"type":"textStyle"}],"text":"Die MEDICE Health Family entwickelt und vertreibt innovative und vielfältige Gesundheitslösungen. Von der Entstehung bis hin zur akuten Symptomatik werden für jede Stufe der Erkrankung geeignete Präventions- oder Behandlungskonzepte geschaffen, in denen pharmazeutische, digitale und ernährungsbezogene Kompetenzen ineinandergreifen und miteinander verwoben werden.","type":"text"}],"type":"paragraph"}],"type":"doc"}},{"_uid":"81eb1a88-5db1-4fd6-a7f9-419a284d49f3","button":[{"_uid":"13b431e2-35fb-434c-add2-8367598f4c6c","component":"ButtonLink","disabled":false,"hasIcon":false,"link":{"cached_url":"a__plattform/de/teaser/let-s-take-care","fieldtype":"multilink","id":"749a75fc-4b0f-4084-9374-0b39d683b967","linktype":"story","url":""},"text":"Mehr zu Let's take Care!"}],"component":"TeaserElement","headline":"Wir möchten uns um die Menschen kümmern ","imageRight":true,"layout":"standard","marginDesktop":false,"media":{"alt":"","copyright":"","fieldtype":...
+debug 2025/08/24 18:16:56 Sync attempt 2 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:56   Will retry in 500ms (attempt 3/3)
+debug 2025/08/24 18:16:56 Syncing story: a__portal/de/
+debug 2025/08/24 18:16:56 DEBUG: Fetched story 592393375 (a__portal/de/) - Content present: true
+debug 2025/08/24 18:16:56 DEBUG: Fetched content keys: [canonicalLink extendedHeader AI_SEO header component footerBgColor headerBgColor disableHeaderStrip seo _uid body]
+debug 2025/08/24 18:16:56 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:56 DEBUG: Story has content: true
+debug 2025/08/24 18:16:56 DEBUG: Content keys: [seo _uid body canonicalLink extendedHeader AI_SEO header component footerBgColor headerBgColor disableHeaderStrip]
+debug 2025/08/24 18:16:56 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:56 DEBUG: Story published: true
+debug 2025/08/24 18:16:56 DEBUG: JSON payload being sent (13508 bytes):
+debug 2025/08/24 18:16:56 DEBUG: JSON too large, truncated: {"force_update":"1","publish":"1","story":{"uuid":"8ddf19fb-fe2a-4ecc-a2f9-4c23f767dceb","name":"Home","slug":"de","full_slug":"a__portal/de/","content":{"AI_SEO":"","_uid":"35c1cec5-c967-4146-9a97-80c81fa50307","body":[{"_uid":"54283cff-64ea-4ccc-9cf1-820dceb97353","button":[{"_uid":"25042645-b655-40a0-97df-a75cd6890c08","component":"ButtonLink","disabled":false,"hasIcon":true,"link":{"cached_url":"a__plattform/de/teaser/health-family-story","fieldtype":"multilink","id":"c6cc69d8-5984-40d8-a1dc-cd30aca6d2d6","linktype":"story","url":""},"text":"Unsere Health Family Story"}],"component":"TopStory","headline":"Wir sind die MEDICE Health Family","image":{"alt":"","copyright":"","fieldtype":"asset","filename":"https://a.storyblok.com/f/276854/1541x1521/2f69748e45/gf-innen-neu.jpg","focus":"","id":16630409,"is_external_url":false,"meta_data":{},"name":"","source":"","title":""},"subheadline":"Zusammen für eine gesündere Welt","text":{"content":[{"content":[{"marks":[{"attrs":{"color":""},"type":"textStyle"}],"text":"Die MEDICE Health Family entwickelt und vertreibt innovative und vielfältige Gesundheitslösungen. Von der Entstehung bis hin zur akuten Symptomatik werden für jede Stufe der Erkrankung geeignete Präventions- oder Behandlungskonzepte geschaffen, in denen pharmazeutische, digitale und ernährungsbezogene Kompetenzen ineinandergreifen und miteinander verwoben werden.","type":"text"}],"type":"paragraph"}],"type":"doc"}},{"_uid":"81eb1a88-5db1-4fd6-a7f9-419a284d49f3","button":[{"_uid":"13b431e2-35fb-434c-add2-8367598f4c6c","component":"ButtonLink","disabled":false,"hasIcon":false,"link":{"cached_url":"a__plattform/de/teaser/let-s-take-care","fieldtype":"multilink","id":"749a75fc-4b0f-4084-9374-0b39d683b967","linktype":"story","url":""},"text":"Mehr zu Let's take Care!"}],"component":"TeaserElement","headline":"Wir möchten uns um die Menschen kümmern ","imageRight":true,"layout":"standard","marginDesktop":false,"media":{"alt":"","copyright":"","fieldtype":...
+debug 2025/08/24 18:16:56 Sync attempt 3 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:56   Max retries (3) exceeded, giving up
+debug 2025/08/24 18:16:56 RETRY FAILED: Operation failed after 3 attempts, final error: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:56   HTTP Error Details: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:56 ERROR: sync failed for a__portal/de/: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:56 ERROR CONTEXT for a__portal/de/:
+debug 2025/08/24 18:16:56   Story ID: 592393375
+debug 2025/08/24 18:16:56   Story UUID: 8ddf19fb-fe2a-4ecc-a2f9-4c23f767dceb
+debug 2025/08/24 18:16:56   Story Name: Home
+debug 2025/08/24 18:16:56   Full Slug: a__portal/de/
+debug 2025/08/24 18:16:56   Is Folder: false
+debug 2025/08/24 18:16:56   Published: true
+debug 2025/08/24 18:16:56   Parent ID: 593651639
+debug 2025/08/24 18:16:56   Full Story JSON: {"id":592393375,"uuid":"8ddf19fb-fe2a-4ecc-a2f9-4c23f767dceb","name":"Home","slug":"de","full_slug":"a__portal/de/","parent_id":593651639,"created_at":"2024-12-09T13:07:02.928Z","updated_at":"2025-08-18T19:29:26.345Z","published":true,"is_folder":false,"is_startpage":true,"position":250}
+debug 2025/08/24 18:16:56   HTTP Error Details: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:56 Starting sync for item 1: a__portal/de/75-jahre-medice (folder: false)
+debug 2025/08/24 18:16:56 Syncing story: a__portal/de/75-jahre-medice
+debug 2025/08/24 18:16:56 DEBUG: Fetched story 592539268 (a__portal/de/75-jahre-medice) - Content present: true
+debug 2025/08/24 18:16:56 DEBUG: Fetched content keys: [header component disableHeaderStrip seo _uid body AI_SEO]
+debug 2025/08/24 18:16:56 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:56 DEBUG: Story has content: true
+debug 2025/08/24 18:16:56 DEBUG: Content keys: [_uid body AI_SEO header component disableHeaderStrip seo]
+debug 2025/08/24 18:16:56 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:56 DEBUG: Story published: true
+debug 2025/08/24 18:16:56 DEBUG: JSON payload being sent (11481 bytes):
+debug 2025/08/24 18:16:56 DEBUG: JSON too large, truncated: {"force_update":"1","publish":"1","story":{"uuid":"b08b65e1-a953-4acf-96f3-c1ba7a2b71a1","name":"75 Jahre MEDICE","slug":"75-jahre-medice","full_slug":"a__portal/de/75-jahre-medice","content":{"AI_SEO":"","_uid":"196759e2-59b7-423e-a0df-3e453bca65f9","body":[{"ForceHeadlineLeft":false,"MarginDesktop":true,"Media":{"alt":"","copyright":"","fieldtype":"asset","filename":"https://a.storyblok.com/f/276854/x/b06c308baf/1x1_240716_medice_highlights_90sek.mp4","focus":"","id":16666195,"is_external_url":false,"meta_data":{},"name":"","source":"","title":""},"MediaLeft":false,"Text":{"content":[{"attrs":{"level":2},"content":[{"text":"75 Jahre MEDICE","type":"text"}],"type":"heading"},{"content":[{"marks":[{"attrs":{"color":""},"type":"textStyle"}],"text":"MEDICE feiert in diesem Jahr ihr 75-jähriges Bestehen. Anlässlich dieses beeindruckenden Meilensteins veranstalteten wir im Juni zwei Jubiläumsfestakte mit vielen feierlichen Momenten. Die Highlights hierzu wollen wir Dir natürlich nicht vorenthalten.","type":"text"}],"type":"paragraph"},{"content":[{"text":"Die Jubiläumsfeier bot eine wunderbare Gelegenheit, auf die vergangenen 75 Jahre der MEDICE zurückzublicken und die vielen Erfolge zu feiern. Gleichzeitig warf das Unternehmen mit allen Gästen einen Blick in die Zukunft und präsentierte die Vision und Mission der Health Family für die kommenden Jahre.","type":"text"}],"type":"paragraph"}],"type":"doc"},"TextAlign":"center","Text__i18n__en":{"content":[{"attrs":{"level":2},"content":[{"text":"75 years of MEDICE","type":"text"}],"type":"heading"},{"content":[{"text":"MEDICE is celebrating its 75th anniversary this year. To mark this impressive milestone, we held two anniversary celebrations in June with many celebratory moments. Of course, we don't want to withhold the highlights from you.","type":"text"}],"type":"paragraph"},{"content":[{"text":"The anniversary celebration offered a wonderful opportunity to look back on the past 75 years of MEDICE and celebrate...
+debug 2025/08/24 18:16:57 Sync attempt 1 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:57   Will retry in 500ms (attempt 2/3)
+debug 2025/08/24 18:16:57 Syncing story: a__portal/de/75-jahre-medice
+debug 2025/08/24 18:16:57 DEBUG: Fetched story 592539268 (a__portal/de/75-jahre-medice) - Content present: true
+debug 2025/08/24 18:16:57 DEBUG: Fetched content keys: [seo _uid body AI_SEO header component disableHeaderStrip]
+debug 2025/08/24 18:16:57 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:57 DEBUG: Story has content: true
+debug 2025/08/24 18:16:57 DEBUG: Content keys: [seo _uid body AI_SEO header component disableHeaderStrip]
+debug 2025/08/24 18:16:57 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:57 DEBUG: Story published: true
+debug 2025/08/24 18:16:57 DEBUG: JSON payload being sent (11481 bytes):
+debug 2025/08/24 18:16:57 DEBUG: JSON too large, truncated: {"force_update":"1","publish":"1","story":{"uuid":"b08b65e1-a953-4acf-96f3-c1ba7a2b71a1","name":"75 Jahre MEDICE","slug":"75-jahre-medice","full_slug":"a__portal/de/75-jahre-medice","content":{"AI_SEO":"","_uid":"196759e2-59b7-423e-a0df-3e453bca65f9","body":[{"ForceHeadlineLeft":false,"MarginDesktop":true,"Media":{"alt":"","copyright":"","fieldtype":"asset","filename":"https://a.storyblok.com/f/276854/x/b06c308baf/1x1_240716_medice_highlights_90sek.mp4","focus":"","id":16666195,"is_external_url":false,"meta_data":{},"name":"","source":"","title":""},"MediaLeft":false,"Text":{"content":[{"attrs":{"level":2},"content":[{"text":"75 Jahre MEDICE","type":"text"}],"type":"heading"},{"content":[{"marks":[{"attrs":{"color":""},"type":"textStyle"}],"text":"MEDICE feiert in diesem Jahr ihr 75-jähriges Bestehen. Anlässlich dieses beeindruckenden Meilensteins veranstalteten wir im Juni zwei Jubiläumsfestakte mit vielen feierlichen Momenten. Die Highlights hierzu wollen wir Dir natürlich nicht vorenthalten.","type":"text"}],"type":"paragraph"},{"content":[{"text":"Die Jubiläumsfeier bot eine wunderbare Gelegenheit, auf die vergangenen 75 Jahre der MEDICE zurückzublicken und die vielen Erfolge zu feiern. Gleichzeitig warf das Unternehmen mit allen Gästen einen Blick in die Zukunft und präsentierte die Vision und Mission der Health Family für die kommenden Jahre.","type":"text"}],"type":"paragraph"}],"type":"doc"},"TextAlign":"center","Text__i18n__en":{"content":[{"attrs":{"level":2},"content":[{"text":"75 years of MEDICE","type":"text"}],"type":"heading"},{"content":[{"text":"MEDICE is celebrating its 75th anniversary this year. To mark this impressive milestone, we held two anniversary celebrations in June with many celebratory moments. Of course, we don't want to withhold the highlights from you.","type":"text"}],"type":"paragraph"},{"content":[{"text":"The anniversary celebration offered a wonderful opportunity to look back on the past 75 years of MEDICE and celebrate...
+debug 2025/08/24 18:16:57 Sync attempt 2 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:57   Will retry in 500ms (attempt 3/3)
+debug 2025/08/24 18:16:58 Syncing story: a__portal/de/75-jahre-medice
+debug 2025/08/24 18:16:58 DEBUG: Fetched story 592539268 (a__portal/de/75-jahre-medice) - Content present: true
+debug 2025/08/24 18:16:58 DEBUG: Fetched content keys: [header component disableHeaderStrip seo _uid body AI_SEO]
+debug 2025/08/24 18:16:58 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:58 DEBUG: Story has content: true
+debug 2025/08/24 18:16:58 DEBUG: Content keys: [AI_SEO header component disableHeaderStrip seo _uid body]
+debug 2025/08/24 18:16:58 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:58 DEBUG: Story published: true
+debug 2025/08/24 18:16:58 DEBUG: JSON payload being sent (11481 bytes):
+debug 2025/08/24 18:16:58 DEBUG: JSON too large, truncated: {"force_update":"1","publish":"1","story":{"uuid":"b08b65e1-a953-4acf-96f3-c1ba7a2b71a1","name":"75 Jahre MEDICE","slug":"75-jahre-medice","full_slug":"a__portal/de/75-jahre-medice","content":{"AI_SEO":"","_uid":"196759e2-59b7-423e-a0df-3e453bca65f9","body":[{"ForceHeadlineLeft":false,"MarginDesktop":true,"Media":{"alt":"","copyright":"","fieldtype":"asset","filename":"https://a.storyblok.com/f/276854/x/b06c308baf/1x1_240716_medice_highlights_90sek.mp4","focus":"","id":16666195,"is_external_url":false,"meta_data":{},"name":"","source":"","title":""},"MediaLeft":false,"Text":{"content":[{"attrs":{"level":2},"content":[{"text":"75 Jahre MEDICE","type":"text"}],"type":"heading"},{"content":[{"marks":[{"attrs":{"color":""},"type":"textStyle"}],"text":"MEDICE feiert in diesem Jahr ihr 75-jähriges Bestehen. Anlässlich dieses beeindruckenden Meilensteins veranstalteten wir im Juni zwei Jubiläumsfestakte mit vielen feierlichen Momenten. Die Highlights hierzu wollen wir Dir natürlich nicht vorenthalten.","type":"text"}],"type":"paragraph"},{"content":[{"text":"Die Jubiläumsfeier bot eine wunderbare Gelegenheit, auf die vergangenen 75 Jahre der MEDICE zurückzublicken und die vielen Erfolge zu feiern. Gleichzeitig warf das Unternehmen mit allen Gästen einen Blick in die Zukunft und präsentierte die Vision und Mission der Health Family für die kommenden Jahre.","type":"text"}],"type":"paragraph"}],"type":"doc"},"TextAlign":"center","Text__i18n__en":{"content":[{"attrs":{"level":2},"content":[{"text":"75 years of MEDICE","type":"text"}],"type":"heading"},{"content":[{"text":"MEDICE is celebrating its 75th anniversary this year. To mark this impressive milestone, we held two anniversary celebrations in June with many celebratory moments. Of course, we don't want to withhold the highlights from you.","type":"text"}],"type":"paragraph"},{"content":[{"text":"The anniversary celebration offered a wonderful opportunity to look back on the past 75 years of MEDICE and celebrate...
+debug 2025/08/24 18:16:58 Sync attempt 3 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:58   Max retries (3) exceeded, giving up
+debug 2025/08/24 18:16:58 RETRY FAILED: Operation failed after 3 attempts, final error: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:58   HTTP Error Details: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:58 ERROR: sync failed for a__portal/de/75-jahre-medice: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:58 ERROR CONTEXT for a__portal/de/75-jahre-medice:
+debug 2025/08/24 18:16:58   Story ID: 592539268
+debug 2025/08/24 18:16:58   Story UUID: b08b65e1-a953-4acf-96f3-c1ba7a2b71a1
+debug 2025/08/24 18:16:58   Story Name: 75 Jahre MEDICE
+debug 2025/08/24 18:16:58   Full Slug: a__portal/de/75-jahre-medice
+debug 2025/08/24 18:16:58   Is Folder: false
+debug 2025/08/24 18:16:58   Published: true
+debug 2025/08/24 18:16:58   Parent ID: 593651639
+debug 2025/08/24 18:16:58   Full Story JSON: {"id":592539268,"uuid":"b08b65e1-a953-4acf-96f3-c1ba7a2b71a1","name":"75 Jahre MEDICE","slug":"75-jahre-medice","full_slug":"a__portal/de/75-jahre-medice","parent_id":593651639,"created_at":"2024-12-09T15:59:50.582Z","updated_at":"2025-05-28T12:01:51.617Z","published":true,"is_folder":false,"is_startpage":false,"position":160}
+debug 2025/08/24 18:16:58   HTTP Error Details: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:58 Starting sync for item 2: a__portal/h__global_configs/section-registry (folder: false)
+debug 2025/08/24 18:16:58 Syncing story: a__portal/h__global_configs/section-registry
+debug 2025/08/24 18:16:58 DEBUG: Fetched story 74434753163194 (a__portal/h__global_configs/section-registry) - Content present: true
+debug 2025/08/24 18:16:58 DEBUG: Fetched content keys: [link_test subSectionConfigs _uid test component]
+debug 2025/08/24 18:16:58 Warning: parent folder a__portal/h__global_configs not found for story a__portal/h__global_configs/section-registry
+debug 2025/08/24 18:16:58 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:58 DEBUG: Story has content: true
+debug 2025/08/24 18:16:58 DEBUG: Content keys: [_uid test component link_test subSectionConfigs]
+debug 2025/08/24 18:16:58 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:58 DEBUG: Story published: true
+debug 2025/08/24 18:16:58 DEBUG: JSON payload being sent (932 bytes):
+debug 2025/08/24 18:16:58 DEBUG: Full JSON: {"force_update":"1","publish":"1","story":{"uuid":"5c829a98-128a-40ce-833c-ca0e38e1bd9d","name":"Section Registry","slug":"section-registry","full_slug":"a__portal/h__global_configs/section-registry","content":{"_uid":"5c226428-1e10-439a-8b95-cf82c4a4ff35","component":"SubSectionRegistryConfig","link_test":{"cached_url":"a__portal/de/config","fieldtype":"multilink","id":"3aaf7c09-45c4-4b0d-812d-11cafb49e91d","linktype":"story","url":""},"subSectionConfigs":["015b8d69-87da-4b9e-944c-9d7bb11c61e9","a9756fb3-6eba-483f-aea3-15207a1d6aaf","3aaf7c09-45c4-4b0d-812d-11cafb49e91d","b7a23a26-7221-4f43-8fdb-d8e7fd236f8c","2964515d-6dad-43ac-81bb-c3e083ee42c4","d4b1e727-eb85-4c24-89a1-4c9784645581","40f4935e-a012-4ddd-bd1e-b961f9126114","8360bd06-c0ef-417b-b5e6-4c3edfc3e030"],"test":"3aaf7c09-45c4-4b0d-812d-11cafb49e91d"},"updated_at":"2025-07-31T12:51:18.952Z","published":true,"is_folder":false,"is_startpage":false,"position":0}}
+debug 2025/08/24 18:16:58 Sync attempt 1 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:58   Will retry in 500ms (attempt 2/3)
+debug 2025/08/24 18:16:59 Syncing story: a__portal/h__global_configs/section-registry
+debug 2025/08/24 18:16:59 DEBUG: Fetched story 74434753163194 (a__portal/h__global_configs/section-registry) - Content present: true
+debug 2025/08/24 18:16:59 DEBUG: Fetched content keys: [_uid test component link_test subSectionConfigs]
+debug 2025/08/24 18:16:59 Warning: parent folder a__portal/h__global_configs not found for story a__portal/h__global_configs/section-registry
+debug 2025/08/24 18:16:59 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:16:59 DEBUG: Story has content: true
+debug 2025/08/24 18:16:59 DEBUG: Content keys: [_uid test component link_test subSectionConfigs]
+debug 2025/08/24 18:16:59 DEBUG: Story is folder: false
+debug 2025/08/24 18:16:59 DEBUG: Story published: true
+debug 2025/08/24 18:16:59 DEBUG: JSON payload being sent (932 bytes):
+debug 2025/08/24 18:16:59 DEBUG: Full JSON: {"force_update":"1","publish":"1","story":{"uuid":"5c829a98-128a-40ce-833c-ca0e38e1bd9d","name":"Section Registry","slug":"section-registry","full_slug":"a__portal/h__global_configs/section-registry","content":{"_uid":"5c226428-1e10-439a-8b95-cf82c4a4ff35","component":"SubSectionRegistryConfig","link_test":{"cached_url":"a__portal/de/config","fieldtype":"multilink","id":"3aaf7c09-45c4-4b0d-812d-11cafb49e91d","linktype":"story","url":""},"subSectionConfigs":["015b8d69-87da-4b9e-944c-9d7bb11c61e9","a9756fb3-6eba-483f-aea3-15207a1d6aaf","3aaf7c09-45c4-4b0d-812d-11cafb49e91d","b7a23a26-7221-4f43-8fdb-d8e7fd236f8c","2964515d-6dad-43ac-81bb-c3e083ee42c4","d4b1e727-eb85-4c24-89a1-4c9784645581","40f4935e-a012-4ddd-bd1e-b961f9126114","8360bd06-c0ef-417b-b5e6-4c3edfc3e030"],"test":"3aaf7c09-45c4-4b0d-812d-11cafb49e91d"},"updated_at":"2025-07-31T12:51:18.952Z","published":true,"is_folder":false,"is_startpage":false,"position":0}}
+debug 2025/08/24 18:16:59 Sync attempt 2 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:16:59   Will retry in 500ms (attempt 3/3)
+debug 2025/08/24 18:17:00 Syncing story: a__portal/h__global_configs/section-registry
+debug 2025/08/24 18:17:00 DEBUG: Fetched story 74434753163194 (a__portal/h__global_configs/section-registry) - Content present: true
+debug 2025/08/24 18:17:00 DEBUG: Fetched content keys: [test component link_test subSectionConfigs _uid]
+debug 2025/08/24 18:17:00 Warning: parent folder a__portal/h__global_configs not found for story a__portal/h__global_configs/section-registry
+debug 2025/08/24 18:17:00 DEBUG: Creating story - Before marshal:
+debug 2025/08/24 18:17:00 DEBUG: Story has content: true
+debug 2025/08/24 18:17:00 DEBUG: Content keys: [_uid test component link_test subSectionConfigs]
+debug 2025/08/24 18:17:00 DEBUG: Story is folder: false
+debug 2025/08/24 18:17:00 DEBUG: Story published: true
+debug 2025/08/24 18:17:00 DEBUG: JSON payload being sent (932 bytes):
+debug 2025/08/24 18:17:00 DEBUG: Full JSON: {"force_update":"1","publish":"1","story":{"uuid":"5c829a98-128a-40ce-833c-ca0e38e1bd9d","name":"Section Registry","slug":"section-registry","full_slug":"a__portal/h__global_configs/section-registry","content":{"_uid":"5c226428-1e10-439a-8b95-cf82c4a4ff35","component":"SubSectionRegistryConfig","link_test":{"cached_url":"a__portal/de/config","fieldtype":"multilink","id":"3aaf7c09-45c4-4b0d-812d-11cafb49e91d","linktype":"story","url":""},"subSectionConfigs":["015b8d69-87da-4b9e-944c-9d7bb11c61e9","a9756fb3-6eba-483f-aea3-15207a1d6aaf","3aaf7c09-45c4-4b0d-812d-11cafb49e91d","b7a23a26-7221-4f43-8fdb-d8e7fd236f8c","2964515d-6dad-43ac-81bb-c3e083ee42c4","d4b1e727-eb85-4c24-89a1-4c9784645581","40f4935e-a012-4ddd-bd1e-b961f9126114","8360bd06-c0ef-417b-b5e6-4c3edfc3e030"],"test":"3aaf7c09-45c4-4b0d-812d-11cafb49e91d"},"updated_at":"2025-07-31T12:51:18.952Z","published":true,"is_folder":false,"is_startpage":false,"position":0}}
+debug 2025/08/24 18:17:00 Sync attempt 3 failed: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:17:00   Max retries (3) exceeded, giving up
+debug 2025/08/24 18:17:00 RETRY FAILED: Operation failed after 3 attempts, final error: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:17:00   HTTP Error Details: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:17:00 ERROR: sync failed for a__portal/h__global_configs/section-registry: story.create status 422 Unprocessable Entity
+debug 2025/08/24 18:17:00 ERROR CONTEXT for a__portal/h__global_configs/section-registry:
+debug 2025/08/24 18:17:00   Story ID: 74434753163194
+debug 2025/08/24 18:17:00   Story UUID: 5c829a98-128a-40ce-833c-ca0e38e1bd9d
+debug 2025/08/24 18:17:00   Story Name: Section Registry
+debug 2025/08/24 18:17:00   Full Slug: a__portal/h__global_configs/section-registry
+debug 2025/08/24 18:17:00   Is Folder: false
+debug 2025/08/24 18:17:00   Published: true
+debug 2025/08/24 18:17:00   Parent ID: 74432899497127
+debug 2025/08/24 18:17:00   Full Story JSON: {"id":74434753163194,"uuid":"5c829a98-128a-40ce-833c-ca0e38e1bd9d","name":"Section Registry","slug":"section-registry","full_slug":"a__portal/h__global_configs/section-registry","parent_id":74432899497127,"created_at":"2025-07-30T07:55:47.153Z","updated_at":"2025-07-31T12:51:18.952Z","published":true,"is_folder":false,"is_startpage":false,"position":0}
+debug 2025/08/24 18:17:00   HTTP Error Details: story.create status 422 Unprocessable Entity

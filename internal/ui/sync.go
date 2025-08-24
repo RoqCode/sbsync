@@ -405,9 +405,12 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		log.Printf("Updated folder: %s", fullFolder.FullSlug)
 	} else {
 		// Create new folder
-		// Clear fields that shouldn't be set on creation
+		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullFolder.ID = 0
 		fullFolder.CreatedAt = ""
+		fullFolder.UpdatedAt = ""    // This was causing 422!
+		
+		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 		
 		// Ensure folders have proper content structure
 		if fullFolder.IsFolder && fullFolder.Content == nil {
@@ -503,9 +506,12 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 		log.Printf("Updated folder: %s", fullFolder.FullSlug)
 	} else {
 		// Create new folder
-		// Clear fields that shouldn't be set on creation
+		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullFolder.ID = 0
 		fullFolder.CreatedAt = ""
+		fullFolder.UpdatedAt = ""    // This was causing 422!
+		
+		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 		
 		// Ensure folders have proper content structure
 		if fullFolder.IsFolder && fullFolder.Content == nil {
@@ -597,9 +603,12 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		log.Printf("Updated story: %s", fullStory.FullSlug)
 	} else {
 		// Create new story
-		// Clear fields that shouldn't be set on creation
+		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullStory.ID = 0
 		fullStory.CreatedAt = ""
+		fullStory.UpdatedAt = ""    // This was causing 422!
+		
+		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 		
 		// Ensure stories have content (required for Storyblok API)
 		if !fullStory.IsFolder && fullStory.Content == nil {
@@ -696,9 +705,12 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 		log.Printf("Updated story: %s", fullStory.FullSlug)
 	} else {
 		// Create new story
-		// Clear fields that shouldn't be set on creation
+		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
 		fullStory.ID = 0
 		fullStory.CreatedAt = ""
+		fullStory.UpdatedAt = ""    // This was causing 422!
+		
+		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 		
 		// Ensure stories have content (required for Storyblok API)
 		if !fullStory.IsFolder && fullStory.Content == nil {
