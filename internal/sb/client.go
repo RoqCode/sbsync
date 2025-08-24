@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -272,6 +273,15 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	} else {
 		log.Printf("DEBUG: JSON too large, truncated: %s...", string(body[:2000]))
 	}
+	
+	// DEBUG: Try minimal payload approach for debugging
+	log.Printf("DEBUG: Story UUID: %s", st.UUID)
+	log.Printf("DEBUG: Story Name: %s", st.Name)
+	log.Printf("DEBUG: Story Slug: %s", st.Slug)
+	log.Printf("DEBUG: Story FullSlug: %s", st.FullSlug)
+	log.Printf("DEBUG: Story FolderID: %v", st.FolderID)
+	log.Printf("DEBUG: Story Published: %t", st.Published)
+	log.Printf("DEBUG: Story IsFolder: %t", st.IsFolder)
 	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
@@ -281,6 +291,13 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
+		// DEBUG: Read and log the error response body for 422 errors
+		if res.StatusCode == 422 {
+			bodyBytes, err := io.ReadAll(res.Body)
+			if err == nil {
+				log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
+			}
+		}
 		return Story{}, fmt.Errorf("story.create status %s", res.Status)
 	}
 	var resp storyResp
