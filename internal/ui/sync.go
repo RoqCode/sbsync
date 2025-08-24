@@ -392,6 +392,11 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Clear fields that shouldn't be set on creation
 		fullFolder.ID = 0
 		fullFolder.CreatedAt = ""
+		
+		// Ensure folders have proper content structure
+		if fullFolder.IsFolder && fullFolder.Content == nil {
+			fullFolder.Content = map[string]interface{}{}
+		}
 
 		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullFolder)
 		if err != nil {
@@ -485,6 +490,11 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 		// Clear fields that shouldn't be set on creation
 		fullFolder.ID = 0
 		fullFolder.CreatedAt = ""
+		
+		// Ensure folders have proper content structure
+		if fullFolder.IsFolder && fullFolder.Content == nil {
+			fullFolder.Content = map[string]interface{}{}
+		}
 
 		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullFolder)
 		if err != nil {
@@ -574,6 +584,13 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Clear fields that shouldn't be set on creation
 		fullStory.ID = 0
 		fullStory.CreatedAt = ""
+		
+		// Ensure stories have content (required for Storyblok API)
+		if !fullStory.IsFolder && fullStory.Content == nil {
+			fullStory.Content = map[string]interface{}{
+				"component": "page", // Default component type
+			}
+		}
 
 		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullStory)
 		if err != nil {
@@ -666,6 +683,13 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 		// Clear fields that shouldn't be set on creation
 		fullStory.ID = 0
 		fullStory.CreatedAt = ""
+		
+		// Ensure stories have content (required for Storyblok API)
+		if !fullStory.IsFolder && fullStory.Content == nil {
+			fullStory.Content = map[string]interface{}{
+				"component": "page", // Default component type
+			}
+		}
 
 		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullStory)
 		if err != nil {

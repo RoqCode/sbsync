@@ -164,7 +164,7 @@ func (c *Client) GetStory(ctx context.Context, spaceID, storyID int) (Story, err
 	if c.token == "" {
 		return Story{}, errors.New("token leer")
 	}
-	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
+	u := fmt.Sprintf(base+"/spaces/%d/stories/%d?version=draft", spaceID, storyID)
 	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
