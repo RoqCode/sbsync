@@ -448,7 +448,7 @@ func ensureFolderPathImpl(api folderAPI, report *Report, sourceStories []sb.Stor
 		}
 
 		ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
-		createdFolder, err := api.CreateStoryWithPublish(ctx, tgtSpaceID, folder, publish)
+		createdFolder, err := createStoryWithPublishRetry(ctx, api.(createAPI), tgtSpaceID, folder, publish)
 		cancel()
 		if err != nil {
 			return created, err
@@ -524,7 +524,7 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Update existing folder
 		existingFolder := existing[0]
 		fullFolder.ID = existingFolder.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -551,7 +551,7 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 			fullFolder.Content = map[string]interface{}{}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			return err
 		}
@@ -625,7 +625,7 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 		// Update existing folder
 		existingFolder := existing[0]
 		fullFolder.ID = existingFolder.ID
-		updated, err := m.api.UpdateStory(ctx, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			log.Printf("Failed to update target folder %s (ID: %d): %v", fullFolder.FullSlug, fullFolder.ID, err)
 			logExtendedErrorContext(err)
@@ -661,7 +661,7 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 			fullFolder.Content = map[string]interface{}{}
 		}
 
-		created, err := m.api.CreateStoryWithPublish(ctx, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
 		if err != nil {
 			log.Printf("Failed to create target folder %s: %v", fullFolder.FullSlug, err)
 			logExtendedErrorContext(err)

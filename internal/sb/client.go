@@ -212,12 +212,8 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish
 		"story":        st,
 		"force_update": "1",
 	}
-	if !st.IsFolder {
-		if publish {
-			payload["publish"] = 1
-		} else {
-			payload["publish"] = 0
-		}
+	if !st.IsFolder && publish {
+		payload["publish"] = 1
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -258,12 +254,8 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 		"story":        st,
 		"force_update": "1",
 	}
-	if !st.IsFolder {
-		if publish {
-			payload["publish"] = 1
-		} else {
-			payload["publish"] = 0
-		}
+	if !st.IsFolder && publish {
+		payload["publish"] = 1
 	}
 
 	// DEBUG: Log the payload before marshalling

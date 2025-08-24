@@ -83,10 +83,10 @@ func TestListStoriesPagination(t *testing.T) {
 func TestPublishFlagNumericUpdateStory(t *testing.T) {
 	tests := []struct {
 		publish bool
-		want    float64
+		want    *float64 // Use pointer to distinguish between 1, 0, and nil (omitted)
 	}{
-		{true, 1},
-		{false, 0},
+		{true, func() *float64 { v := float64(1); return &v }()},
+		{false, nil}, // When publish=false, field should be omitted
 	}
 	for _, tt := range tests {
 		c := New("token")
@@ -100,11 +100,19 @@ func TestPublishFlagNumericUpdateStory(t *testing.T) {
 				t.Fatalf("unmarshal body: %v", err)
 			}
 			val, ok := payload["publish"].(float64)
-			if !ok {
-				t.Fatalf("publish field missing or not number: %#v", payload["publish"])
-			}
-			if val != tt.want {
-				t.Fatalf("expected publish %v, got %v", tt.want, val)
+			if tt.want == nil {
+				// Expect publish field to be omitted
+				if ok {
+					t.Fatalf("expected publish field to be omitted, but found: %v", val)
+				}
+			} else {
+				// Expect publish field to be present with specific value
+				if !ok {
+					t.Fatalf("publish field missing or not number: %#v", payload["publish"])
+				}
+				if val != *tt.want {
+					t.Fatalf("expected publish %v, got %v", *tt.want, val)
+				}
 			}
 			resBody := `{"story":{"id":1}}`
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(resBody)), Header: make(http.Header)}, nil
@@ -119,10 +127,10 @@ func TestPublishFlagNumericUpdateStory(t *testing.T) {
 func TestPublishFlagNumericCreateStory(t *testing.T) {
 	tests := []struct {
 		publish bool
-		want    float64
+		want    *float64 // Use pointer to distinguish between 1, 0, and nil (omitted)
 	}{
-		{true, 1},
-		{false, 0},
+		{true, func() *float64 { v := float64(1); return &v }()},
+		{false, nil}, // When publish=false, field should be omitted
 	}
 	for _, tt := range tests {
 		c := New("token")
@@ -136,11 +144,19 @@ func TestPublishFlagNumericCreateStory(t *testing.T) {
 				t.Fatalf("unmarshal body: %v", err)
 			}
 			val, ok := payload["publish"].(float64)
-			if !ok {
-				t.Fatalf("publish field missing or not number: %#v", payload["publish"])
-			}
-			if val != tt.want {
-				t.Fatalf("expected publish %v, got %v", tt.want, val)
+			if tt.want == nil {
+				// Expect publish field to be omitted
+				if ok {
+					t.Fatalf("expected publish field to be omitted, but found: %v", val)
+				}
+			} else {
+				// Expect publish field to be present with specific value
+				if !ok {
+					t.Fatalf("publish field missing or not number: %#v", payload["publish"])
+				}
+				if val != *tt.want {
+					t.Fatalf("expected publish %v, got %v", *tt.want, val)
+				}
 			}
 			resBody := `{"story":{"id":1}}`
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(resBody)), Header: make(http.Header)}, nil
