@@ -294,19 +294,22 @@ func (m Model) viewPreflight() string {
 				break
 			}
 			content := lines[i]
-			if it.Collision {
+			if it.Collision && it.Selected {
 				content = collisionSign + " " + content
 			} else {
 				content = "  " + content
 			}
 			if it.Skip {
-				content = subtleStyle.Render(content + " [skip]")
+				content += " [skip]"
 			}
+			lineStyle := lipgloss.NewStyle().Width(m.width - 2)
 			if i == m.preflight.listIndex {
-				content = cursorLineStyle.Width(m.width - 2).Render(content)
-			} else {
-				content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
+				lineStyle = cursorLineStyle.Copy().Width(m.width - 2)
 			}
+			if it.Skip {
+				lineStyle = lineStyle.Faint(true)
+			}
+			content = lineStyle.Render(content)
 			cursorCell := " "
 			if i == m.preflight.listIndex {
 				cursorCell = cursorBarStyle.Render(" ")
@@ -338,13 +341,13 @@ func displayPreflightItem(it PreflightItem) string {
 	if name == "" {
 		name = it.Story.Slug
 	}
-	slug := it.Story.FullSlug
-	if !it.Selected {
+	slug := "(" + it.Story.FullSlug + ")"
+	if !it.Selected || it.Skip {
 		name = subtleStyle.Render(name)
 		slug = subtleStyle.Render(slug)
 	}
 	sym := storyTypeSymbol(it.Story)
-	return fmt.Sprintf("%s %s  (%s)", sym, name, slug)
+	return fmt.Sprintf("%s %s  %s", sym, name, slug)
 }
 
 func displayStory(st sb.Story) string {

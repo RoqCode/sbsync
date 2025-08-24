@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -92,5 +93,26 @@ func TestPreflightSkipToggleAndGlobal(t *testing.T) {
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if m.state != stateBrowseList {
 		t.Fatalf("expected return to browse list on q")
+	}
+}
+
+func TestDisplayPreflightItemDimsSlug(t *testing.T) {
+	it := PreflightItem{Story: sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}}
+	s := displayPreflightItem(it)
+	expected := fmt.Sprintf("%s one  (one)", symbolStory)
+	if s != expected {
+		t.Fatalf("unexpected render for selected item: %q", s)
+	}
+	it.Selected = false
+	s = displayPreflightItem(it)
+	expected = fmt.Sprintf("%s %s  %s", symbolStory, subtleStyle.Render("one"), subtleStyle.Render("(one)"))
+	if s != expected {
+		t.Fatalf("expected dimmed slug and name when unselected: %q", s)
+	}
+	it.Selected = true
+	it.Skip = true
+	s = displayPreflightItem(it)
+	if s != expected {
+		t.Fatalf("expected dimmed slug and name when skipped: %q", s)
 	}
 }
