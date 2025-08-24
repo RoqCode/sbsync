@@ -99,6 +99,11 @@ type Model struct {
 	storiesSource []sb.Story
 	storiesTarget []sb.Story
 
+	// tree state
+	storyIdx        map[int]int  // Story ID -> index in storiesSource
+	folderCollapsed map[int]bool // Folder ID -> collapsed?
+	visibleIdx      []int        // indices of visible storiesSource entries
+
 	selection SelectionState
 	filter    FilterState
 	search    SearchState
@@ -132,6 +137,8 @@ func InitialModel() Model {
 	ti.CharLimit = 200
 	m.ti = ti
 	m.selection.selected = make(map[string]bool)
+	m.folderCollapsed = make(map[int]bool)
+	m.storyIdx = make(map[int]int)
 
 	// search
 	si := textinput.New()

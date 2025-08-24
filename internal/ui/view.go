@@ -244,7 +244,7 @@ func (m Model) viewBrowseList() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-	b.WriteString(helpStyle.Render("j/k bewegen  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
+	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
 	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
 	return b.String()
 }
