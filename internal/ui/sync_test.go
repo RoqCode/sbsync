@@ -1,10 +1,26 @@
 package ui
 
 import (
+	"io"
+	"net/http"
+	"reflect"
+	"strings"
 	"testing"
+	"unsafe"
 
 	"storyblok-sync/internal/sb"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func setField(obj interface{}, name string, val interface{}) {
+	rv := reflect.ValueOf(obj).Elem().FieldByName(name)
+	reflect.NewAt(rv.Type(), unsafe.Pointer(rv.UnsafeAddr())).Elem().Set(reflect.ValueOf(val))
+}
 
 func TestSyncStructureCreatesFolders(t *testing.T) {
 	root := sb.Story{ID: 1, Name: "a__portal", Slug: "a__portal", FullSlug: "a__portal", IsFolder: true}
@@ -28,6 +44,44 @@ func TestSyncStructureCreatesFolders(t *testing.T) {
 		if idx := m.findTarget(slug); idx < 0 {
 			t.Fatalf("folder %s not created", slug)
 		}
+	}
+}
+
+func TestSyncStructureUsesRemoteFolder(t *testing.T) {
+	root := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	de := sb.Story{ID: 2, Name: "de", Slug: "de", FullSlug: "app/de", FolderID: &root.ID, IsFolder: true}
+	item := sb.Story{ID: 3, Name: "one", Slug: "one", FullSlug: "app/de/one", FolderID: &de.ID}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{root, de, item}
+	m.storiesTarget = []sb.Story{root}
+
+	c := sb.New("token")
+	getCalls := 0
+	setField(c, "http", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		getCalls++
+		slug := req.URL.Query().Get("with_slug")
+		if slug != "app/de" {
+			t.Fatalf("unexpected slug %s", slug)
+		}
+		body := `{"story":{"id":2,"name":"de","slug":"de","full_slug":"app/de","parent_id":1,"is_folder":true}}`
+		res := &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
+		return res, nil
+	})})
+	m.api = c
+	m.targetSpace = &sb.Space{ID: 1}
+
+	if err := m.syncStructure(item); err != nil {
+		t.Fatalf("syncStructure: %v", err)
+	}
+	if getCalls != 1 {
+		t.Fatalf("expected 1 API call, got %d", getCalls)
+	}
+	if idx := m.findTarget(de.FullSlug); idx < 0 {
+		t.Fatalf("expected folder %s in target", de.FullSlug)
+	}
+	if len(m.storiesTarget) != 2 {
+		t.Fatalf("expected 2 folders, got %d", len(m.storiesTarget))
 	}
 }
 

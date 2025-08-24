@@ -78,3 +78,41 @@ func TestListStoriesPagination(t *testing.T) {
 		t.Fatalf("expected 2 calls, got %d", calls)
 	}
 }
+
+func TestGetStoryBySlug(t *testing.T) {
+	c := New("token")
+	c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != "GET" {
+			t.Fatalf("expected GET, got %s", req.Method)
+		}
+		q := req.URL.Query().Get("with_slug")
+		if q != "app/de" {
+			t.Fatalf("unexpected with_slug %s", q)
+		}
+		body := `{"story":{"id":2,"name":"de"}}`
+		res := &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
+		return res, nil
+	})}
+	st, err := c.GetStoryBySlug(context.Background(), 1, "app/de")
+	if err != nil {
+		t.Fatalf("GetStoryBySlug returned error: %v", err)
+	}
+	if st.ID != 2 || st.Name != "de" {
+		t.Fatalf("unexpected story: %+v", st)
+	}
+}
+
+func TestGetStoryBySlugNotFound(t *testing.T) {
+	c := New("token")
+	c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		res := &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}
+		return res, nil
+	})}
+	st, err := c.GetStoryBySlug(context.Background(), 1, "missing")
+	if err != nil {
+		t.Fatalf("GetStoryBySlug returned error: %v", err)
+	}
+	if st.ID != 0 {
+		t.Fatalf("expected zero story, got %+v", st)
+	}
+}

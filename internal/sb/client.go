@@ -168,6 +168,36 @@ func (c *Client) GetStory(ctx context.Context, spaceID, storyID int) (Story, err
 	return payload.Story, nil
 }
 
+// GetStoryBySlug fetches a single story by its full slug.
+func (c *Client) GetStoryBySlug(ctx context.Context, spaceID int, slug string) (Story, error) {
+	if c.token == "" {
+		return Story{}, errors.New("token leer")
+	}
+	u, _ := url.Parse(fmt.Sprintf(base+"/spaces/%d/stories", spaceID))
+	q := u.Query()
+	q.Set("with_slug", slug)
+	u.RawQuery = q.Encode()
+	req, _ := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode == 404 {
+		return Story{}, nil
+	}
+	if res.StatusCode != 200 {
+		return Story{}, fmt.Errorf("story.slug status %s", res.Status)
+	}
+	var payload storyResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return Story{}, err
+	}
+	return payload.Story, nil
+}
+
 // CreateStory creates a new story (or folder) in the target space.
 func (c *Client) CreateStory(ctx context.Context, spaceID int, st Story) (Story, error) {
 	if c.token == "" {

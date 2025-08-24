@@ -106,6 +106,24 @@ func (m *Model) syncStructure(st sb.Story) error {
 			parentID = &id
 			continue
 		}
+		if m.api != nil && m.targetSpace != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			existing, err := m.api.GetStoryBySlug(ctx, m.targetSpace.ID, full)
+			cancel()
+			if err != nil {
+				return err
+			}
+			if existing.ID != 0 {
+				if parentID != nil && existing.FolderID == nil {
+					id := *parentID
+					existing.FolderID = &id
+				}
+				m.storiesTarget = append(m.storiesTarget, existing)
+				id := existing.ID
+				parentID = &id
+				continue
+			}
+		}
 		src, ok := m.findSource(full)
 		if !ok {
 			src = sb.Story{Name: p, Slug: p, FullSlug: full, IsFolder: true}
