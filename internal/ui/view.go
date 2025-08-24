@@ -317,6 +317,8 @@ func (m Model) viewPreflight() string {
 				stateCell = m.spinner.View()
 			case RunDone:
 				stateCell = stateDoneStyle.Render(string(it.State))
+			case RunCancelled:
+				stateCell = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("0")).Bold(true).Render("X")
 			default:
 				if it.State != "" {
 					if st, ok := stateStyles[it.State]; ok {
@@ -344,7 +346,11 @@ func (m Model) viewPreflight() string {
 		b.WriteString(renderProgress(m.syncIndex, len(m.preflight.items), m.width-2))
 		b.WriteString("\n\n")
 	}
-	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"))
+	if m.syncing {
+		b.WriteString(helpStyle.Render("Syncing... | Ctrl+C to cancel"))
+	} else {
+		b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"))
+	}
 	return b.String()
 }
 

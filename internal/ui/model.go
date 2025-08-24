@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"storyblok-sync/internal/config"
 	"storyblok-sync/internal/sb"
 	"strings"
@@ -102,6 +103,7 @@ const (
 	RunPending RunState = iota
 	RunRunning
 	RunDone
+	RunCancelled
 )
 
 type PreflightItem struct {
@@ -146,11 +148,13 @@ type Model struct {
 	width, height int
 
 	// spinner for loading states
-	spinner   spinner.Model
-	syncing   bool
-	syncIndex int
-	api       *sb.Client
-	report    Report
+	spinner     spinner.Model
+	syncing     bool
+	syncIndex   int
+	syncCancel  context.CancelFunc // for cancelling sync operations
+	syncContext context.Context    // cancellable context for sync
+	api         *sb.Client
+	report      Report
 
 	// token input
 	ti textinput.Model

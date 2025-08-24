@@ -23,7 +23,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// global shortcuts
-		if key == "ctrl+c" || key == "q" {
+		if key == "ctrl+c" {
+			// If we're syncing, cancel the sync operations
+			if m.syncing && m.syncCancel != nil {
+				m.syncCancel()
+				m.statusMsg = "Sync cancelled by user (Ctrl+C)"
+				return m, nil
+			}
+			return m, tea.Quit
+		}
+		if key == "q" {
 			return m, tea.Quit
 		}
 
@@ -111,6 +120,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case syncResultMsg:
 		if msg.index < len(m.preflight.items) {
+			if msg.cancelled {
+				m.preflight.items[msg.index].Run = RunCancelled
+				it := m.preflight.items[msg.index]
+				m.report.AddError(it.Story.FullSlug, "cancelled", "Sync cancelled by user", 0, &it.Story)
+
+				// Mark all remaining items as cancelled
+				for i := msg.index + 1; i < len(m.preflight.items); i++ {
+					if m.preflight.items[i].Run == RunPending || m.preflight.items[i].Run == RunRunning {
+						m.preflight.items[i].Run = RunCancelled
+						it := m.preflight.items[i]
+						m.report.AddError(it.Story.FullSlug, "cancelled", "Sync cancelled by user", 0, &it.Story)
+					}
+				}
+
+				m.syncing = false
+				m.syncCancel = nil
+				m.syncContext = nil
+				m.statusMsg = "Sync cancelled - press 'r' to generate report"
+				return m, nil
+			}
+
 			m.preflight.items[msg.index].Run = RunDone
 			it := m.preflight.items[msg.index]
 
@@ -133,18 +163,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		done := 0
+		cancelled := 0
 		for _, it := range m.preflight.items {
 			if it.Run == RunDone {
 				done++
+			} else if it.Run == RunCancelled {
+				cancelled++
 			}
 		}
 		m.syncIndex = done
-		if done < len(m.preflight.items) {
+
+		// Continue only if we haven't finished all items and haven't been cancelled
+		if done+cancelled < len(m.preflight.items) && cancelled == 0 {
 			return m, m.runNextItem()
 		}
 
 		m.syncing = false
-		m.statusMsg = m.report.GetDisplaySummary()
+		if cancelled > 0 {
+			m.statusMsg = fmt.Sprintf("Sync cancelled - %d completed, %d cancelled", done, cancelled)
+		} else {
+			m.statusMsg = m.report.GetDisplaySummary()
+		}
 		_ = m.report.Save()
 		return m, nil
 	}
@@ -489,6 +528,9 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.syncing = true
 		m.syncIndex = 0
 		m.api = sb.New(m.cfg.Token)
+
+		// Set up cancellation context for sync operations
+		m.syncContext, m.syncCancel = context.WithCancel(context.Background())
 
 		// Initialize comprehensive report with space information
 		sourceSpaceName := ""
