@@ -214,9 +214,9 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish
 	}
 	if !st.IsFolder {
 		if publish {
-			payload["publish"] = "1"
+			payload["publish"] = 1
 		} else {
-			payload["publish"] = "0"
+			payload["publish"] = 0
 		}
 	}
 	body, err := json.Marshal(payload)
@@ -260,9 +260,9 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	}
 	if !st.IsFolder {
 		if publish {
-			payload["publish"] = "1"
+			payload["publish"] = 1
 		} else {
-			payload["publish"] = "0"
+			payload["publish"] = 0
 		}
 	}
 
