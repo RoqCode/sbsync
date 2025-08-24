@@ -475,7 +475,8 @@ func (m *Model) startPreflight() {
 	var walk func(int)
 	walk = func(idx int) {
 		st := m.storiesSource[idx]
-		it := PreflightItem{Story: st, Collision: target[st.FullSlug], Selected: m.selection.selected[st.FullSlug]}
+		sel := m.selection.selected[st.FullSlug]
+		it := PreflightItem{Story: st, Collision: sel && target[st.FullSlug], Selected: sel}
 		items = append(items, it)
 		for _, ch := range children[idx] {
 			walk(ch)

@@ -24,7 +24,7 @@ var (
 	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
 	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
 	markNestedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA"))
-	collisionSign   = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("⚠")
+	collisionSign   = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("!")
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")

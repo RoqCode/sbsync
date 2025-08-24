@@ -272,7 +272,7 @@ func (m Model) viewPreflight() string {
 		tr := tree.New()
 		nodes := make(map[int]*tree.Tree, len(m.preflight.items))
 		for _, it := range m.preflight.items {
-			node := tree.Root(displayStory(it.Story))
+			node := tree.Root(displayPreflightItem(it))
 			nodes[it.Story.ID] = node
 		}
 		for _, it := range m.preflight.items {
@@ -301,8 +301,6 @@ func (m Model) viewPreflight() string {
 			}
 			if it.Skip {
 				content = subtleStyle.Render(content + " [skip]")
-			} else if !it.Selected {
-				content = subtleStyle.Render(content)
 			}
 			if i == m.preflight.listIndex {
 				content = cursorLineStyle.Width(m.width - 2).Render(content)
@@ -333,6 +331,20 @@ func (m Model) viewPreflight() string {
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  Enter OK  |  esc/q zurück"))
 	return b.String()
+}
+
+func displayPreflightItem(it PreflightItem) string {
+	name := it.Story.Name
+	if name == "" {
+		name = it.Story.Slug
+	}
+	slug := it.Story.FullSlug
+	if !it.Selected {
+		name = subtleStyle.Render(name)
+		slug = subtleStyle.Render(slug)
+	}
+	sym := storyTypeSymbol(it.Story)
+	return fmt.Sprintf("%s %s  (%s)", sym, name, slug)
 }
 
 func displayStory(st sb.Story) string {

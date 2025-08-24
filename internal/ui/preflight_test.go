@@ -33,6 +33,39 @@ func TestStartPreflightDetectsCollisions(t *testing.T) {
 	}
 }
 
+func TestPreflightIgnoresCollisionsForUnselectedFolders(t *testing.T) {
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child := sb.Story{ID: 2, Name: "child", Slug: "child", FullSlug: "app/child", FolderID: &parent.ID}
+	tgt := sb.Story{ID: 3, Name: "app", Slug: "app", FullSlug: "app"}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child}
+	m.storiesTarget = []sb.Story{tgt}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[child.FullSlug] = true
+
+	m.startPreflight()
+
+	if len(m.preflight.items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(m.preflight.items))
+	}
+	var folderItem *PreflightItem
+	for i := range m.preflight.items {
+		if m.preflight.items[i].Story.ID == parent.ID {
+			folderItem = &m.preflight.items[i]
+		}
+	}
+	if folderItem == nil {
+		t.Fatalf("folder not found in preflight items")
+	}
+	if folderItem.Collision {
+		t.Fatalf("expected no collision for unselected folder")
+	}
+}
+
 func TestPreflightSkipToggleAndGlobal(t *testing.T) {
 	st := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
 	tgt := sb.Story{ID: 2, Name: "one", Slug: "one", FullSlug: "one"}
