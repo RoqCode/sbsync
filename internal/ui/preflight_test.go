@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,9 +33,12 @@ func TestStartPreflightDetectsCollisions(t *testing.T) {
 	if !m.preflight.items[0].Collision {
 		t.Fatalf("expected collision for first item")
 	}
+	if m.preflight.items[0].State != StateUpdate {
+		t.Fatalf("expected state update, got %v", m.preflight.items[0].State)
+	}
 }
 
-func TestPreflightIgnoresCollisionsForUnselectedFolders(t *testing.T) {
+func TestPreflightMarksUnselectedFoldersSkipped(t *testing.T) {
 	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
 	child := sb.Story{ID: 2, Name: "child", Slug: "child", FullSlug: "app/child", FolderID: &parent.ID}
 	tgt := sb.Story{ID: 3, Name: "app", Slug: "app", FullSlug: "app"}
@@ -62,8 +66,14 @@ func TestPreflightIgnoresCollisionsForUnselectedFolders(t *testing.T) {
 	if folderItem == nil {
 		t.Fatalf("folder not found in preflight items")
 	}
-	if folderItem.Collision {
-		t.Fatalf("expected no collision for unselected folder")
+	if !folderItem.Collision {
+		t.Fatalf("expected collision for unselected folder")
+	}
+	if !folderItem.Skip {
+		t.Fatalf("expected unselected folder to be skipped")
+	}
+	if folderItem.State != StateSkip {
+		t.Fatalf("expected state skip for unselected folder, got %v", folderItem.State)
 	}
 }
 
@@ -85,10 +95,17 @@ func TestPreflightSkipToggleAndGlobal(t *testing.T) {
 	if !m.preflight.items[0].Skip {
 		t.Fatalf("expected item skipped after x")
 	}
+	if m.preflight.items[0].State != StateSkip {
+		t.Fatalf("expected state skip after x, got %v", m.preflight.items[0].State)
+	}
 	m.preflight.items[0].Skip = false
+	m.preflight.items[0].State = StateUpdate
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
 	if !m.preflight.items[0].Skip {
 		t.Fatalf("expected item skipped after X")
+	}
+	if m.preflight.items[0].State != StateSkip {
+		t.Fatalf("expected state skip after X, got %v", m.preflight.items[0].State)
 	}
 	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	if m.selection.selected[st.FullSlug] {
@@ -121,5 +138,30 @@ func TestDisplayPreflightItemDimsSlug(t *testing.T) {
 	s = displayPreflightItem(it)
 	if s != expected {
 		t.Fatalf("expected dimmed slug and name when skipped: %q", s)
+	}
+}
+
+func TestViewPreflightShowsStateCell(t *testing.T) {
+	st := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st}
+	m.rebuildStoryIndex()
+	m.applyFilter()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[st.FullSlug] = true
+	m.startPreflight()
+
+	out := m.viewPreflight()
+	if !strings.Contains(out, stateStyles[StateCreate].Render(string(StateCreate))) {
+		t.Fatalf("expected create state cell")
+	}
+
+	m.preflight.items[0].Skip = true
+	m.preflight.items[0].RecalcState()
+	out = m.viewPreflight()
+	if !strings.Contains(out, stateStyles[StateSkip].Render(string(StateSkip))) {
+		t.Fatalf("expected skip state cell")
 	}
 }

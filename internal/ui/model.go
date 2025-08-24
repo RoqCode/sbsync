@@ -13,18 +13,21 @@ import (
 
 // --- UI Styles ---
 var (
-	titleStyle      = lipgloss.NewStyle().Bold(true).Underline(true)
-	subtleStyle     = lipgloss.NewStyle().Faint(true)
-	okStyle         = lipgloss.NewStyle().Bold(true)
-	warnStyle       = lipgloss.NewStyle().Bold(true)
-	helpStyle       = lipgloss.NewStyle().Faint(true)
-	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	focusStyle      = lipgloss.NewStyle().Bold(true)
-	cursorLineStyle = lipgloss.NewStyle().Background(lipgloss.Color("#2A2B3D"))
-	cursorBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
-	markBarStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
-	markNestedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA"))
-	collisionSign   = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("!")
+	titleStyle       = lipgloss.NewStyle().Bold(true).Underline(true)
+	subtleStyle      = lipgloss.NewStyle().Faint(true)
+	okStyle          = lipgloss.NewStyle().Bold(true)
+	warnStyle        = lipgloss.NewStyle().Bold(true)
+	helpStyle        = lipgloss.NewStyle().Faint(true)
+	dividerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	focusStyle       = lipgloss.NewStyle().Bold(true)
+	cursorLineStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#2A2B3D"))
+	cursorBarStyle   = lipgloss.NewStyle().Background(lipgloss.Color("#FFAB78"))
+	markBarStyle     = lipgloss.NewStyle().Background(lipgloss.Color("#3AC4BA"))
+	markNestedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA"))
+	collisionSign    = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("!")
+	stateCreateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	stateUpdateStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	stateSkipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
@@ -75,11 +78,39 @@ type SearchState struct {
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
 }
 
+// SyncState represents the action that will be performed for a story.
+// It is kept as a string to allow easy extension with additional states.
+type SyncState string
+
+const (
+	StateCreate SyncState = "C"
+	StateUpdate SyncState = "U"
+	StateSkip   SyncState = "S"
+)
+
+var stateStyles = map[SyncState]lipgloss.Style{
+	StateCreate: stateCreateStyle,
+	StateUpdate: stateUpdateStyle,
+	StateSkip:   stateSkipStyle,
+}
+
 type PreflightItem struct {
 	Story     sb.Story
 	Collision bool
 	Skip      bool
 	Selected  bool
+	State     SyncState
+}
+
+func (it *PreflightItem) RecalcState() {
+	switch {
+	case it.Skip:
+		it.State = StateSkip
+	case it.Collision:
+		it.State = StateUpdate
+	default:
+		it.State = StateCreate
+	}
 }
 
 type PreflightState struct {
