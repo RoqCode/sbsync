@@ -75,11 +75,33 @@ type SearchState struct {
 	filteredIdx []int  // Mapping: sichtbarer Index -> original Index
 }
 
+// SyncState represents the action that will be performed for a story.
+// It is kept as a string to allow easy extension with additional states.
+type SyncState string
+
+const (
+	StateCreate SyncState = "C"
+	StateUpdate SyncState = "U"
+	StateSkip   SyncState = "S"
+)
+
 type PreflightItem struct {
 	Story     sb.Story
 	Collision bool
 	Skip      bool
 	Selected  bool
+	State     SyncState
+}
+
+func (it *PreflightItem) RecalcState() {
+	switch {
+	case it.Skip:
+		it.State = StateSkip
+	case it.Collision:
+		it.State = StateUpdate
+	default:
+		it.State = StateCreate
+	}
 }
 
 type PreflightState struct {

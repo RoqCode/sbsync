@@ -299,14 +299,11 @@ func (m Model) viewPreflight() string {
 			} else {
 				content = "  " + content
 			}
-			if it.Skip {
-				content += " [skip]"
-			}
 			lineStyle := lipgloss.NewStyle().Width(m.width - 2)
 			if i == m.preflight.listIndex {
 				lineStyle = cursorLineStyle.Copy().Width(m.width - 2)
 			}
-			if it.Skip {
+			if it.State == StateSkip {
 				lineStyle = lineStyle.Faint(true)
 			}
 			content = lineStyle.Render(content)
@@ -314,11 +311,11 @@ func (m Model) viewPreflight() string {
 			if i == m.preflight.listIndex {
 				cursorCell = cursorBarStyle.Render(" ")
 			}
-			skipCell := " "
-			if it.Skip {
-				skipCell = markBarStyle.Render("x")
+			stateCell := " "
+			if it.State != "" {
+				stateCell = markBarStyle.Render(string(it.State))
 			}
-			lines[i] = cursorCell + skipCell + content
+			lines[i] = cursorCell + stateCell + content
 		}
 		start := m.preflight.listOffset
 		if start > len(lines) {
@@ -342,7 +339,7 @@ func displayPreflightItem(it PreflightItem) string {
 		name = it.Story.Slug
 	}
 	slug := "(" + it.Story.FullSlug + ")"
-	if !it.Selected || it.Skip {
+	if !it.Selected || it.State == StateSkip {
 		name = subtleStyle.Render(name)
 		slug = subtleStyle.Render(slug)
 	}

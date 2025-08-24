@@ -413,12 +413,14 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			it := &m.preflight.items[m.preflight.listIndex]
 			if it.Collision {
 				it.Skip = !it.Skip
+				it.RecalcState()
 			}
 		}
 	case "X":
 		for i := range m.preflight.items {
 			if m.preflight.items[i].Collision {
 				m.preflight.items[i].Skip = true
+				m.preflight.items[i].RecalcState()
 			}
 		}
 	case "c":
@@ -489,6 +491,7 @@ func (m *Model) startPreflight() {
 		st := m.storiesSource[idx]
 		sel := m.selection.selected[st.FullSlug]
 		it := PreflightItem{Story: st, Collision: sel && target[st.FullSlug], Selected: sel}
+		it.RecalcState()
 		items = append(items, it)
 		for _, ch := range children[idx] {
 			walk(ch)
