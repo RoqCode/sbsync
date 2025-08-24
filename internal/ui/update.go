@@ -421,6 +421,10 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.preflight.items[i].Skip = true
 			}
 		}
+	case "c":
+		for i := range m.preflight.items {
+			m.preflight.items[i].Skip = false
+		}
 	case "esc", "q":
 		m.state = stateBrowseList
 		return m, nil

@@ -332,7 +332,7 @@ func (m Model) viewPreflight() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  Enter OK  |  esc/q zurück"))
+	b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  c skip zurücksetzen  |  Enter OK  |  esc/q zurück"))
 	return b.String()
 }
 
