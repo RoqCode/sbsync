@@ -29,8 +29,9 @@ func New(token string) *Client {
 
 // ---------- Spaces ----------
 type Space struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	PlanLevel int    `json:"plan_level"`
 }
 
 type spacesResp struct {
@@ -78,6 +79,7 @@ type Story struct {
 	Slug                      string                 `json:"slug"`
 	FullSlug                  string                 `json:"full_slug"`
 	Content                   map[string]interface{} `json:"content,omitempty"`
+	ContentType               string                 `json:"content_type,omitempty"`
 	FolderID                  *int                   `json:"parent_id,omitempty"`
 	CreatedAt                 string                 `json:"created_at,omitempty"`
 	UpdatedAt                 string                 `json:"updated_at,omitempty"`
@@ -197,7 +199,7 @@ func (c *Client) CreateStory(ctx context.Context, spaceID int, st Story) (Story,
 }
 
 // UpdateStory updates an existing story in the target space.
-func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story, error) {
+func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish bool) (Story, error) {
 	if c.token == "" {
 		return Story{}, errors.New("token leer")
 	}
@@ -209,8 +211,12 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 		"story":        st,
 		"force_update": "1",
 	}
-	if st.Published && !st.IsFolder {
-		// payload["publish"] = "1"
+	if !st.IsFolder {
+		if publish {
+			payload["publish"] = "1"
+		} else {
+			payload["publish"] = "0"
+		}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -235,7 +241,7 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 }
 
 // CreateStoryWithPublish creates a new story with proper payload structure
-func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Story) (Story, error) {
+func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Story, publish bool) (Story, error) {
 	if c.token == "" {
 		return Story{}, errors.New("token leer")
 	}
@@ -244,8 +250,12 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 		"story":        st,
 		"force_update": "1",
 	}
-	if st.Published && !st.IsFolder {
-		// payload["publish"] = "1"
+	if !st.IsFolder {
+		if publish {
+			payload["publish"] = "1"
+		} else {
+			payload["publish"] = "0"
+		}
 	}
 
 	// DEBUG: Log the payload before marshalling
