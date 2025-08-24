@@ -210,7 +210,7 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story) (Story,
 		"force_update": "1",
 	}
 	if st.Published && !st.IsFolder {
-		payload["publish"] = "1"
+		// payload["publish"] = "1"
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -245,9 +245,9 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 		"force_update": "1",
 	}
 	if st.Published && !st.IsFolder {
-		payload["publish"] = "1"
+		// payload["publish"] = "1"
 	}
-	
+
 	// DEBUG: Log the payload before marshalling
 	log.Printf("DEBUG: Creating story - Before marshal:")
 	log.Printf("DEBUG: Story has content: %t", st.Content != nil)
@@ -260,12 +260,12 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	}
 	log.Printf("DEBUG: Story is folder: %t", st.IsFolder)
 	log.Printf("DEBUG: Story published: %t", st.Published)
-	
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return Story{}, err
 	}
-	
+
 	// DEBUG: Log the actual JSON being sent
 	log.Printf("DEBUG: JSON payload being sent (%d bytes):", len(body))
 	if len(body) < 2000 {
@@ -273,7 +273,7 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	} else {
 		log.Printf("DEBUG: JSON too large, truncated: %s...", string(body[:2000]))
 	}
-	
+
 	// DEBUG: Try minimal payload approach for debugging
 	log.Printf("DEBUG: Story UUID: %s", st.UUID)
 	log.Printf("DEBUG: Story Name: %s", st.Name)
@@ -368,11 +368,11 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 	if c.token == "" {
 		return Story{}, errors.New("token leer")
 	}
-	
+
 	// Based on Storyblok CLI: just fetch by ID without version parameter
 	// The CLI does: client.get(`spaces/${spaceId}/stories/${storyId}`)
 	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
-	
+
 	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
@@ -388,7 +388,7 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
 		return Story{}, err
 	}
-	
+
 	// DEBUG: Log what we received from the API
 	story := payload.Story
 	log.Printf("DEBUG: Fetched story %d (%s) - Content present: %t", story.ID, story.FullSlug, story.Content != nil)
@@ -401,7 +401,7 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 	} else {
 		log.Printf("DEBUG: Story content is nil - this is likely the issue!")
 	}
-	
+
 	return story, nil
 }
 
@@ -415,7 +415,7 @@ func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, 
 		// Include both version and resolve_relations for full content
 		u = fmt.Sprintf(base+"/spaces/%d/stories/%d?version=%s&resolve_relations=1", spaceID, storyID, version)
 	}
-	
+
 	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
