@@ -9,134 +9,137 @@ import (
 	tree "github.com/charmbracelet/lipgloss/tree"
 )
 
-func (m Model) viewBrowseList() string {
-	var b strings.Builder
+func (m *Model) updateBrowseViewport() {
+	content := m.renderBrowseContent()
+	m.viewport.SetContent(content)
+}
+
+func (m Model) renderBrowseHeader() string {
 	srcCount := len(m.storiesSource)
 	tgtCount := len(m.storiesTarget)
-	b.WriteString(fmt.Sprintf("Browse (Source Stories) – %d Items  |  Target: %d\n\n", srcCount, tgtCount))
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Browse (Source Stories) – %d Items  |  Target: %d\n", srcCount, tgtCount))
+
+	// Search and filter status
+	label := "Suche: "
+	if m.search.searching {
+		b.WriteString(label + m.search.searchInput.View() + "  |  ")
+	} else {
+		b.WriteString(label + m.search.query + "  |  ")
+	}
+
+	if m.filter.prefixing {
+		b.WriteString("Prefix: " + m.filter.prefixInput.View())
+	} else {
+		b.WriteString(subtleStyle.Render("Prefix:" + m.filter.prefix))
+	}
+
+	return b.String()
+}
+
+func (m Model) renderBrowseContent() string {
+	var b strings.Builder
+	srcCount := len(m.storiesSource)
+
 	if srcCount == 0 {
 		b.WriteString(warnStyle.Render("Keine Stories im Source gefunden.") + "\n")
-	} else {
-		// sichtbaren Bereich bestimmen
-		total := m.itemsLen()
-
-		// Suchleiste (falls aktiv oder Query gesetzt)
-		label := "Suche: "
-		if m.search.searching {
-			b.WriteString(label + m.search.searchInput.View() + "  |  ")
-		} else {
-			b.WriteString(label + m.search.query + "  |  ")
-		}
-
-		if m.filter.prefixing {
-			b.WriteString("Prefix: " + m.filter.prefixInput.View() + "\n\n")
-		} else {
-			b.WriteString(subtleStyle.Render("Prefix:"+m.filter.prefix) + "\n\n")
-		}
-
-		if total == 0 {
-			b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).") + "\n")
-		} else {
-			// Sammle sichtbare Stories
-			stories := make([]sb.Story, total)
-			for i := 0; i < total; i++ {
-				stories[i] = m.itemAt(i)
-			}
-
-			// Erzeuge Tree-Struktur
-			tr := tree.New()
-			nodes := make(map[int]*tree.Tree, len(stories))
-			for _, st := range stories {
-				node := tree.Root(displayStory(st))
-				nodes[st.ID] = node
-			}
-
-			for _, st := range stories {
-				node := nodes[st.ID]
-				if st.FolderID != nil {
-					if parent, ok := nodes[*st.FolderID]; ok {
-						parent.Child(node)
-						continue
-					}
-				}
-				tr.Child(node)
-			}
-
-			// Begrenze Ausgabe auf sichtbaren Bereich
-			lines := strings.Split(tr.String(), "\n")
-			if len(lines) > 0 && lines[len(lines)-1] == "" {
-				lines = lines[:len(lines)-1]
-			}
-
-			for i, st := range stories {
-				if i >= len(lines) {
-					break
-				}
-
-				content := lines[i]
-				if i == m.selection.listIndex {
-					content = cursorLineStyle.Width(m.width - 2).Render(content)
-				} else {
-					content = lipgloss.NewStyle().Width(m.width - 2).Render(content)
-				}
-
-				cursorCell := " "
-				if i == m.selection.listIndex {
-					cursorCell = cursorBarStyle.Render(" ")
-				}
-
-				markCell := " "
-				if m.selection.selected[st.FullSlug] {
-					markCell = markBarStyle.Render(" ")
-				} else if st.IsFolder {
-					if m.hasSelectedDirectChild(st.FullSlug) {
-						markCell = markNestedStyle.Render(":")
-					} else if m.hasSelectedDescendant(st.FullSlug) {
-						markCell = markNestedStyle.Render("·")
-					}
-				}
-
-				lines[i] = cursorCell + markCell + content
-			}
-
-			start := m.selection.listOffset
-			if start > len(lines) {
-				start = len(lines)
-			}
-			end := start + m.selection.listViewport
-			if end > len(lines) {
-				end = len(lines)
-			}
-			b.WriteString(strings.Join(lines[start:end], "\n"))
-			b.WriteString("\n")
-
-			shown := end - start
-
-			// Anzeige: Filterstatus + Range
-			suffix := ""
-			if m.search.filteredIdx != nil {
-				suffix = fmt.Sprintf("  |  gefiltert: %d", total)
-			}
-			b.WriteString("\n")
-			b.WriteString(subtleStyle.Render(
-				fmt.Sprintf("Zeilen %d–%d von %d (sichtbar: %d)%s",
-					start+1, end, total, shown, suffix),
-			))
-			b.WriteString("\n")
-		}
+		return b.String()
 	}
-	// Footer / Hilfe
+
+	total := m.itemsLen()
+	if total == 0 {
+		b.WriteString(warnStyle.Render("Keine Stories gefunden (Filter aktiv?).") + "\n")
+		return b.String()
+	}
+
+	// Sammle sichtbare Stories
+	stories := make([]sb.Story, total)
+	for i := 0; i < total; i++ {
+		stories[i] = m.itemAt(i)
+	}
+
+	// Erzeuge Tree-Struktur
+	tr := tree.New()
+	nodes := make(map[int]*tree.Tree, len(stories))
+	for _, st := range stories {
+		node := tree.Root(displayStory(st))
+		nodes[st.ID] = node
+	}
+
+	for _, st := range stories {
+		node := nodes[st.ID]
+		if st.FolderID != nil {
+			if parent, ok := nodes[*st.FolderID]; ok {
+				parent.Child(node)
+				continue
+			}
+		}
+		tr.Child(node)
+	}
+
+	// Render tree lines
+	lines := strings.Split(tr.String(), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	for i, st := range stories {
+		if i >= len(lines) {
+			break
+		}
+
+		content := lines[i]
+		if i == m.selection.listIndex {
+			content = cursorLineStyle.Width(m.width - 4).Render(content)
+		} else {
+			content = lipgloss.NewStyle().Width(m.width - 4).Render(content)
+		}
+
+		cursorCell := " "
+		if i == m.selection.listIndex {
+			cursorCell = cursorBarStyle.Render(" ")
+		}
+
+		markCell := " "
+		if m.selection.selected[st.FullSlug] {
+			markCell = markBarStyle.Render(" ")
+		} else if st.IsFolder {
+			if m.hasSelectedDirectChild(st.FullSlug) {
+				markCell = markNestedStyle.Render(":")
+			} else if m.hasSelectedDescendant(st.FullSlug) {
+				markCell = markNestedStyle.Render("·")
+			}
+		}
+
+		lines[i] = cursorCell + markCell + content
+	}
+
+	b.WriteString(strings.Join(lines, "\n"))
+	return b.String()
+}
+
+func (m Model) renderBrowseFooter() string {
+	total := m.itemsLen()
 	checked := 0
 	for _, v := range m.selection.selected {
 		if v {
 			checked++
 		}
 	}
-	b.WriteString("\n")
-	b.WriteString(subtleStyle.Render(fmt.Sprintf("Markiert: %d", checked)) + "\n")
-	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
-	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
-	return b.String()
+
+	// Status info
+	suffix := ""
+	if m.search.filteredIdx != nil {
+		suffix = fmt.Sprintf("  |  gefiltert: %d", total)
+	}
+	statusLine := fmt.Sprintf("Total: %d | Markiert: %d%s", total, checked, suffix)
+
+	return renderFooter(
+		statusLine,
+		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden",
+		"p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück",
+	)
 }
 
 func displayStory(st sb.Story) string {

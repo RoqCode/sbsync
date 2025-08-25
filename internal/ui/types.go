@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 )
 
 // --- Model / State ---
@@ -20,16 +21,15 @@ const (
 	stateScanning
 	stateBrowseList
 	statePreflight
+	stateSync
 	stateReport
 	stateQuit
 )
 
 type SelectionState struct {
 	// browse list (source)
-	listIndex    int
-	listOffset   int
-	listViewport int
-	selected     map[string]bool // key: FullSlug (oder Full Path)
+	listIndex int
+	selected  map[string]bool // key: FullSlug (oder Full Path)
 }
 
 type FilterState struct {
@@ -89,10 +89,8 @@ func (it *PreflightItem) RecalcState() {
 }
 
 type PreflightState struct {
-	items        []PreflightItem
-	listIndex    int
-	listOffset   int
-	listViewport int
+	items     []PreflightItem
+	listIndex int
 }
 
 type SyncPlan struct {
@@ -107,6 +105,9 @@ type Model struct {
 	statusMsg     string
 	validateErr   error
 	width, height int
+
+	// viewport for scrollable content
+	viewport viewport.Model
 
 	// spinner for loading states
 	spinner     spinner.Model

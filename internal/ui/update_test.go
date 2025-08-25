@@ -154,9 +154,9 @@ func TestPartialFolderMarkingIndicator(t *testing.T) {
 	}
 	m.selection.selected[child.FullSlug] = true
 	m.refreshVisible()
-	m.selection.listViewport = 10
 
-	out := m.viewBrowseList()
+	m.updateBrowseViewport()
+	out := m.renderBrowseContent()
 	if !strings.Contains(out, markNestedStyle.Render(":")) {
 		t.Fatalf("expected ':' marker for folder with selected child")
 	}
@@ -181,9 +181,9 @@ func TestNestedFolderMarkingIndicator(t *testing.T) {
 	}
 	m.selection.selected[child.FullSlug] = true
 	m.refreshVisible()
-	m.selection.listViewport = 10
 
-	out := m.viewBrowseList()
+	m.updateBrowseViewport()
+	out := m.renderBrowseContent()
 	if !strings.Contains(out, markNestedStyle.Render("·")) {
 		t.Fatalf("expected '·' marker for folder with selected descendant")
 	}

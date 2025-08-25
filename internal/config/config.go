@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-const TOKEN_PATH = "./.sbrc"
-
 type Config struct {
 	Token       string
 	SourceSpace string
@@ -18,7 +16,11 @@ type Config struct {
 }
 
 func DefaultPath() string {
-	return TOKEN_PATH
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".sbrc" // fallback to current directory
+	}
+	return filepath.Join(home, ".sbrc")
 }
 
 func Load(path string) (Config, error) {

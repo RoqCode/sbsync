@@ -5,6 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"storyblok-sync/internal/config"
 )
 
 // ---------- Update ----------
@@ -44,20 +46,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleScanningKey(key)
 		case stateBrowseList:
 			return m.handleBrowseListKey(msg)
+		case stateSync:
+			return m.handleSyncKey(key)
 		case stateReport:
 			return m.handleReportKey(key)
 		}
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// grobe Reserve für Header, Divider, Titel, Footer/Hilfe
-		const chrome = 12
-		vp := m.height - chrome
-		if vp < 3 {
-			vp = 3
+
+		// Update viewport dimensions
+		headerHeight := 3 // title + divider + state header
+		footerHeight := 3 // help text lines
+		viewportHeight := msg.Height - headerHeight - footerHeight
+		if viewportHeight < 5 {
+			viewportHeight = 5
 		}
-		m.selection.listViewport = vp
-		m.preflight.listViewport = vp
+		m.viewport.Width = msg.Width
+		m.viewport.Height = viewportHeight
+
+		// BubbleTea viewport handles all scrolling now
+
+		// Update viewport content after resize
+		m.updateViewportContent()
 
 	case validateMsg:
 		if msg.err != nil {
@@ -67,7 +78,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.spaces = msg.spaces
-		m.statusMsg = fmt.Sprintf("Token ok. %d Spaces gefunden.", len(m.spaces))
+
+		// Save token to .sbrc file after successful validation
+		if err := config.Save(m.cfg.Path, m.cfg); err != nil {
+			m.statusMsg = "Token validiert, aber Speichern fehlgeschlagen: " + err.Error()
+		} else {
+			m.statusMsg = fmt.Sprintf("Token gespeichert. %d Spaces gefunden.", len(m.spaces))
+		}
 		// check if we have spaces configured and validate if their ids are in m.spaces
 		if m.cfg.SourceSpace != "" && m.cfg.TargetSpace != "" {
 			sourceSpace, sourceIdIsOk := containsSpaceID(m.spaces, m.cfg.SourceSpace)
@@ -94,7 +111,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.storiesSource = msg.src
 		m.storiesTarget = msg.tgt
-		m.selection.listIndex, m.selection.listOffset = 0, 0
+		m.selection.listIndex = 0
 		m.rebuildStoryIndex()
 		m.applyFilter()
 		if m.selection.selected == nil {
@@ -105,10 +122,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsg = fmt.Sprintf("Scan ok. Source: %d Stories, Target: %d Stories.", len(m.storiesSource), len(m.storiesTarget))
 		m.state = stateBrowseList
+		m.updateViewportContent()
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.state == stateValidating || m.state == stateScanning || (m.state == statePreflight && m.syncing) {
+		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -170,12 +188,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.syncIndex = done
 
+		// Update viewport content to show progress in real-time
+		if m.state == stateSync {
+			m.updateViewportContent()
+		}
+
 		// Continue only if we haven't finished all items and haven't been cancelled
 		if done+cancelled < len(m.preflight.items) && cancelled == 0 {
 			return m, m.runNextItem()
 		}
 
 		m.syncing = false
+		m.state = stateReport
 		if cancelled > 0 {
 			m.statusMsg = fmt.Sprintf("Sync cancelled - %d completed, %d cancelled", done, cancelled)
 		} else {
@@ -183,8 +207,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		_ = m.report.Save()
 
-		// Transition to report screen to show detailed results
-		m.state = stateReport
+		// Update viewport content for report view
+		m.updateViewportContent()
 		return m, nil
 	}
 
