@@ -54,6 +54,7 @@ const (
 	stateScanning
 	stateBrowseList
 	statePreflight
+	stateReport
 	stateQuit
 )
 
