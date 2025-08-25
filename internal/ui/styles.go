@@ -8,11 +8,37 @@ import (
 
 // --- UI Styles ---
 var (
-	titleStyle       = lipgloss.NewStyle().Bold(true).Underline(true)
-	subtleStyle      = lipgloss.NewStyle().Faint(true)
-	okStyle          = lipgloss.NewStyle().Bold(true)
-	warnStyle        = lipgloss.NewStyle().Bold(true)
-	helpStyle        = lipgloss.NewStyle().Faint(true)
+	titleStyle      = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("#8942E1"))
+	subtitleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA")).Italic(true)
+	subtleStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	okStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#10B981"))
+	warnStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F59E0B"))
+	errorStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#EF4444"))
+	helpStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Italic(true)
+	welcomeBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#8942E1")).
+			Padding(1, 2).
+			Margin(1, 0)
+	centeredStyle = lipgloss.NewStyle().Align(lipgloss.Center)
+	footerStyle   = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("245")).
+			Background(lipgloss.Color("236")).
+			Padding(0, 2).
+			Margin(1, 0, 0, 0).
+			Align(lipgloss.Center)
+	listHeaderStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#8942E1")).
+			Margin(0, 0, 1, 0)
+	spaceItemStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("252")).
+			Padding(0, 1)
+	spaceSelectedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(lipgloss.Color("#8942E1")).
+				Padding(0, 1)
 	dividerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	focusStyle       = lipgloss.NewStyle().Bold(true)
 	cursorLineStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#2A2B3D"))

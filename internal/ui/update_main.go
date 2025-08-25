@@ -5,6 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"storyblok-sync/internal/config"
 )
 
 // ---------- Update ----------
@@ -67,7 +69,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.spaces = msg.spaces
-		m.statusMsg = fmt.Sprintf("Token ok. %d Spaces gefunden.", len(m.spaces))
+
+		// Save token to .sbrc file after successful validation
+		if err := config.Save(m.cfg.Path, m.cfg); err != nil {
+			m.statusMsg = "Token validiert, aber Speichern fehlgeschlagen: " + err.Error()
+		} else {
+			m.statusMsg = fmt.Sprintf("Token gespeichert. %d Spaces gefunden.", len(m.spaces))
+		}
 		// check if we have spaces configured and validate if their ids are in m.spaces
 		if m.cfg.SourceSpace != "" && m.cfg.TargetSpace != "" {
 			sourceSpace, sourceIdIsOk := containsSpaceID(m.spaces, m.cfg.SourceSpace)
