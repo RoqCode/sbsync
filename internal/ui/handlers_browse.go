@@ -12,6 +12,9 @@ import (
 func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
+	// The viewport will be updated after cursor movement via updateBrowseViewport()
+	// Don't let viewport handle navigation keys directly as it conflicts with cursor system
+
 	if m.filter.prefixing {
 		switch key {
 		case "esc":
@@ -21,12 +24,14 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			m.filter.prefixing = false
 			m.applyFilter()
+			m.updateBrowseViewport()
 			return m, nil
 		case "enter":
 			m.filter.prefix = strings.TrimSpace(m.filter.prefixInput.Value())
 			m.filter.prefixing = false
 			m.filter.prefixInput.Blur()
 			m.applyFilter()
+			m.updateBrowseViewport()
 			return m, nil
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -84,6 +89,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 				m.search.query = newQ
 				m.applyFilter()
+				m.updateBrowseViewport()
 			}
 			return m, cmd
 		}
@@ -101,6 +107,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.search.searchInput.SetValue("")
 		m.collapseAllFolders()
 		m.applyFilter()
+		m.updateBrowseViewport()
 		return m, nil
 
 	case "p": // Prefix bearbeiten
@@ -113,6 +120,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.filter.prefix = ""
 		m.filter.prefixInput.SetValue("")
 		m.applyFilter()
+		m.updateBrowseViewport()
 		return m, nil
 
 	case "c":
@@ -122,6 +130,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.filter.prefixInput.SetValue("")
 		m.collapseAllFolders()
 		m.applyFilter()
+		m.updateBrowseViewport()
 		return m, nil
 
 	case "l":
@@ -132,6 +141,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if st.IsFolder {
 			m.folderCollapsed[st.ID] = false
 			m.refreshVisible()
+			m.updateBrowseViewport()
 		}
 	case "h":
 		if m.itemsLen() == 0 {
@@ -141,6 +151,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if st.IsFolder {
 			m.folderCollapsed[st.ID] = true
 			m.refreshVisible()
+			m.updateBrowseViewport()
 		} else if st.FolderID != nil {
 			pid := *st.FolderID
 			m.folderCollapsed[pid] = true
@@ -149,20 +160,25 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.selection.listIndex = vis
 				m.ensureCursorVisible()
 			}
+			m.updateBrowseViewport()
 		}
 	case "H":
 		m.collapseAllFolders()
+		m.updateBrowseViewport()
 	case "L":
 		m.expandAllFolders()
+		m.updateBrowseViewport()
 	case "j", "down":
 		if m.selection.listIndex < m.itemsLen()-1 {
 			m.selection.listIndex++
 			m.ensureCursorVisible()
+			m.updateBrowseViewport()
 		}
 	case "k", "up":
 		if m.selection.listIndex > 0 {
 			m.selection.listIndex--
 			m.ensureCursorVisible()
+			m.updateBrowseViewport()
 		}
 	case "ctrl+d", "pgdown":
 		if m.itemsLen() > 0 {
@@ -171,6 +187,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.selection.listIndex = m.itemsLen() - 1
 			}
 			m.ensureCursorVisible()
+			m.updateBrowseViewport()
 		}
 	case "ctrl+u", "pgup":
 		m.selection.listIndex -= m.selection.listViewport
@@ -178,6 +195,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.selection.listIndex = 0
 		}
 		m.ensureCursorVisible()
+		m.updateBrowseViewport()
 
 	case " ":
 		if m.itemsLen() == 0 {
@@ -196,6 +214,7 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.selection.listIndex++
 			m.ensureCursorVisible()
 		}
+		m.updateBrowseViewport()
 
 	case "r":
 		m.state = stateScanning

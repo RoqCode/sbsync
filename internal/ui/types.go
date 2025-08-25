@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 )
 
 // --- Model / State ---
@@ -107,6 +108,9 @@ type Model struct {
 	statusMsg     string
 	validateErr   error
 	width, height int
+
+	// viewport for scrollable content
+	viewport viewport.Model
 
 	// spinner for loading states
 	spinner     spinner.Model

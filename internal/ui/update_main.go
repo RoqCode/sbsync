@@ -52,7 +52,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// grobe Reserve für Header, Divider, Titel, Footer/Hilfe
+
+		// Update viewport dimensions
+		headerHeight := 3 // title + divider + state header
+		footerHeight := 3 // help text lines
+		viewportHeight := msg.Height - headerHeight - footerHeight
+		if viewportHeight < 5 {
+			viewportHeight = 5
+		}
+		m.viewport.Width = msg.Width
+		m.viewport.Height = viewportHeight
+
+		// Keep old viewport logic for compatibility
 		const chrome = 12
 		vp := m.height - chrome
 		if vp < 3 {
@@ -60,6 +71,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.selection.listViewport = vp
 		m.preflight.listViewport = vp
+
+		// Update viewport content after resize
+		m.updateViewportContent()
 
 	case validateMsg:
 		if msg.err != nil {
@@ -113,6 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsg = fmt.Sprintf("Scan ok. Source: %d Stories, Target: %d Stories.", len(m.storiesSource), len(m.storiesTarget))
 		m.state = stateBrowseList
+		m.updateViewportContent()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -193,6 +208,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Transition to report screen to show detailed results
 		m.state = stateReport
+		m.updateViewportContent()
 		return m, nil
 	}
 

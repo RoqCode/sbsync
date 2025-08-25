@@ -19,11 +19,13 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if m.preflight.listIndex < len(m.preflight.items)-1 {
 			m.preflight.listIndex++
 			m.ensurePreflightCursorVisible()
+			m.updateViewportContent()
 		}
 	case "k", "up":
 		if m.preflight.listIndex > 0 {
 			m.preflight.listIndex--
 			m.ensurePreflightCursorVisible()
+			m.updateViewportContent()
 		}
 	case "x":
 		if len(m.preflight.items) > 0 {
@@ -31,6 +33,7 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if it.Collision && it.Selected {
 				it.Skip = !it.Skip
 				it.RecalcState()
+				m.updateViewportContent()
 			}
 		}
 	case "X":
@@ -40,6 +43,7 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.preflight.items[i].RecalcState()
 			}
 		}
+		m.updateViewportContent()
 	case "c":
 		removed := false
 		for _, it := range m.preflight.items {
@@ -53,6 +57,7 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case "esc", "q":
 		m.state = stateBrowseList
+		m.updateViewportContent()
 		return m, nil
 	case "enter":
 		m.optimizePreflight()
@@ -142,6 +147,7 @@ func (m *Model) startPreflight() {
 		}
 	}
 	m.statusMsg = fmt.Sprintf("Preflight: %d Items, %d Kollisionen", len(items), collisions)
+	m.updateViewportContent()
 }
 
 func (m *Model) ensurePreflightCursorVisible() {

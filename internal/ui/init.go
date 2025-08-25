@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -65,6 +66,10 @@ func InitialModel() Model {
 	sp.Spinner = spinner.Line
 	sp.Style = subtleStyle
 	m.spinner = sp
+
+	// viewport
+	vp := viewport.New(80, 24) // initial dimensions, will be updated in WindowSize
+	m.viewport = vp
 
 	return m
 }
