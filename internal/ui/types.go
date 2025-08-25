@@ -28,10 +28,8 @@ const (
 
 type SelectionState struct {
 	// browse list (source)
-	listIndex    int
-	listOffset   int
-	listViewport int
-	selected     map[string]bool // key: FullSlug (oder Full Path)
+	listIndex int
+	selected  map[string]bool // key: FullSlug (oder Full Path)
 }
 
 type FilterState struct {
@@ -91,10 +89,8 @@ func (it *PreflightItem) RecalcState() {
 }
 
 type PreflightState struct {
-	items        []PreflightItem
-	listIndex    int
-	listOffset   int
-	listViewport int
+	items     []PreflightItem
+	listIndex int
 }
 
 type SyncPlan struct {

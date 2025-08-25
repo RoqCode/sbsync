@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	tree "github.com/charmbracelet/lipgloss/tree"
 	"storyblok-sync/internal/sb"
 )
 
@@ -182,7 +184,11 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case "ctrl+d", "pgdown":
 		if m.itemsLen() > 0 {
-			m.selection.listIndex += m.selection.listViewport
+			jump := m.viewport.Height
+			if jump <= 0 {
+				jump = 10
+			}
+			m.selection.listIndex += jump
 			if m.selection.listIndex > m.itemsLen()-1 {
 				m.selection.listIndex = m.itemsLen() - 1
 			}
@@ -190,7 +196,11 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.updateBrowseViewport()
 		}
 	case "ctrl+u", "pgup":
-		m.selection.listIndex -= m.selection.listViewport
+		jump := m.viewport.Height
+		if jump <= 0 {
+			jump = 10
+		}
+		m.selection.listIndex -= jump
 		if m.selection.listIndex < 0 {
 			m.selection.listIndex = 0
 		}
@@ -238,14 +248,9 @@ func (m *Model) itemAt(visIdx int) sb.Story {
 }
 
 func (m *Model) ensureCursorVisible() {
-	if m.selection.listViewport <= 0 {
-		m.selection.listViewport = 10
-	}
-
 	n := m.itemsLen()
 	if n == 0 {
 		m.selection.listIndex = 0
-		m.selection.listOffset = 0
 		return
 	}
 	if m.selection.listIndex < 0 {
@@ -255,23 +260,123 @@ func (m *Model) ensureCursorVisible() {
 		m.selection.listIndex = n - 1
 	}
 
-	if m.selection.listIndex < m.selection.listOffset {
-		m.selection.listOffset = m.selection.listIndex
-	}
-	if m.selection.listIndex >= m.selection.listOffset+m.selection.listViewport {
-		m.selection.listOffset = m.selection.listIndex - m.selection.listViewport + 1
+	// Calculate which line in the viewport content the cursor is on
+	cursorLine := m.calculateCursorLine()
+
+	// Check if cursor line is visible in viewport
+	topLine := m.viewport.YOffset
+	bottomLine := topLine + m.viewport.Height - 1
+
+	// Scroll margin - start scrolling when cursor approaches edges
+	scrollMargin := 3
+	if m.viewport.Height < 8 {
+		scrollMargin = 1
 	}
 
-	maxStart := n - m.selection.listViewport
-	if maxStart < 0 {
-		maxStart = 0
+	if cursorLine < topLine+scrollMargin {
+		// Cursor too close to top - scroll up
+		targetLine := cursorLine - scrollMargin
+		if targetLine < 0 {
+			targetLine = 0
+		}
+		m.viewport.SetYOffset(targetLine)
+	} else if cursorLine > bottomLine-scrollMargin {
+		// Cursor too close to bottom - scroll down
+		targetLine := cursorLine - m.viewport.Height + scrollMargin + 1
+		if targetLine < 0 {
+			targetLine = 0
+		}
+		m.viewport.SetYOffset(targetLine)
 	}
-	if m.selection.listOffset > maxStart {
-		m.selection.listOffset = maxStart
+}
+
+func (m *Model) calculateCursorLine() int {
+	// Calculate the actual visual line number where the cursor appears
+	// This must match exactly how browse view renders each line
+
+	totalLines := 0
+
+	// We need to recreate the exact same tree rendering logic as view_browse.go
+	// Get all stories up to cursor position
+	stories := make([]sb.Story, m.selection.listIndex)
+	for i := 0; i < m.selection.listIndex && i < len(m.visibleIdx); i++ {
+		stories[i] = m.itemAt(i)
 	}
-	if m.selection.listOffset < 0 {
-		m.selection.listOffset = 0
+
+	if len(stories) == 0 {
+		return 0
 	}
+
+	// Recreate the tree structure exactly as in view_browse.go
+	treeLines := m.generateTreeLines(stories)
+
+	// Calculate wrapped lines for each tree line with proper formatting
+	contentWidth := m.width - 4 // Same as view: cursorCell + markCell + content styled width
+	if contentWidth <= 0 {
+		contentWidth = 80
+	}
+
+	for i, treeLine := range treeLines {
+		// Apply the exact same styling as in view_browse.go
+		var styledContent string
+		if i == m.selection.listIndex-1 { // Last item is cursor item
+			styledContent = cursorLineStyle.Width(contentWidth).Render(treeLine)
+		} else {
+			styledContent = lipgloss.NewStyle().Width(contentWidth).Render(treeLine)
+		}
+
+		// Create complete line: cursorCell + markCell + styledContent
+		// But for line counting, we only care about the styled content wrapping
+		wrappedLines := m.countWrappedLines(styledContent)
+		totalLines += wrappedLines
+	}
+
+	return totalLines
+}
+
+func (m *Model) generateTreeLines(stories []sb.Story) []string {
+	if len(stories) == 0 {
+		return []string{}
+	}
+
+	// Use the same tree generation as view_browse.go
+	tr := tree.New()
+	nodes := make(map[int]*tree.Tree, len(stories))
+
+	for _, st := range stories {
+		node := tree.Root(displayStory(st))
+		nodes[st.ID] = node
+	}
+
+	for _, st := range stories {
+		node := nodes[st.ID]
+		if st.FolderID != nil {
+			if parent, ok := nodes[*st.FolderID]; ok {
+				parent.Child(node)
+				continue
+			}
+		}
+		tr.Child(node)
+	}
+
+	// Get tree lines exactly as in view_browse.go
+	lines := strings.Split(tr.String(), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return lines
+}
+
+func (m *Model) countWrappedLines(styledContent string) int {
+	// Count actual newlines in the styled content
+	lines := 1
+	for _, char := range styledContent {
+		if char == '\n' {
+			lines++
+		}
+	}
+	return lines
 }
 
 func (m *Model) applyFilter() {
@@ -291,7 +396,7 @@ func (m *Model) applyFilter() {
 
 	if q == "" {
 		m.search.filteredIdx = append(m.search.filteredIdx[:0], idx...)
-		m.selection.listIndex, m.selection.listOffset = 0, 0
+		m.selection.listIndex = 0
 		m.refreshVisible()
 		return
 	}
@@ -299,13 +404,13 @@ func (m *Model) applyFilter() {
 	sub := filterBySubstring(q, base, idx, m.filterCfg)
 	if len(sub) > 0 {
 		m.search.filteredIdx = sub
-		m.selection.listIndex, m.selection.listOffset = 0, 0
+		m.selection.listIndex = 0
 		m.refreshVisible()
 		return
 	}
 
 	m.search.filteredIdx = filterByFuzzy(q, base, idx, m.filterCfg)
-	m.selection.listIndex, m.selection.listOffset = 0, 0
+	m.selection.listIndex = 0
 	m.refreshVisible()
 }
 

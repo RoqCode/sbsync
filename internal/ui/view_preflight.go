@@ -82,15 +82,8 @@ func (m Model) viewPreflight() string {
 			}
 			lines[i] = cursorCell + stateCell + content
 		}
-		start := m.preflight.listOffset
-		if start > len(lines) {
-			start = len(lines)
-		}
-		end := start + m.preflight.listViewport
-		if end > len(lines) {
-			end = len(lines)
-		}
-		b.WriteString(strings.Join(lines[start:end], "\n"))
+		// Let BubbleTea viewport handle content slicing - just provide full content
+		b.WriteString(strings.Join(lines, "\n"))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")

@@ -154,7 +154,6 @@ func TestPartialFolderMarkingIndicator(t *testing.T) {
 	}
 	m.selection.selected[child.FullSlug] = true
 	m.refreshVisible()
-	m.selection.listViewport = 10
 
 	m.updateBrowseViewport()
 	out := m.renderBrowseContent()
@@ -182,7 +181,6 @@ func TestNestedFolderMarkingIndicator(t *testing.T) {
 	}
 	m.selection.selected[child.FullSlug] = true
 	m.refreshVisible()
-	m.selection.listViewport = 10
 
 	m.updateBrowseViewport()
 	out := m.renderBrowseContent()

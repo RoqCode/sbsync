@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"storyblok-sync/internal/sb"
 )
@@ -27,6 +28,30 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.ensurePreflightCursorVisible()
 			m.updateViewportContent()
 		}
+	case "ctrl+d", "pgdown":
+		jump := m.viewport.Height
+		if jump <= 0 {
+			jump = 10
+		}
+		if m.preflight.listIndex+jump < len(m.preflight.items) {
+			m.preflight.listIndex += jump
+		} else {
+			m.preflight.listIndex = len(m.preflight.items) - 1
+		}
+		m.ensurePreflightCursorVisible()
+		m.updateViewportContent()
+	case "ctrl+u", "pgup":
+		jump := m.viewport.Height
+		if jump <= 0 {
+			jump = 10
+		}
+		if m.preflight.listIndex-jump >= 0 {
+			m.preflight.listIndex -= jump
+		} else {
+			m.preflight.listIndex = 0
+		}
+		m.ensurePreflightCursorVisible()
+		m.updateViewportContent()
 	case "x":
 		if len(m.preflight.items) > 0 {
 			it := &m.preflight.items[m.preflight.listIndex]
@@ -106,7 +131,7 @@ func (m *Model) startPreflight() {
 		}
 	}
 	if len(included) == 0 {
-		m.preflight = PreflightState{listViewport: m.selection.listViewport}
+		m.preflight = PreflightState{}
 		m.statusMsg = "Keine Stories markiert."
 		return
 	}
@@ -139,7 +164,7 @@ func (m *Model) startPreflight() {
 	for _, r := range roots {
 		walk(r)
 	}
-	m.preflight = PreflightState{items: items, listIndex: 0, listOffset: 0, listViewport: m.selection.listViewport}
+	m.preflight = PreflightState{items: items, listIndex: 0}
 	m.state = statePreflight
 	collisions := 0
 	for _, it := range items {
@@ -152,14 +177,9 @@ func (m *Model) startPreflight() {
 }
 
 func (m *Model) ensurePreflightCursorVisible() {
-	vp := m.preflight.listViewport
-	if vp <= 0 {
-		vp = 10
-	}
 	n := len(m.preflight.items)
 	if n == 0 {
 		m.preflight.listIndex = 0
-		m.preflight.listOffset = 0
 		return
 	}
 	if m.preflight.listIndex < 0 {
@@ -168,20 +188,97 @@ func (m *Model) ensurePreflightCursorVisible() {
 	if m.preflight.listIndex > n-1 {
 		m.preflight.listIndex = n - 1
 	}
-	if m.preflight.listIndex < m.preflight.listOffset {
-		m.preflight.listOffset = m.preflight.listIndex
+	// Calculate which line in the viewport content the cursor is on
+	cursorLine := m.calculatePreflightCursorLine()
+
+	// Check if cursor line is visible in viewport
+	topLine := m.viewport.YOffset
+	bottomLine := topLine + m.viewport.Height - 1
+
+	// Scroll margin - start scrolling when cursor approaches edges
+	scrollMargin := 3
+	if m.viewport.Height < 8 {
+		scrollMargin = 1
 	}
-	if m.preflight.listIndex >= m.preflight.listOffset+vp {
-		m.preflight.listOffset = m.preflight.listIndex - vp + 1
+
+	if cursorLine < topLine+scrollMargin {
+		// Cursor too close to top - scroll up
+		targetLine := cursorLine - scrollMargin
+		if targetLine < 0 {
+			targetLine = 0
+		}
+		m.viewport.SetYOffset(targetLine)
+	} else if cursorLine > bottomLine-scrollMargin {
+		// Cursor too close to bottom - scroll down
+		targetLine := cursorLine - m.viewport.Height + scrollMargin + 1
+		if targetLine < 0 {
+			targetLine = 0
+		}
+		m.viewport.SetYOffset(targetLine)
 	}
-	maxStart := n - vp
-	if maxStart < 0 {
-		maxStart = 0
+}
+
+func (m *Model) calculatePreflightCursorLine() int {
+	// Calculate the actual visual line number where the cursor appears
+	// This must match exactly how preflight view renders each line
+
+	totalLines := 0
+
+	// Preflight view uses width - 2 for content (cursorCell + stateCell + content)
+	contentWidth := m.width - 2
+	if contentWidth <= 0 {
+		contentWidth = 80
 	}
-	if m.preflight.listOffset > maxStart {
-		m.preflight.listOffset = maxStart
+
+	for i := 0; i < m.preflight.listIndex && i < len(m.preflight.items); i++ {
+		item := m.preflight.items[i]
+
+		// Recreate the exact content formatting from view_preflight.go
+		content := m.formatPreflightContent(item)
+
+		// Apply the exact same styling as in view_preflight.go
+		lineStyle := lipgloss.NewStyle().Width(contentWidth)
+		if i == m.preflight.listIndex-1 { // If this will be the cursor item
+			lineStyle = cursorLineStyle.Copy().Width(contentWidth)
+		}
+		if item.State == StateSkip {
+			lineStyle = lineStyle.Faint(true)
+		}
+
+		styledContent := lineStyle.Render(content)
+
+		// Count wrapped lines in styled content
+		wrappedLines := m.countPreflightWrappedLines(styledContent)
+		totalLines += wrappedLines
 	}
-	if m.preflight.listOffset < 0 {
-		m.preflight.listOffset = 0
+
+	return totalLines
+}
+
+func (m *Model) formatPreflightContent(item PreflightItem) string {
+	// Recreate the exact content formatting from view_preflight.go
+	story := item.Story
+
+	// Create story display content
+	content := fmt.Sprintf("%s  (%s)", story.Name, story.FullSlug)
+
+	// Add collision indicator exactly as in view_preflight.go
+	if item.Collision {
+		content = collisionSign + " " + content
+	} else {
+		content = "  " + content
 	}
+
+	return content
+}
+
+func (m *Model) countPreflightWrappedLines(styledContent string) int {
+	// Count actual newlines in the styled content
+	lines := 1
+	for _, char := range styledContent {
+		if char == '\n' {
+			lines++
+		}
+	}
+	return lines
 }

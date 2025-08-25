@@ -65,14 +65,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = viewportHeight
 
-		// Keep old viewport logic for compatibility
-		const chrome = 12
-		vp := m.height - chrome
-		if vp < 3 {
-			vp = 3
-		}
-		m.selection.listViewport = vp
-		m.preflight.listViewport = vp
+		// BubbleTea viewport handles all scrolling now
 
 		// Update viewport content after resize
 		m.updateViewportContent()
@@ -118,7 +111,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.storiesSource = msg.src
 		m.storiesTarget = msg.tgt
-		m.selection.listIndex, m.selection.listOffset = 0, 0
+		m.selection.listIndex = 0
 		m.rebuildStoryIndex()
 		m.applyFilter()
 		if m.selection.selected == nil {

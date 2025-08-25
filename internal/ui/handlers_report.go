@@ -22,7 +22,6 @@ func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 			if len(failedItems) > 0 {
 				m.preflight.items = failedItems
 				m.preflight.listIndex = 0
-				m.preflight.listOffset = 0
 				m.state = statePreflight
 				m.statusMsg = fmt.Sprintf("Retry: %d failed items ready for sync", len(failedItems))
 				return m, nil
