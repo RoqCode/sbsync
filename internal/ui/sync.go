@@ -43,17 +43,20 @@ func getContentKeys(content map[string]interface{}) []string {
 
 // contentManager handles story content fetching and caching
 type contentManager struct {
-	api     folderAPI
-	spaceID int
-	cache   map[int]sb.Story
+	api      folderAPI
+	spaceID  int
+	cache    map[int]sb.Story
+	maxSize  int
+	hitCount int
 }
 
-// newContentManager creates a new content manager
+// newContentManager creates a new content manager with cache size limit
 func newContentManager(api folderAPI, spaceID int) *contentManager {
 	return &contentManager{
 		api:     api,
 		spaceID: spaceID,
 		cache:   make(map[int]sb.Story),
+		maxSize: 500, // Limit cache to 500 entries
 	}
 }
 
@@ -83,9 +86,27 @@ func (cm *contentManager) ensureContent(ctx context.Context, story sb.Story) (sb
 		story.Content = map[string]interface{}{}
 	}
 
-	// Cache the result
-	cm.cache[story.ID] = story
+	// Cache the result with size limit
+	cm.addToCache(story)
 	return story, nil
+}
+
+// addToCache adds a story to the cache with LRU eviction when size limit is reached
+func (cm *contentManager) addToCache(story sb.Story) {
+	// If cache is at capacity, remove oldest entries
+	if len(cm.cache) >= cm.maxSize {
+		// Simple eviction: remove first 100 entries to make room
+		// In a production system, you might want proper LRU implementation
+		count := 0
+		for id := range cm.cache {
+			if count >= 100 {
+				break
+			}
+			delete(cm.cache, id)
+			count++
+		}
+	}
+	cm.cache[story.ID] = story
 }
 
 // prepareStoryForCreation prepares a story for creation by clearing read-only fields

@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -12,6 +14,9 @@ import (
 )
 
 func main() {
+	// Clean up old log files before starting
+	cleanupOldLogFiles()
+
 	// Configure logging based on DEBUG environment variable
 	if len(os.Getenv("DEBUG")) > 0 {
 		// Enable Bubble Tea debug logging to file
@@ -43,5 +48,26 @@ func main() {
 	).Run(); err != nil {
 		fmt.Println("error:", err)
 		os.Exit(1)
+	}
+}
+
+// cleanupOldLogFiles removes old debug log files to prevent disk space accumulation
+func cleanupOldLogFiles() {
+	// Remove old debug.log files if they get too large (>10MB)
+	if stat, err := os.Stat("debug.log"); err == nil {
+		if stat.Size() > 10*1024*1024 { // 10MB limit
+			// Rotate the log file by renaming it with timestamp
+			if err := os.Rename("debug.log", fmt.Sprintf("debug.log.%d", stat.ModTime().Unix())); err == nil {
+				// Clean up very old rotated log files (keep only last 3)
+				if files, err := filepath.Glob("debug.log.*"); err == nil && len(files) > 3 {
+					// Sort files to get proper ordering
+					sort.Strings(files)
+					// Remove oldest files, keeping only the 3 most recent
+					for i := 0; i < len(files)-3; i++ {
+						os.Remove(files[i])
+					}
+				}
+			}
+		}
 	}
 }

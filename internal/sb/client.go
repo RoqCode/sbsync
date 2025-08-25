@@ -43,7 +43,10 @@ func (c *Client) ListSpaces(ctx context.Context) ([]Space, error) {
 	if c.token == "" {
 		return nil, errors.New("token leer")
 	}
-	req, _ := http.NewRequestWithContext(ctx, "GET", base+"/spaces", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", base+"/spaces", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	q := req.URL.Query()
@@ -127,7 +130,10 @@ func (c *Client) ListStories(ctx context.Context, opt ListStoriesOpts) ([]Story,
 		q.Set("per_page", fmt.Sprint(opt.PerPage))
 		u.RawQuery = q.Encode()
 
-		req, _ := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 		req.Header.Set("Authorization", c.token)
 		req.Header.Add("Content-Type", "application/json")
 
@@ -135,18 +141,16 @@ func (c *Client) ListStories(ctx context.Context, opt ListStoriesOpts) ([]Story,
 		if err != nil {
 			return nil, err
 		}
+		defer res.Body.Close()
 
 		if res.StatusCode != 200 {
-			res.Body.Close()
 			return nil, fmt.Errorf("stories.list status %s", res.Status)
 		}
 
 		var payload storiesResp
 		if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
-			res.Body.Close()
 			return nil, err
 		}
-		res.Body.Close()
 
 		all = append(all, payload.Stories...)
 
@@ -181,7 +185,10 @@ func (c *Client) CreateStory(ctx context.Context, spaceID int, st Story) (Story,
 	if err != nil {
 		return Story{}, err
 	}
-	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -219,7 +226,10 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish
 	if err != nil {
 		return Story{}, err
 	}
-	req, _ := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -228,7 +238,10 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		bodyBytes, _ := io.ReadAll(res.Body)
+		bodyBytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			return Story{}, fmt.Errorf("failed to read response body: %w", err)
+		}
 		var apiErr struct {
 			Error string `json:"error"`
 		}
@@ -292,7 +305,10 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	log.Printf("DEBUG: Story FolderID: %v", st.FolderID)
 	log.Printf("DEBUG: Story Published: %t", st.Published)
 	log.Printf("DEBUG: Story IsFolder: %t", st.IsFolder)
-	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -301,7 +317,10 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		bodyBytes, _ := io.ReadAll(res.Body)
+		bodyBytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			return Story{}, fmt.Errorf("failed to read response body: %w", err)
+		}
 		// DEBUG: log body for troubleshooting
 		if res.StatusCode == 422 {
 			log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
@@ -331,7 +350,10 @@ func (c *Client) GetStoriesBySlug(ctx context.Context, spaceID int, slug string)
 	q.Set("with_slug", slug)
 	u.RawQuery = q.Encode()
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 
@@ -363,7 +385,10 @@ func (c *Client) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid
 	if err != nil {
 		return err
 	}
-	req, _ := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -387,7 +412,10 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 	// The CLI does: client.get(`spaces/${spaceId}/stories/${storyId}`)
 	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -430,7 +458,10 @@ func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, 
 		u = fmt.Sprintf(base+"/spaces/%d/stories/%d?version=%s&resolve_relations=1", spaceID, storyID, version)
 	}
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)

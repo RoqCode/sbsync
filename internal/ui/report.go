@@ -3,7 +3,10 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
+	"sort"
 	"time"
 
 	"storyblok-sync/internal/sb"
@@ -153,11 +156,18 @@ func (r *Report) GetDisplaySummary() string {
 }
 
 // Save writes the comprehensive report to a JSON file in the current directory.
+// It also performs cleanup of old report files to prevent disk space accumulation.
 func (r *Report) Save() error {
 	r.Finalize()
 
 	if len(r.Entries) == 0 {
 		return nil
+	}
+
+	// Clean up old report files before creating a new one
+	if err := r.cleanupOldReports(); err != nil {
+		// Log error but don't fail the save operation
+		log.Printf("Warning: failed to cleanup old reports: %v", err)
 	}
 
 	data, err := json.MarshalIndent(r, "", "  ")
@@ -167,4 +177,34 @@ func (r *Report) Save() error {
 
 	filename := fmt.Sprintf("sync-report-%s.json", time.Now().Format("20060102-150405"))
 	return os.WriteFile(filename, data, 0o644)
+}
+
+// cleanupOldReports removes old report files, keeping only the most recent 10 files
+func (r *Report) cleanupOldReports() error {
+	files, err := filepath.Glob("sync-report-*.json")
+	if err != nil {
+		return fmt.Errorf("failed to find report files: %w", err)
+	}
+
+	// Keep only the most recent 10 reports
+	if len(files) <= 10 {
+		return nil
+	}
+
+	// Sort files by name (which includes timestamp, so this sorts by date)
+	sort.Strings(files)
+
+	// Remove the oldest files, keeping the last 10
+	filesToRemove := files[:len(files)-10]
+	for _, file := range filesToRemove {
+		if err := os.Remove(file); err != nil {
+			log.Printf("Warning: failed to remove old report file %s: %v", file, err)
+		}
+	}
+
+	if len(filesToRemove) > 0 {
+		log.Printf("Cleaned up %d old report files", len(filesToRemove))
+	}
+
+	return nil
 }
