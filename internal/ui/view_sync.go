@@ -49,12 +49,12 @@ func (m Model) renderSyncHeader() string {
 	// Current item being processed - find the running item
 	for i, item := range m.preflight.items {
 		if item.Run == RunRunning {
-			itemText := fmt.Sprintf("Läuft: %s (%s)", item.Story.Name, item.State)
+			itemText := fmt.Sprintf("Läuft: %s | %s (%s)", item.Story.Name, item.Story.FullSlug, item.State)
 			b.WriteString(warnStyle.Render(itemText))
 			break
 		} else if i == m.syncIndex && m.syncing && item.Run == RunPending {
 			// Fallback to sync index if no running item found
-			itemText := fmt.Sprintf("Verarbeite: %s (%s)", item.Story.Name, item.State)
+			itemText := fmt.Sprintf("Verarbeite: %s | %s (%s)", item.Story.Name, item.Story.FullSlug, item.State)
 			b.WriteString(subtleStyle.Render(itemText))
 			break
 		}
@@ -128,9 +128,11 @@ func (m *Model) updateSyncViewport() {
 			actionText += " (läuft...)"
 		}
 
-		line := fmt.Sprintf("%s %s (%s)",
+		// Format: [status] Name | slug (action)
+		line := fmt.Sprintf("%s %s | %s (%s)",
 			color.Render(status),
 			item.Story.Name,
+			subtleStyle.Render(item.Story.FullSlug),
 			subtleStyle.Render(actionText))
 		content.WriteString(line)
 		content.WriteString("\n")
