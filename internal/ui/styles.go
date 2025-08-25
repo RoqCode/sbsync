@@ -68,15 +68,15 @@ func fgSymbol(col, ch string) string {
 // helpLines: help text lines (shown in helpStyle)
 func renderFooter(statusLine string, helpLines ...string) string {
 	var b strings.Builder
-	
+
 	if statusLine != "" {
 		b.WriteString(subtleStyle.Render(statusLine) + "\n")
 	}
-	
+
 	for _, line := range helpLines {
 		b.WriteString(helpStyle.Render(line) + "\n")
 	}
-	
+
 	// Remove trailing newline
 	result := b.String()
 	return strings.TrimSuffix(result, "\n")

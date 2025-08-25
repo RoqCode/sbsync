@@ -215,14 +215,14 @@ func (m Model) renderPreflightFooter() string {
 	if m.syncing {
 		statusLine = renderProgress(m.syncIndex, len(m.preflight.items), m.width-2)
 	}
-	
+
 	var helpText string
 	if m.syncing {
 		helpText = "Syncing... | Ctrl+C to cancel"
 	} else {
 		helpText = "j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
 	}
-	
+
 	return renderFooter(statusLine, helpText)
 }
 

@@ -16,7 +16,7 @@ func (m Model) View() string {
 
 	// States that use viewport
 	switch m.state {
-	case stateBrowseList, statePreflight, stateReport:
+	case stateBrowseList, statePreflight, stateSync, stateReport:
 		stateHeader := m.renderStateHeader()
 		content := m.renderViewportContent()
 		return lipgloss.JoinVertical(lipgloss.Left, header, stateHeader, content, footer)
@@ -54,6 +54,8 @@ func (m Model) renderFooter() string {
 		return m.renderBrowseFooter()
 	case statePreflight:
 		return m.renderPreflightFooter()
+	case stateSync:
+		return m.renderSyncFooter()
 	case stateReport:
 		return m.renderReportFooter()
 	default:
@@ -67,6 +69,8 @@ func (m Model) renderStateHeader() string {
 		return m.renderBrowseHeader()
 	case statePreflight:
 		return m.renderPreflightHeader()
+	case stateSync:
+		return m.renderSyncHeader()
 	case stateReport:
 		return m.renderReportHeader()
 	default:
@@ -80,6 +84,8 @@ func (m *Model) updateViewportContent() {
 		m.updateBrowseViewport()
 	case statePreflight:
 		m.updatePreflightViewport()
+	case stateSync:
+		m.updateSyncViewport()
 	case stateReport:
 		m.updateReportViewport()
 	}

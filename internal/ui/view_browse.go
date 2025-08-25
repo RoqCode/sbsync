@@ -134,7 +134,7 @@ func (m Model) renderBrowseFooter() string {
 		suffix = fmt.Sprintf("  |  gefiltert: %d", total)
 	}
 	statusLine := fmt.Sprintf("Total: %d | Markiert: %d%s", total, checked, suffix)
-	
+
 	return renderFooter(
 		statusLine,
 		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden",

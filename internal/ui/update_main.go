@@ -46,6 +46,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleScanningKey(key)
 		case stateBrowseList:
 			return m.handleBrowseListKey(msg)
+		case stateSync:
+			return m.handleSyncKey(key)
 		case stateReport:
 			return m.handleReportKey(key)
 		}
@@ -131,7 +133,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.state == stateValidating || m.state == stateScanning || (m.state == statePreflight && m.syncing) {
+		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -199,6 +201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.syncing = false
+		m.state = stateReport
 		if cancelled > 0 {
 			m.statusMsg = fmt.Sprintf("Sync cancelled - %d completed, %d cancelled", done, cancelled)
 		} else {
@@ -206,8 +209,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		_ = m.report.Save()
 
-		// Transition to report screen to show detailed results
-		m.state = stateReport
+		// Update viewport content for report view
 		m.updateViewportContent()
 		return m, nil
 	}

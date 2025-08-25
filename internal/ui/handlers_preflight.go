@@ -69,6 +69,7 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.syncing = true
 		m.syncIndex = 0
 		m.api = sb.New(m.cfg.Token)
+		m.state = stateSync
 
 		// Set up cancellation context for sync operations
 		m.syncContext, m.syncCancel = context.WithCancel(context.Background())

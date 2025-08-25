@@ -21,6 +21,7 @@ const (
 	stateScanning
 	stateBrowseList
 	statePreflight
+	stateSync
 	stateReport
 	stateQuit
 )
