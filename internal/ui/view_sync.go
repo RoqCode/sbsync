@@ -3,24 +3,61 @@ package ui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) renderSyncHeader() string {
 	var b strings.Builder
 
-	// Progress information
-	total := len(m.plan.Items)
-	completed := m.syncIndex
+	// Count states for progress information
+	total := len(m.preflight.items)
+	completed := 0
+	running := 0
+	cancelled := 0
+	pending := 0
 
-	progressText := fmt.Sprintf("Synchronisierung läuft... (%d/%d)", completed, total)
+	for _, item := range m.preflight.items {
+		switch item.Run {
+		case RunDone:
+			completed++
+		case RunRunning:
+			running++
+		case RunCancelled:
+			cancelled++
+		default: // RunPending
+			pending++
+		}
+	}
+
+	// Progress information with detailed counts
+	statusParts := []string{fmt.Sprintf("%d✓", completed)}
+	if running > 0 {
+		statusParts = append(statusParts, fmt.Sprintf("%d◯", running))
+	}
+	if cancelled > 0 {
+		statusParts = append(statusParts, fmt.Sprintf("%d✗", cancelled))
+	}
+	if pending > 0 {
+		statusParts = append(statusParts, fmt.Sprintf("%d◦", pending))
+	}
+
+	progressText := fmt.Sprintf("Synchronisierung (%s von %d)", strings.Join(statusParts, " "), total)
 	b.WriteString(listHeaderStyle.Render(progressText))
 	b.WriteString("\n")
 
-	// Current item being processed
-	if m.syncIndex < len(m.plan.Items) {
-		currentItem := m.plan.Items[m.syncIndex]
-		itemText := fmt.Sprintf("Aktuell: %s (%s)", currentItem.Story.Name, currentItem.State)
-		b.WriteString(subtleStyle.Render(itemText))
+	// Current item being processed - find the running item
+	for i, item := range m.preflight.items {
+		if item.Run == RunRunning {
+			itemText := fmt.Sprintf("Läuft: %s (%s)", item.Story.Name, item.State)
+			b.WriteString(warnStyle.Render(itemText))
+			break
+		} else if i == m.syncIndex && m.syncing && item.Run == RunPending {
+			// Fallback to sync index if no running item found
+			itemText := fmt.Sprintf("Verarbeite: %s (%s)", item.Story.Name, item.State)
+			b.WriteString(subtleStyle.Render(itemText))
+			break
+		}
 	}
 
 	b.WriteString("\n")
@@ -40,74 +77,131 @@ func (m *Model) updateSyncViewport() {
 	var content strings.Builder
 
 	// Show sync progress
-	total := len(m.plan.Items)
-	completed := m.syncIndex
+	total := len(m.preflight.items)
+	completed := 0
+	running := 0
+	cancelled := 0
+
+	// Count actual states from preflight items
+	for _, item := range m.preflight.items {
+		switch item.Run {
+		case RunDone:
+			completed++
+		case RunRunning:
+			running++
+		case RunCancelled:
+			cancelled++
+		}
+	}
 
 	// Progress bar
-	progressBar := m.renderProgressBar(completed, total)
+	progressBar := m.renderProgressBar(completed, cancelled, total)
 	content.WriteString(progressBar)
 	content.WriteString("\n\n")
 
-	// Show recent sync operations (last 10-15 items)
+	// Show all items with their current states
+	maxDisplay := 20 // Show more items for better visibility
 	startIdx := 0
-	if completed > 15 {
-		startIdx = completed - 15
+	if len(m.preflight.items) > maxDisplay {
+		// Show items around the current sync position
+		startIdx = m.syncIndex - maxDisplay/2
+		if startIdx < 0 {
+			startIdx = 0
+		}
+		if startIdx+maxDisplay > len(m.preflight.items) {
+			startIdx = len(m.preflight.items) - maxDisplay
+		}
 	}
 
-	for i := startIdx; i < completed && i < len(m.plan.Items); i++ {
-		item := m.plan.Items[i]
-		status := "✓"
-		color := okStyle
+	endIdx := startIdx + maxDisplay
+	if endIdx > len(m.preflight.items) {
+		endIdx = len(m.preflight.items)
+	}
 
-		// Use different status based on item state
+	for i := startIdx; i < endIdx; i++ {
+		item := m.preflight.items[i]
+		status, color := m.getItemStatusDisplay(item.Run)
+
+		// Show sync action and current state
+		actionText := string(item.State)
+		if item.Run == RunRunning {
+			actionText += " (läuft...)"
+		}
+
 		line := fmt.Sprintf("%s %s (%s)",
 			color.Render(status),
 			item.Story.Name,
-			subtleStyle.Render(string(item.State)))
+			subtleStyle.Render(actionText))
 		content.WriteString(line)
 		content.WriteString("\n")
 	}
 
-	// Show current item if sync is ongoing
-	if m.syncing && m.syncIndex < len(m.plan.Items) {
-		currentItem := m.plan.Items[m.syncIndex]
-		line := fmt.Sprintf("%s %s (%s)",
-			warnStyle.Render("◯"),
-			currentItem.Story.Name,
-			subtleStyle.Render(string(currentItem.State)))
-		content.WriteString(line)
+	// Show summary if we're not displaying all items
+	if len(m.preflight.items) > maxDisplay {
+		content.WriteString("\n")
+		summaryText := fmt.Sprintf("... zeige %d-%d von %d Items",
+			startIdx+1, endIdx, len(m.preflight.items))
+		content.WriteString(subtleStyle.Render(summaryText))
 		content.WriteString("\n")
 	}
 
 	m.viewport.SetContent(content.String())
 }
 
-func (m Model) renderProgressBar(completed, total int) string {
+func (m Model) getItemStatusDisplay(runState RunState) (string, lipgloss.Style) {
+	switch runState {
+	case RunDone:
+		return "✓", okStyle
+	case RunRunning:
+		return "◯", warnStyle
+	case RunCancelled:
+		return "✗", errorStyle
+	default: // RunPending
+		return "◦", subtleStyle
+	}
+}
+
+func (m Model) renderProgressBar(completed, cancelled, total int) string {
 	if total == 0 {
 		return "Kein Fortschritt verfügbar"
 	}
 
-	percentage := float64(completed) / float64(total) * 100
+	processed := completed + cancelled
+	percentage := float64(processed) / float64(total) * 100
 	barWidth := 50
-	filledWidth := int(float64(barWidth) * float64(completed) / float64(total))
+	completedWidth := int(float64(barWidth) * float64(completed) / float64(total))
+	cancelledWidth := int(float64(barWidth) * float64(cancelled) / float64(total))
 
 	var bar strings.Builder
 	bar.WriteString("[")
 
-	// Filled portion
-	for i := 0; i < filledWidth; i++ {
-		bar.WriteString("█")
+	// Completed portion (green)
+	for i := 0; i < completedWidth; i++ {
+		bar.WriteString(okStyle.Render("█"))
+	}
+
+	// Cancelled portion (red)
+	for i := 0; i < cancelledWidth; i++ {
+		bar.WriteString(errorStyle.Render("█"))
 	}
 
 	// Empty portion
-	for i := filledWidth; i < barWidth; i++ {
+	remaining := barWidth - completedWidth - cancelledWidth
+	for i := 0; i < remaining; i++ {
 		bar.WriteString("░")
 	}
 
 	bar.WriteString("]")
 
-	progressText := fmt.Sprintf("%s %.1f%% (%d/%d)",
-		bar.String(), percentage, completed, total)
+	// Status text
+	statusParts := []string{fmt.Sprintf("%d✓", completed)}
+	if cancelled > 0 {
+		statusParts = append(statusParts, fmt.Sprintf("%d✗", cancelled))
+	}
+	statusText := strings.Join(statusParts, " ")
+
+	progressText := fmt.Sprintf("%s %.1f%% (%s/%d)",
+		bar.String(), percentage, statusText, total)
 
 	return focusStyle.Render(progressText)
 }

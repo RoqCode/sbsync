@@ -195,6 +195,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.syncIndex = done
 
+		// Update viewport content to show progress in real-time
+		if m.state == stateSync {
+			m.updateViewportContent()
+		}
+
 		// Continue only if we haven't finished all items and haven't been cancelled
 		if done+cancelled < len(m.preflight.items) && cancelled == 0 {
 			return m, m.runNextItem()
