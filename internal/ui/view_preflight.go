@@ -211,17 +211,19 @@ func (m Model) renderPreflightContent() string {
 }
 
 func (m Model) renderPreflightFooter() string {
-	var b strings.Builder
+	var statusLine string
 	if m.syncing {
-		b.WriteString(renderProgress(m.syncIndex, len(m.preflight.items), m.width-2))
-		b.WriteString("\n")
+		statusLine = renderProgress(m.syncIndex, len(m.preflight.items), m.width-2)
 	}
+	
+	var helpText string
 	if m.syncing {
-		b.WriteString(helpStyle.Render("Syncing... | Ctrl+C to cancel"))
+		helpText = "Syncing... | Ctrl+C to cancel"
 	} else {
-		b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"))
+		helpText = "j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
 	}
-	return b.String()
+	
+	return renderFooter(statusLine, helpText)
 }
 
 func renderProgress(done, total, width int) string {

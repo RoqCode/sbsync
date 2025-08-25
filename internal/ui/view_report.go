@@ -224,10 +224,11 @@ func (m Model) renderReportContent() string {
 }
 
 func (m Model) renderReportFooter() string {
-	// Footer with actions
+	var helpText string
 	if m.report.Summary.Failure > 0 {
-		return helpStyle.Render("r retry failures  |  enter back to scan  |  q exit")
+		helpText = "r retry failures  |  enter back to scan  |  q exit"
 	} else {
-		return helpStyle.Render("enter back to scan  |  q exit")
+		helpText = "enter back to scan  |  q exit"
 	}
+	return renderFooter("", helpText)
 }

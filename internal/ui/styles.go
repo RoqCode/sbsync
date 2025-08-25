@@ -20,13 +20,7 @@ var (
 			BorderForeground(lipgloss.Color("#8942E1")).
 			Padding(1, 2).
 			Margin(1, 0)
-	centeredStyle = lipgloss.NewStyle().Align(lipgloss.Center)
-	footerStyle   = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245")).
-			Background(lipgloss.Color("236")).
-			Padding(0, 2).
-			Margin(1, 0, 0, 0).
-			Align(lipgloss.Center)
+	centeredStyle   = lipgloss.NewStyle().Align(lipgloss.Center)
 	listHeaderStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#8942E1")).
@@ -67,4 +61,23 @@ func fgSymbol(col, ch string) string {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(col)).Render(ch)
 	const reset = "\x1b[0m"
 	return strings.TrimSuffix(s, reset) + "\x1b[39m"
+}
+
+// renderFooter creates a consistent footer across all views
+// statusLine: optional status information (shown in subtleStyle)
+// helpLines: help text lines (shown in helpStyle)
+func renderFooter(statusLine string, helpLines ...string) string {
+	var b strings.Builder
+	
+	if statusLine != "" {
+		b.WriteString(subtleStyle.Render(statusLine) + "\n")
+	}
+	
+	for _, line := range helpLines {
+		b.WriteString(helpStyle.Render(line) + "\n")
+	}
+	
+	// Remove trailing newline
+	result := b.String()
+	return strings.TrimSuffix(result, "\n")
 }

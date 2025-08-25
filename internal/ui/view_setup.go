@@ -30,7 +30,7 @@ func (m Model) viewWelcome() string {
 		strings.Join(statusLines, "\n"))
 
 	boxContent := welcomeBoxStyle.Render(content)
-	help := helpStyle.Render("⌨️  Enter: weiter  •  q: beenden")
+	help := renderFooter("", "⌨️  Enter: weiter  •  q: beenden")
 
 	return centeredStyle.Width(m.width).Render(boxContent) + "\n\n" +
 		centeredStyle.Width(m.width).Render(help)
@@ -52,7 +52,7 @@ func (m Model) viewTokenPrompt() string {
 		errorMsg)
 
 	boxContent := welcomeBoxStyle.Render(content)
-	help := helpStyle.Render("⌨️  Enter: bestätigen  •  Esc: zurück")
+	help := renderFooter("", "⌨️  Enter: bestätigen  •  Esc: zurück")
 
 	return centeredStyle.Width(m.width).Render(boxContent) + "\n\n" +
 		centeredStyle.Width(m.width).Render(help)
@@ -66,7 +66,7 @@ func (m Model) viewValidating() string {
 		subtitleStyle.Render("Validiere Token..."))
 
 	boxContent := welcomeBoxStyle.Render(content)
-	help := helpStyle.Render("⌨️  q: abbrechen")
+	help := renderFooter("", "⌨️  q: abbrechen")
 
 	return centeredStyle.Width(m.width).Render(boxContent) + "\n\n" +
 		centeredStyle.Width(m.width).Render(help)
@@ -102,7 +102,7 @@ func (m Model) viewSpaceSelect() string {
 	}
 
 	// Create footer that sits at the bottom
-	footer := footerStyle.Width(m.width).Render("⌨️  ↑↓/j/k: navigieren  •  Enter: auswählen  •  q: beenden")
+	footer := renderFooter("", "⌨️  ↑↓/j/k: navigieren  •  Enter: auswählen  •  q: beenden")
 
 	// Calculate available height for content (total height - header - footer - margins)
 	contentHeight := m.height - 4 // rough estimate for header and footer space
@@ -136,7 +136,7 @@ func (m Model) viewScanning() string {
 	content += fmt.Sprintf("📂 Source: %s\n", okStyle.Render(src))
 	content += fmt.Sprintf("📂 Target: %s\n", okStyle.Render(tgt))
 
-	footer := footerStyle.Width(m.width).Render("⌨️  q: beenden")
+	footer := renderFooter("", "⌨️  q: beenden")
 
 	// Add padding to push footer to bottom
 	contentHeight := m.height - 6 // space for header, content, and footer

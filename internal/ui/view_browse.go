@@ -120,8 +120,6 @@ func (m Model) renderBrowseContent() string {
 }
 
 func (m Model) renderBrowseFooter() string {
-	var b strings.Builder
-
 	total := m.itemsLen()
 	checked := 0
 	for _, v := range m.selection.selected {
@@ -135,13 +133,13 @@ func (m Model) renderBrowseFooter() string {
 	if m.search.filteredIdx != nil {
 		suffix = fmt.Sprintf("  |  gefiltert: %d", total)
 	}
-	b.WriteString(subtleStyle.Render(fmt.Sprintf("Total: %d | Markiert: %d%s", total, checked, suffix)) + "\n")
-
-	// Help text
-	b.WriteString(helpStyle.Render("j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden") + "\n")
-	b.WriteString(helpStyle.Render("p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück"))
-
-	return b.String()
+	statusLine := fmt.Sprintf("Total: %d | Markiert: %d%s", total, checked, suffix)
+	
+	return renderFooter(
+		statusLine,
+		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden",
+		"p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück",
+	)
 }
 
 func displayStory(st sb.Story) string {
