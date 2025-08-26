@@ -19,7 +19,10 @@ const (
 type FolderAPI interface {
 	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
 	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
-	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+	// Raw payload support for preserving folder settings
+	GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error)
+    CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
+    UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error
 }
 
 // Report interface for folder creation reporting
@@ -29,31 +32,25 @@ type Report interface {
 
 // FolderPathBuilder handles the creation of folder hierarchies
 type FolderPathBuilder struct {
-	api           FolderAPI
-	report        Report
-	sourceStories map[string]sb.Story
-	contentMgr    *ContentManager
-	srcSpaceID    int
-	tgtSpaceID    int
-	publish       bool
+	api        FolderAPI
+	report     Report
+	contentMgr *ContentManager
+	srcSpaceID int
+	tgtSpaceID int
+	publish    bool
 }
 
 // NewFolderPathBuilder creates a new folder path builder
 func NewFolderPathBuilder(api FolderAPI, report Report, sourceStories []sb.Story, srcSpaceID, tgtSpaceID int, publish bool) *FolderPathBuilder {
-	// Build source stories map for quick lookup
-	sourceMap := make(map[string]sb.Story)
-	for _, story := range sourceStories {
-		sourceMap[story.FullSlug] = story
-	}
-
+	// Note: We no longer rely on preloaded sourceStories for folder payloads, as the
+	// list endpoint lacks full data. We'll fetch each folder segment from the API.
 	return &FolderPathBuilder{
-		api:           api,
-		report:        report,
-		sourceStories: sourceMap,
-		contentMgr:    NewContentManager(api, srcSpaceID),
-		srcSpaceID:    srcSpaceID,
-		tgtSpaceID:    tgtSpaceID,
-		publish:       publish,
+		api:        api,
+		report:     report,
+		contentMgr: NewContentManager(api, srcSpaceID),
+		srcSpaceID: srcSpaceID,
+		tgtSpaceID: tgtSpaceID,
+		publish:    publish,
 	}
 }
 
@@ -74,38 +71,78 @@ func (fpb *FolderPathBuilder) CheckExistingFolder(ctx context.Context, path stri
 }
 
 // PrepareSourceFolder prepares a source folder for creation in target space
-func (fpb *FolderPathBuilder) PrepareSourceFolder(ctx context.Context, path string, parentID *int) (sb.Story, error) {
-	source, exists := fpb.sourceStories[path]
-	if !exists {
-		return sb.Story{}, fmt.Errorf("source folder not found: %s", path)
-	}
-
-	// Ensure content is loaded
-	folder, err := fpb.contentMgr.EnsureContent(ctx, source)
+func (fpb *FolderPathBuilder) PrepareSourceFolder(ctx context.Context, path string, parentID *int) (map[string]interface{}, error) {
+	// Look up the source folder by slug using API (not the preloaded map)
+	matches, err := fpb.api.GetStoriesBySlug(ctx, fpb.srcSpaceID, path)
 	if err != nil {
-		log.Printf("DEBUG: Failed to fetch content for folder %s: %v", path, err)
-		return sb.Story{}, err
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("source folder not found: %s", path)
+	}
+	source := matches[0]
+	if !source.IsFolder {
+		return nil, fmt.Errorf("expected folder at %s, found story", path)
 	}
 
-	// Prepare for creation
-	folder = PrepareStoryForCreation(folder)
-	folder.FolderID = parentID
+	// Fetch raw story payload from API to preserve unknown fields
+	raw, err := fpb.api.GetStoryRaw(ctx, fpb.srcSpaceID, source.ID)
+	if err != nil {
+		log.Printf("DEBUG: Failed to fetch raw payload for folder %s: %v", path, err)
+		return nil, err
+	}
 
-	log.Printf("DEBUG: Prepared source folder %s with content: %t", path, len(folder.Content) > 0)
-	return folder, nil
+	// Strip read-only fields
+	delete(raw, "id")
+	delete(raw, "created_at")
+
+	// Always set explicit parent_id (0 for root)
+	if parentID == nil {
+		raw["parent_id"] = 0
+	} else {
+		raw["parent_id"] = *parentID
+	}
+
+	// Convert translated_slugs -> translated_slugs_attributes (remove IDs)
+	if ts, ok := raw["translated_slugs"].([]interface{}); ok && len(ts) > 0 {
+		attrs := make([]map[string]interface{}, 0, len(ts))
+		for _, item := range ts {
+			if m, ok := item.(map[string]interface{}); ok {
+				// remove id if present
+				delete(m, "id")
+				attrs = append(attrs, m)
+			}
+		}
+		raw["translated_slugs_attributes"] = attrs
+		delete(raw, "translated_slugs")
+	}
+
+	log.Printf("DEBUG: Prepared raw source folder %s", path)
+	return raw, nil
 }
 
 // CreateFolder creates a single folder in the target space
-func (fpb *FolderPathBuilder) CreateFolder(ctx context.Context, folder sb.Story) (sb.Story, error) {
-	log.Printf("DEBUG: Creating folder: %s", folder.FullSlug)
+func (fpb *FolderPathBuilder) CreateFolder(ctx context.Context, folder map[string]interface{}) (sb.Story, error) {
+	slug := ""
+	if v, ok := folder["full_slug"].(string); ok {
+		slug = v
+	}
+	log.Printf("DEBUG: Creating folder: %s", slug)
 
-	created, err := fpb.api.CreateStoryWithPublish(ctx, fpb.tgtSpaceID, folder, fpb.publish)
+    created, err := fpb.api.CreateStoryRawWithPublish(ctx, fpb.tgtSpaceID, folder, false /* never publish folders */)
 	if err != nil {
-		log.Printf("DEBUG: Failed to create folder %s: %v", folder.FullSlug, err)
+		log.Printf("DEBUG: Failed to create folder %s: %v", slug, err)
 		return sb.Story{}, err
 	}
 
 	log.Printf("DEBUG: Successfully created folder %s (ID: %d)", created.FullSlug, created.ID)
+
+    // Update UUID after creation if source provided one
+    if uuidVal, ok := folder["uuid"].(string); ok && uuidVal != "" && uuidVal != created.UUID {
+        if err := fpb.api.UpdateStoryUUID(ctx, fpb.tgtSpaceID, created.ID, uuidVal); err != nil {
+            log.Printf("DEBUG: Failed to update UUID for created folder %s: %v", slug, err)
+        }
+    }
 	return created, nil
 }
 

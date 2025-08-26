@@ -454,7 +454,8 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Update existing folder
 		existingFolder := existing[0]
 		fullFolder.ID = existingFolder.ID
-		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		// Never publish folders; update respects publish flag internally
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, false)
 		if err != nil {
 			return err
 		}
@@ -481,7 +482,8 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 			fullFolder.Content = json.RawMessage([]byte(`{}`))
 		}
 
-		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		// Never publish folders on create
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, false)
 		if err != nil {
 			return err
 		}
@@ -551,7 +553,9 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Update existing story
 		existingStory := existing[0]
 		fullStory.ID = existingStory.ID
-		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
+		// Publish only if source was published and target space allows it
+		publish := m.shouldPublish() && sourceStory.Published
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, publish)
 		if err != nil {
 			return err
 		}
@@ -581,7 +585,9 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 			fullStory.Content = json.RawMessage(contentBytes)
 		}
 
-		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
+		// Publish only if source was published and target space allows it
+		publish := m.shouldPublish() && sourceStory.Published
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, publish)
 		if err != nil {
 			return err
 		}
@@ -612,13 +618,15 @@ func (m *Model) processTranslatedSlugs(sourceStory sb.Story, existingStories []s
 }
 
 func (m *Model) syncStartsWith(slug string) error {
-	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID)
+	allowPublish := m.shouldPublish()
+	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, allowPublish)
 	return bulkSyncer.SyncStartsWith(slug)
 }
 
 // syncStartsWithDetailed syncs all content with prefix and returns results
 func (m *Model) syncStartsWithDetailed(slug string) (*syncItemResult, error) {
-	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID)
+	allowPublish := m.shouldPublish()
+	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, allowPublish)
 	return bulkSyncer.SyncStartsWithDetailed(slug)
 }
 

@@ -15,7 +15,7 @@ func TestNewBulkSyncer(t *testing.T) {
 		{ID: 2, FullSlug: "folder", IsFolder: true},
 	}
 
-	syncer := NewBulkSyncer(api, sourceStories, 1, 2)
+    syncer := NewBulkSyncer(api, sourceStories, 1, 2, true)
 
 	if syncer == nil {
 		t.Fatal("Expected bulk syncer to be created")
@@ -40,7 +40,7 @@ func TestGetStoriesWithPrefix(t *testing.T) {
 		{ID: 5, FullSlug: "app-other", IsFolder: false}, // Should not match
 	}
 
-	syncer := NewBulkSyncer(&mockStorySyncAPI{}, sourceStories, 1, 2)
+    syncer := NewBulkSyncer(&mockStorySyncAPI{}, sourceStories, 1, 2, true)
 
 	tests := []struct {
 		prefix   string
@@ -94,7 +94,7 @@ func TestSortByTypeAndDepth(t *testing.T) {
 		{ID: 5, FullSlug: "zzz", IsFolder: true},
 	}
 
-	syncer := NewBulkSyncer(&mockStorySyncAPI{}, stories, 1, 2)
+    syncer := NewBulkSyncer(&mockStorySyncAPI{}, stories, 1, 2, true)
 	syncer.sortByTypeAndDepth(stories)
 
 	expected := []string{
@@ -140,7 +140,7 @@ func TestSyncStartsWith(t *testing.T) {
 		},
 	}
 
-	syncer := NewBulkSyncer(api, sourceStories, 1, 2)
+    syncer := NewBulkSyncer(api, sourceStories, 1, 2, true)
 
 	err := syncer.SyncStartsWith("app")
 
@@ -184,7 +184,7 @@ func TestSyncStartsWithDetailed(t *testing.T) {
 		},
 	}
 
-	syncer := NewBulkSyncer(api, sourceStories, 1, 2)
+    syncer := NewBulkSyncer(api, sourceStories, 1, 2, true)
 
 	result, err := syncer.SyncStartsWithDetailed("app")
 
@@ -225,7 +225,7 @@ func TestSyncStartsWithDetailed_WithWarnings(t *testing.T) {
 		},
 	}
 
-	syncer := NewBulkSyncer(api, sourceStories, 1, 2)
+    syncer := NewBulkSyncer(api, sourceStories, 1, 2, true)
 
 	result, err := syncer.SyncStartsWithDetailed("app")
 

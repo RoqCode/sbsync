@@ -275,8 +275,8 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 				// initialIndex therefore refers to index within selectableSpaces()
 			}
 
-            visibleBefore := testModel.selectableSpaces()
-            result, cmd := testModel.handleSpaceSelectKey(tt.key)
+			visibleBefore := testModel.selectableSpaces()
+			result, cmd := testModel.handleSpaceSelectKey(tt.key)
 
 			if result.selectedIndex != tt.expectedIndex {
 				t.Errorf("Expected index %d, got %d", tt.expectedIndex, result.selectedIndex)
@@ -286,22 +286,22 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 				t.Errorf("Expected state %v, got %v", tt.expectedState, result.state)
 			}
 
-            if tt.expectSourceSet {
+			if tt.expectSourceSet {
 				if result.sourceSpace == nil {
 					t.Error("Expected source space to be set")
-                } else if result.sourceSpace.ID != visibleBefore[tt.initialIndex].ID {
-                    t.Errorf("Expected source space ID %d, got %d", visibleBefore[tt.initialIndex].ID, result.sourceSpace.ID)
+				} else if result.sourceSpace.ID != visibleBefore[tt.initialIndex].ID {
+					t.Errorf("Expected source space ID %d, got %d", visibleBefore[tt.initialIndex].ID, result.sourceSpace.ID)
 				}
 				if result.selectingSource {
 					t.Error("Expected selectingSource to be false after setting source")
 				}
 			}
 
-            if tt.expectTargetSet {
+			if tt.expectTargetSet {
 				if result.targetSpace == nil {
 					t.Error("Expected target space to be set")
-                } else if result.targetSpace.ID != visibleBefore[tt.initialIndex].ID {
-                    t.Errorf("Expected target space ID %d, got %d", visibleBefore[tt.initialIndex].ID, result.targetSpace.ID)
+				} else if result.targetSpace.ID != visibleBefore[tt.initialIndex].ID {
+					t.Errorf("Expected target space ID %d, got %d", visibleBefore[tt.initialIndex].ID, result.targetSpace.ID)
 				}
 			}
 

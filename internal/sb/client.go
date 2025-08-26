@@ -168,6 +168,11 @@ type storyResp struct {
 	Story Story `json:"story"`
 }
 
+// storyRawResp mirrors API response when fetching a single story
+type storyRawResp struct {
+	Story map[string]interface{} `json:"story"`
+}
+
 // GetStory fetches a single story by ID.
 func (c *Client) GetStory(ctx context.Context, spaceID, storyID int) (Story, error) {
 	// Use the same fallback logic as GetStoryWithContent
@@ -437,6 +442,75 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 	}
 
 	return story, nil
+}
+
+// GetStoryRaw fetches a story and returns the raw map payload for preservation
+func (c *Client) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) {
+	if c.token == "" {
+		return nil, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("story.get status %s", res.Status)
+	}
+	var payload storyRawResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	return payload.Story, nil
+}
+
+// CreateStoryRawWithPublish creates a story from a raw map payload, preserving unknown fields
+func (c *Client) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (Story, error) {
+	if c.token == "" {
+		return Story{}, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories", spaceID)
+	payload := map[string]interface{}{
+		"story":        story,
+		"force_update": "1",
+	}
+	// Only publish if not a folder and requested
+	if publish {
+		if isFolder, ok := story["is_folder"].(bool); !ok || !isFolder {
+			payload["publish"] = 1
+		}
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return Story{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return Story{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		bodyBytes, _ := io.ReadAll(res.Body)
+		return Story{}, fmt.Errorf("story.create status %s: %s", res.Status, strings.TrimSpace(string(bodyBytes)))
+	}
+	var resp storyResp
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return Story{}, err
+	}
+	return resp.Story, nil
 }
 
 // getStoryWithVersion fetches story with specific version parameter

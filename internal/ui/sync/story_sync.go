@@ -69,6 +69,13 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			}
 		}
 
+		// Update UUID if different after update
+		if updated.UUID != fullStory.UUID && fullStory.UUID != "" {
+			if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, updated.ID, fullStory.UUID); err != nil {
+				log.Printf("Warning: failed to update UUID for story %s: %v", fullStory.FullSlug, err)
+			}
+		}
+
 		log.Printf("Updated story: %s", fullStory.FullSlug)
 		return updated, nil
 	} else {
@@ -78,6 +85,13 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		created, err := ss.api.CreateStoryWithPublish(ctx, ss.targetSpaceID, createStory, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
+		}
+
+		// Update UUID if different after create
+		if created.UUID != fullStory.UUID && fullStory.UUID != "" {
+			if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, created.ID, fullStory.UUID); err != nil {
+				log.Printf("Warning: failed to update UUID for new story %s: %v", fullStory.FullSlug, err)
+			}
 		}
 
 		log.Printf("Created story: %s", fullStory.FullSlug)
