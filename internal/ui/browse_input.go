@@ -13,8 +13,11 @@ func (m Model) handlePrefixFilterInput(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.filter.prefixInput.Blur()
-		if strings.TrimSpace(m.filter.prefixInput.Value()) == "" {
+		trimmed := strings.TrimSpace(m.filter.prefixInput.Value())
+		if trimmed == "" {
 			m.filter.prefix = ""
+		} else {
+			m.filter.prefix = trimmed
 		}
 		m.filter.prefixing = false
 		m.applyFilter()
@@ -106,6 +109,8 @@ func (m Model) handleBrowseSearchAndFilterControls(key string) (Model, tea.Cmd) 
 		// Clear search
 		m.search.query = ""
 		m.search.searchInput.SetValue("")
+		m.filter.prefix = ""
+		m.filter.prefixInput.SetValue("")
 		m.collapseAllFolders()
 		m.applyFilter()
 		m.updateBrowseViewport()
