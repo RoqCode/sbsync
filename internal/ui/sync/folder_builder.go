@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -21,8 +22,8 @@ type FolderAPI interface {
 	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
 	// Raw payload support for preserving folder settings
 	GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error)
-    CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
-    UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error
+	CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
+	UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error
 }
 
 // Report interface for folder creation reporting
@@ -92,6 +93,11 @@ func (fpb *FolderPathBuilder) PrepareSourceFolder(ctx context.Context, path stri
 		return nil, err
 	}
 
+	// Log original raw payload from source
+	if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
+		log.Printf("DEBUG: SOURCE_RAW folder %s: %s", path, string(b))
+	}
+
 	// Strip read-only fields
 	delete(raw, "id")
 	delete(raw, "created_at")
@@ -117,7 +123,10 @@ func (fpb *FolderPathBuilder) PrepareSourceFolder(ctx context.Context, path stri
 		delete(raw, "translated_slugs")
 	}
 
-	log.Printf("DEBUG: Prepared raw source folder %s", path)
+	// Log prepared raw payload to be pushed (pre-create)
+	if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
+		log.Printf("DEBUG: PREPARED_RAW folder %s: %s", path, string(b))
+	}
 	return raw, nil
 }
 
@@ -128,8 +137,11 @@ func (fpb *FolderPathBuilder) CreateFolder(ctx context.Context, folder map[strin
 		slug = v
 	}
 	log.Printf("DEBUG: Creating folder: %s", slug)
+	if b, err := json.MarshalIndent(folder, "", "  "); err == nil {
+		log.Printf("DEBUG: PUSH_RAW folder %s: %s", slug, string(b))
+	}
 
-    created, err := fpb.api.CreateStoryRawWithPublish(ctx, fpb.tgtSpaceID, folder, false /* never publish folders */)
+	created, err := fpb.api.CreateStoryRawWithPublish(ctx, fpb.tgtSpaceID, folder, false /* never publish folders */)
 	if err != nil {
 		log.Printf("DEBUG: Failed to create folder %s: %v", slug, err)
 		return sb.Story{}, err
@@ -137,12 +149,12 @@ func (fpb *FolderPathBuilder) CreateFolder(ctx context.Context, folder map[strin
 
 	log.Printf("DEBUG: Successfully created folder %s (ID: %d)", created.FullSlug, created.ID)
 
-    // Update UUID after creation if source provided one
-    if uuidVal, ok := folder["uuid"].(string); ok && uuidVal != "" && uuidVal != created.UUID {
-        if err := fpb.api.UpdateStoryUUID(ctx, fpb.tgtSpaceID, created.ID, uuidVal); err != nil {
-            log.Printf("DEBUG: Failed to update UUID for created folder %s: %v", slug, err)
-        }
-    }
+	// Update UUID after creation if source provided one
+	if uuidVal, ok := folder["uuid"].(string); ok && uuidVal != "" && uuidVal != created.UUID {
+		if err := fpb.api.UpdateStoryUUID(ctx, fpb.tgtSpaceID, created.ID, uuidVal); err != nil {
+			log.Printf("DEBUG: Failed to update UUID for created folder %s: %v", slug, err)
+		}
+	}
 	return created, nil
 }
 

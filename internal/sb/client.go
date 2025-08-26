@@ -513,6 +513,48 @@ func (c *Client) CreateStoryRawWithPublish(ctx context.Context, spaceID int, sto
 	return resp.Story, nil
 }
 
+// UpdateStoryRawWithPublish updates a story using a raw map payload, preserving unknown fields
+func (c *Client) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (Story, error) {
+    if c.token == "" {
+        return Story{}, errors.New("token leer")
+    }
+    u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
+    payload := map[string]interface{}{
+        "story":        story,
+        "force_update": "1",
+    }
+    // Only publish if not a folder and requested
+    if publish {
+        if isFolder, ok := story["is_folder"].(bool); !ok || !isFolder {
+            payload["publish"] = 1
+        }
+    }
+    body, err := json.Marshal(payload)
+    if err != nil {
+        return Story{}, err
+    }
+    req, err := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+    if err != nil {
+        return Story{}, fmt.Errorf("failed to create request: %w", err)
+    }
+    req.Header.Set("Authorization", c.token)
+    req.Header.Add("Content-Type", "application/json")
+    res, err := c.http.Do(req)
+    if err != nil {
+        return Story{}, err
+    }
+    defer res.Body.Close()
+    if res.StatusCode != 200 && res.StatusCode != 201 {
+        bodyBytes, _ := io.ReadAll(res.Body)
+        return Story{}, fmt.Errorf("story.update status %s: %s", res.Status, strings.TrimSpace(string(bodyBytes)))
+    }
+    var resp storyResp
+    if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+        return Story{}, err
+    }
+    return resp.Story, nil
+}
+
 // getStoryWithVersion fetches story with specific version parameter
 func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, version string) (Story, error) {
 	var u string

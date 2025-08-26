@@ -2,12 +2,12 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"time"
-    "encoding/json"
-    "fmt"
 
-    tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"storyblok-sync/internal/sb"
 )
@@ -191,9 +191,14 @@ func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult,
 func (so *SyncOrchestrator) SyncStoryDetailed(story sb.Story) (*SyncItemResult, error) {
 	// Ensure parent folder chain exists before syncing the story (no-op for root-only)
     adapter := newFolderReportAdapter(so.report)
-    // Use a small shim to satisfy FolderAPI from our SyncAPI
-    shim := folderAPIShim{api: so.api}
-    _, _ = EnsureFolderPathStatic(shim, adapter, nil, so.sourceSpace.ID, so.targetSpace.ID, story.FullSlug, false)
+    // Prefer real raw-capable API if available; otherwise fallback to shim
+    var folderAPI FolderAPI
+    if apiWithRaw, ok := any(so.api).(FolderAPI); ok {
+        folderAPI = apiWithRaw
+    } else {
+        folderAPI = folderAPIShim{api: so.api}
+    }
+    _, _ = EnsureFolderPathStatic(folderAPI, adapter, nil, so.sourceSpace.ID, so.targetSpace.ID, story.FullSlug, false)
 
 	// Compute publish flag from source item and target dev mode
 	publish := so.ShouldPublish() && story.Published
@@ -217,71 +222,71 @@ func (ra folderReportAdapter) AddSuccess(slug, operation string, duration int64,
 type folderAPIShim struct{ api SyncAPI }
 
 func (s folderAPIShim) GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error) {
-    return s.api.GetStoriesBySlug(ctx, spaceID, slug)
+	return s.api.GetStoriesBySlug(ctx, spaceID, slug)
 }
 func (s folderAPIShim) GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error) {
-    return s.api.GetStoryWithContent(ctx, spaceID, storyID)
+	return s.api.GetStoryWithContent(ctx, spaceID, storyID)
 }
 func (s folderAPIShim) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) {
-    // Raw not supported on SyncAPI; fallback to typed and approximate
-    st, err := s.api.GetStoryWithContent(ctx, spaceID, storyID)
-    if err != nil {
-        return nil, err
-    }
-    raw := map[string]interface{}{
-        "name":      st.Name,
-        "slug":      st.Slug,
-        "full_slug": st.FullSlug,
-        "is_folder": st.IsFolder,
-        "uuid":      st.UUID,
-    }
-    if st.FolderID != nil {
-        raw["parent_id"] = *st.FolderID
-    } else {
-        raw["parent_id"] = 0
-    }
-    if len(st.Content) > 0 {
-        var m map[string]interface{}
-        _ = json.Unmarshal(st.Content, &m)
-        raw["content"] = m
-    }
-    if len(st.TranslatedSlugs) > 0 {
-        arr := make([]map[string]interface{}, 0, len(st.TranslatedSlugs))
-        for _, ts := range st.TranslatedSlugs {
-            m := map[string]interface{}{"lang": ts.Lang, "name": ts.Name, "path": ts.Path}
-            arr = append(arr, m)
-        }
-        raw["translated_slugs"] = arr
-    }
-    return raw, nil
+	// Raw not supported on SyncAPI; fallback to typed and approximate
+	st, err := s.api.GetStoryWithContent(ctx, spaceID, storyID)
+	if err != nil {
+		return nil, err
+	}
+	raw := map[string]interface{}{
+		"name":      st.Name,
+		"slug":      st.Slug,
+		"full_slug": st.FullSlug,
+		"is_folder": st.IsFolder,
+		"uuid":      st.UUID,
+	}
+	if st.FolderID != nil {
+		raw["parent_id"] = *st.FolderID
+	} else {
+		raw["parent_id"] = 0
+	}
+	if len(st.Content) > 0 {
+		var m map[string]interface{}
+		_ = json.Unmarshal(st.Content, &m)
+		raw["content"] = m
+	}
+	if len(st.TranslatedSlugs) > 0 {
+		arr := make([]map[string]interface{}, 0, len(st.TranslatedSlugs))
+		for _, ts := range st.TranslatedSlugs {
+			m := map[string]interface{}{"lang": ts.Lang, "name": ts.Name, "path": ts.Path}
+			arr = append(arr, m)
+		}
+		raw["translated_slugs"] = arr
+	}
+	return raw, nil
 }
 func (s folderAPIShim) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error) {
-    // Convert raw to typed minimal story for creation
-    st := sb.Story{
-        Name:     asString(story["name"]),
-        Slug:     asString(story["slug"]),
-        FullSlug: asString(story["full_slug"]),
-        IsFolder: true,
-    }
-    if pid, ok := story["parent_id"].(int); ok {
-        st.FolderID = &pid
-    }
-    if content, ok := story["content"].(map[string]interface{}); ok {
-        b, _ := json.Marshal(content)
-        st.Content = json.RawMessage(b)
-    }
-    return s.api.CreateStoryWithPublish(ctx, spaceID, st, false)
+	// Convert raw to typed minimal story for creation
+	st := sb.Story{
+		Name:     asString(story["name"]),
+		Slug:     asString(story["slug"]),
+		FullSlug: asString(story["full_slug"]),
+		IsFolder: true,
+	}
+	if pid, ok := story["parent_id"].(int); ok {
+		st.FolderID = &pid
+	}
+	if content, ok := story["content"].(map[string]interface{}); ok {
+		b, _ := json.Marshal(content)
+		st.Content = json.RawMessage(b)
+	}
+	return s.api.CreateStoryWithPublish(ctx, spaceID, st, false)
 }
 func (s folderAPIShim) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error {
-    return s.api.UpdateStoryUUID(ctx, spaceID, storyID, uuid)
+	return s.api.UpdateStoryUUID(ctx, spaceID, storyID, uuid)
 }
 
 func asString(v interface{}) string {
-    if v == nil {
-        return ""
-    }
-    if s, ok := v.(string); ok {
-        return s
-    }
-    return fmt.Sprintf("%v", v)
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
 }

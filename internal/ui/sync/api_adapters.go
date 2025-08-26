@@ -10,7 +10,7 @@ import (
 
 // APIAdapter provides API operations with retry and error handling logic
 type APIAdapter struct {
-    api AdapterAPI
+	api AdapterAPI
 }
 
 // NewAPIAdapter creates a new API adapter
@@ -22,8 +22,8 @@ func NewAPIAdapter(api AdapterAPI) *APIAdapter {
 
 // AdapterAPI is the minimal API surface required by the adapter tests
 type AdapterAPI interface {
-    CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
-    UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+	UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
 }
 
 // IsRateLimited checks if an error indicates rate limiting
