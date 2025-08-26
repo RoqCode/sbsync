@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"encoding/json"
-	"testing"
+    "encoding/json"
+    "testing"
 
-	"storyblok-sync/internal/sb"
+    "storyblok-sync/internal/sb"
 )
 
 func TestReportCreationAndSaving(t *testing.T) {
@@ -12,21 +12,21 @@ func TestReportCreationAndSaving(t *testing.T) {
 	report := NewReport("Source Space (123)", "Target Space (456)")
 
 	// Add various types of entries
-	sourceStory := &sb.Story{
+    sourceStory := &sb.Story{
 		ID:       1,
 		Name:     "Test Story",
 		Slug:     "test-story",
 		FullSlug: "folder/test-story",
-		Content:  map[string]interface{}{"title": "Test Title"},
+        Content:  json.RawMessage([]byte(`{"title":"Test Title"}`)),
 		UUID:     "test-uuid-123",
 	}
 
-	targetStory := &sb.Story{
+    targetStory := &sb.Story{
 		ID:       2,
 		Name:     "Test Story",
 		Slug:     "test-story",
 		FullSlug: "folder/test-story",
-		Content:  map[string]interface{}{"title": "Test Title"},
+        Content:  json.RawMessage([]byte(`{"title":"Test Title"}`)),
 		UUID:     "test-uuid-123",
 	}
 
@@ -82,11 +82,11 @@ func TestReportCreationAndSaving(t *testing.T) {
 func TestReportJSONFormat(t *testing.T) {
 	report := NewReport("Source (123)", "Target (456)")
 
-	sourceStory := &sb.Story{
+    sourceStory := &sb.Story{
 		ID:       1,
 		Name:     "Test Story",
 		FullSlug: "test-story",
-		Content:  map[string]interface{}{"component": "story", "title": "Test"},
+        Content:  json.RawMessage([]byte(`{"component":"story","title":"Test"}`)),
 		UUID:     "story-uuid-123",
 	}
 

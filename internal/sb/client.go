@@ -1,17 +1,17 @@
 package sb
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
+    "bytes"
+    "context"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "net/url"
+    "strings"
+    "time"
 )
 
 const base = "https://mapi.storyblok.com/v1"
@@ -43,7 +43,10 @@ func (c *Client) ListSpaces(ctx context.Context) ([]Space, error) {
 	if c.token == "" {
 		return nil, errors.New("token leer")
 	}
-	req, _ := http.NewRequestWithContext(ctx, "GET", base+"/spaces", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", base+"/spaces", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	q := req.URL.Query()
@@ -79,7 +82,7 @@ type Story struct {
 	Name                      string                 `json:"name"`
 	Slug                      string                 `json:"slug"`
 	FullSlug                  string                 `json:"full_slug"`
-	Content                   map[string]interface{} `json:"content,omitempty"`
+    Content                   json.RawMessage        `json:"content,omitempty"`
 	ContentType               string                 `json:"content_type,omitempty"`
 	FolderID                  *int                   `json:"parent_id,omitempty"`
 	CreatedAt                 string                 `json:"created_at,omitempty"`
@@ -127,7 +130,10 @@ func (c *Client) ListStories(ctx context.Context, opt ListStoriesOpts) ([]Story,
 		q.Set("per_page", fmt.Sprint(opt.PerPage))
 		u.RawQuery = q.Encode()
 
-		req, _ := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 		req.Header.Set("Authorization", c.token)
 		req.Header.Add("Content-Type", "application/json")
 
@@ -135,18 +141,16 @@ func (c *Client) ListStories(ctx context.Context, opt ListStoriesOpts) ([]Story,
 		if err != nil {
 			return nil, err
 		}
+		defer res.Body.Close()
 
 		if res.StatusCode != 200 {
-			res.Body.Close()
 			return nil, fmt.Errorf("stories.list status %s", res.Status)
 		}
 
 		var payload storiesResp
 		if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
-			res.Body.Close()
 			return nil, err
 		}
-		res.Body.Close()
 
 		all = append(all, payload.Stories...)
 
@@ -181,7 +185,10 @@ func (c *Client) CreateStory(ctx context.Context, spaceID int, st Story) (Story,
 	if err != nil {
 		return Story{}, err
 	}
-	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -219,7 +226,10 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish
 	if err != nil {
 		return Story{}, err
 	}
-	req, _ := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -228,7 +238,10 @@ func (c *Client) UpdateStory(ctx context.Context, spaceID int, st Story, publish
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		bodyBytes, _ := io.ReadAll(res.Body)
+		bodyBytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			return Story{}, fmt.Errorf("failed to read response body: %w", err)
+		}
 		var apiErr struct {
 			Error string `json:"error"`
 		}
@@ -260,14 +273,10 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 
 	// DEBUG: Log the payload before marshalling
 	log.Printf("DEBUG: Creating story - Before marshal:")
-	log.Printf("DEBUG: Story has content: %t", st.Content != nil)
-	if st.Content != nil {
-		contentKeys := make([]string, 0, len(st.Content))
-		for k := range st.Content {
-			contentKeys = append(contentKeys, k)
-		}
-		log.Printf("DEBUG: Content keys: %v", contentKeys)
-	}
+    log.Printf("DEBUG: Story has content: %t", len(st.Content) > 0)
+    if len(st.Content) > 0 {
+        log.Printf("DEBUG: Content keys: %v", contentKeysFromRaw(st.Content))
+    }
 	log.Printf("DEBUG: Story is folder: %t", st.IsFolder)
 	log.Printf("DEBUG: Story published: %t", st.Published)
 
@@ -292,7 +301,10 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	log.Printf("DEBUG: Story FolderID: %v", st.FolderID)
 	log.Printf("DEBUG: Story Published: %t", st.Published)
 	log.Printf("DEBUG: Story IsFolder: %t", st.IsFolder)
-	req, _ := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -301,7 +313,10 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		bodyBytes, _ := io.ReadAll(res.Body)
+		bodyBytes, err := io.ReadAll(res.Body)
+		if err != nil {
+			return Story{}, fmt.Errorf("failed to read response body: %w", err)
+		}
 		// DEBUG: log body for troubleshooting
 		if res.StatusCode == 422 {
 			log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
@@ -331,7 +346,10 @@ func (c *Client) GetStoriesBySlug(ctx context.Context, spaceID int, slug string)
 	q.Set("with_slug", slug)
 	u.RawQuery = q.Encode()
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 
@@ -363,7 +381,10 @@ func (c *Client) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid
 	if err != nil {
 		return err
 	}
-	req, _ := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -387,7 +408,10 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 	// The CLI does: client.get(`spaces/${spaceId}/stories/${storyId}`)
 	u := fmt.Sprintf(base+"/spaces/%d/stories/%d", spaceID, storyID)
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -405,16 +429,12 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 
 	// DEBUG: Log what we received from the API
 	story := payload.Story
-	log.Printf("DEBUG: Fetched story %d (%s) - Content present: %t", story.ID, story.FullSlug, story.Content != nil)
-	if story.Content != nil {
-		contentKeys := make([]string, 0, len(story.Content))
-		for k := range story.Content {
-			contentKeys = append(contentKeys, k)
-		}
-		log.Printf("DEBUG: Fetched content keys: %v", contentKeys)
-	} else {
-		log.Printf("DEBUG: Story content is nil - this is likely the issue!")
-	}
+    log.Printf("DEBUG: Fetched story %d (%s) - Content present: %t", story.ID, story.FullSlug, len(story.Content) > 0)
+    if len(story.Content) > 0 {
+        log.Printf("DEBUG: Fetched content keys: %v", contentKeysFromRaw(story.Content))
+    } else {
+        log.Printf("DEBUG: Story content is empty - this is likely the issue!")
+    }
 
 	return story, nil
 }
@@ -430,7 +450,10 @@ func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, 
 		u = fmt.Sprintf(base+"/spaces/%d/stories/%d?version=%s&resolve_relations=1", spaceID, storyID, version)
 	}
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return Story{}, fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", c.token)
 	req.Header.Add("Content-Type", "application/json")
 	res, err := c.http.Do(req)
@@ -446,4 +469,20 @@ func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, 
 		return Story{}, err
 	}
 	return payload.Story, nil
+}
+
+// contentKeysFromRaw extracts top-level keys from a JSON raw message.
+func contentKeysFromRaw(raw json.RawMessage) []string {
+    if len(raw) == 0 {
+        return nil
+    }
+    var tmp map[string]interface{}
+    if err := json.Unmarshal(raw, &tmp); err != nil {
+        return nil
+    }
+    keys := make([]string, 0, len(tmp))
+    for k := range tmp {
+        keys = append(keys, k)
+    }
+    return keys
 }

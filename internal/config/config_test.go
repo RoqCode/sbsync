@@ -56,3 +56,12 @@ func TestSaveRequiresToken(t *testing.T) {
 		t.Fatal("expected error for empty token")
 	}
 }
+
+func TestDefaultPathUsesHome(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	want := filepath.Join(dir, ".sbrc")
+	if got := DefaultPath(); got != want {
+		t.Fatalf("DefaultPath() = %q, want %q", got, want)
+	}
+}
