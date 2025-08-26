@@ -7,11 +7,11 @@ import (
 // SyncItemResult represents the result of a single sync operation
 type SyncItemResult struct {
 	Operation   string    `json:"operation"`   // create|update|skip
-	TargetStory *sb.Story `json:"targetStory"` // created/updated story  
+	TargetStory *sb.Story `json:"targetStory"` // created/updated story
 	Warning     string    `json:"warning"`     // any warnings
 }
 
-// SyncResultMsg represents a message containing sync operation results  
+// SyncResultMsg represents a message containing sync operation results
 type SyncResultMsg struct {
 	Index     int             `json:"index"`
 	Err       error           `json:"error"`

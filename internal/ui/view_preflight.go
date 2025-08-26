@@ -5,99 +5,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	tree "github.com/charmbracelet/lipgloss/tree"
 )
 
-func (m Model) viewPreflight() string {
-	var b strings.Builder
-	total := len(m.preflight.items)
-	collisions := 0
-	for _, it := range m.preflight.items {
-		if it.Collision {
-			collisions++
-		}
-	}
-	b.WriteString(fmt.Sprintf("Preflight – %d Items  |  Kollisionen: %d\n\n", total, collisions))
-	if total == 0 {
-		b.WriteString(warnStyle.Render("Keine Stories markiert.") + "\n")
-	} else {
-		tr := tree.New()
-		nodes := make(map[int]*tree.Tree, len(m.preflight.items))
-		for _, it := range m.preflight.items {
-			node := tree.Root(displayPreflightItem(it))
-			nodes[it.Story.ID] = node
-		}
-		for _, it := range m.preflight.items {
-			node := nodes[it.Story.ID]
-			if it.Story.FolderID != nil {
-				if parent, ok := nodes[*it.Story.FolderID]; ok {
-					parent.Child(node)
-					continue
-				}
-			}
-			tr.Child(node)
-		}
-		lines := strings.Split(tr.String(), "\n")
-		if len(lines) > 0 && lines[len(lines)-1] == "" {
-			lines = lines[:len(lines)-1]
-		}
-		for i, it := range m.preflight.items {
-			if i >= len(lines) {
-				break
-			}
-			content := lines[i]
-			if it.Collision {
-				content = collisionSign + " " + content
-			} else {
-				content = "  " + content
-			}
-			lineStyle := lipgloss.NewStyle().Width(m.width - 2)
-			if i == m.preflight.listIndex {
-				lineStyle = cursorLineStyle.Copy().Width(m.width - 2)
-			}
-			if it.State == StateSkip {
-				lineStyle = lineStyle.Faint(true)
-			}
-			content = lineStyle.Render(content)
-			cursorCell := " "
-			if i == m.preflight.listIndex {
-				cursorCell = cursorBarStyle.Render(" ")
-			}
-			stateCell := " "
-			switch it.Run {
-			case RunRunning:
-				stateCell = m.spinner.View()
-			case RunDone:
-				stateCell = stateDoneStyle.Render(string(it.State))
-			case RunCancelled:
-				stateCell = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("0")).Bold(true).Render("X")
-			default:
-				if it.State != "" {
-					if st, ok := stateStyles[it.State]; ok {
-						stateCell = st.Render(string(it.State))
-					} else {
-						stateCell = string(it.State)
-					}
-				}
-			}
-			lines[i] = cursorCell + stateCell + content
-		}
-		// Let BubbleTea viewport handle content slicing - just provide full content
-		b.WriteString(strings.Join(lines, "\n"))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-	if m.syncing {
-		b.WriteString(renderProgress(m.syncIndex, len(m.preflight.items), m.width-2))
-		b.WriteString("\n\n")
-	}
-	if m.syncing {
-		b.WriteString(helpStyle.Render("Syncing... | Ctrl+C to cancel"))
-	} else {
-		b.WriteString(helpStyle.Render("j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"))
-	}
-	return b.String()
-}
+// Preflight is rendered via viewport header/content/footer.
 
 func displayPreflightItem(it PreflightItem) string {
 	name := it.Story.Name
@@ -138,38 +48,22 @@ func (m Model) renderPreflightContent() string {
 		return b.String()
 	}
 
-	tr := tree.New()
-	nodes := make(map[int]*tree.Tree, len(m.preflight.items))
-	for _, it := range m.preflight.items {
-		node := tree.Root(displayPreflightItem(it))
-		nodes[it.Story.ID] = node
-	}
-	for _, it := range m.preflight.items {
-		node := nodes[it.Story.ID]
-		if it.Story.FolderID != nil {
-			if parent, ok := nodes[*it.Story.FolderID]; ok {
-				parent.Child(node)
-				continue
-			}
-		}
-		tr.Child(node)
-	}
-	lines := strings.Split(tr.String(), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	for i, it := range m.preflight.items {
-		if i >= len(lines) {
+	// Build stories slice in preflight visible order (shared helper)
+	stories, order := m.visibleOrderPreflight()
+	lines := generateTreeLinesFromStories(stories)
+	for visPos, idx := range order {
+		if visPos >= len(lines) {
 			break
 		}
-		content := lines[i]
+		it := m.preflight.items[idx]
+		content := lines[visPos]
 		if it.Collision {
 			content = collisionSign + " " + content
 		} else {
 			content = "  " + content
 		}
 		lineStyle := lipgloss.NewStyle().Width(m.width - 4)
-		if i == m.preflight.listIndex {
+		if visPos == m.preflight.listIndex {
 			lineStyle = cursorLineStyle.Copy().Width(m.width - 4)
 		}
 		if it.State == StateSkip {
@@ -177,7 +71,7 @@ func (m Model) renderPreflightContent() string {
 		}
 		content = lineStyle.Render(content)
 		cursorCell := " "
-		if i == m.preflight.listIndex {
+		if visPos == m.preflight.listIndex {
 			cursorCell = cursorBarStyle.Render(" ")
 		}
 		stateCell := " "
@@ -197,7 +91,7 @@ func (m Model) renderPreflightContent() string {
 				}
 			}
 		}
-		lines[i] = cursorCell + stateCell + content
+		lines[visPos] = cursorCell + stateCell + content
 	}
 	b.WriteString(strings.Join(lines, "\n"))
 	return b.String()

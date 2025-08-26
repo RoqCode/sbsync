@@ -35,11 +35,11 @@ func IsDevModePublishLimit(err error) bool {
 		return false
 	}
 	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "plan limit") || 
-		   strings.Contains(errStr, "publish limit") ||
-		   strings.Contains(errStr, "exceeded") ||
-		   strings.Contains(errStr, "development mode") ||
-		   strings.Contains(errStr, "publishing is limited")
+	return strings.Contains(errStr, "plan limit") ||
+		strings.Contains(errStr, "publish limit") ||
+		strings.Contains(errStr, "exceeded") ||
+		strings.Contains(errStr, "development mode") ||
+		strings.Contains(errStr, "publishing is limited")
 }
 
 // UpdateStoryWithPublishRetry attempts to update a story with publish retry fallback

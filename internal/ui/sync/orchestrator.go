@@ -12,11 +12,11 @@ import (
 
 // SyncOrchestrator manages the execution of sync operations with Bubble Tea integration
 type SyncOrchestrator struct {
-	api           SyncAPI
-	contentMgr    *ContentManager
-	report        ReportInterface
-	sourceSpace   *sb.Space
-	targetSpace   *sb.Space
+	api         SyncAPI
+	contentMgr  *ContentManager
+	report      ReportInterface
+	sourceSpace *sb.Space
+	targetSpace *sb.Space
 }
 
 // SyncAPI defines the interface for sync API operations

@@ -91,6 +91,9 @@ func (it *PreflightItem) RecalcState() {
 type PreflightState struct {
 	items     []PreflightItem
 	listIndex int
+	// visibleIdx maps visible list positions to indices in items
+	// to support folder collapse/expand like in browse view
+	visibleIdx []int
 }
 
 type SyncPlan struct {
@@ -144,4 +147,7 @@ type Model struct {
 
 	preflight PreflightState
 	plan      SyncPlan
+
+	// preserve browse collapse state when entering preflight
+	collapsedBeforePreflight map[int]bool
 }

@@ -11,11 +11,11 @@ import (
 
 // Mock implementations for testing
 type mockSyncAPI struct {
-	getStoriesFunc        func(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
-	getStoryContentFunc   func(ctx context.Context, spaceID, storyID int) (sb.Story, error)
-	createStoryFunc       func(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
-	updateStoryFunc       func(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
-	updateStoryUUIDFunc   func(ctx context.Context, spaceID, storyID int, uuid string) error
+	getStoriesFunc      func(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
+	getStoryContentFunc func(ctx context.Context, spaceID, storyID int) (sb.Story, error)
+	createStoryFunc     func(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+	updateStoryFunc     func(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+	updateStoryUUIDFunc func(ctx context.Context, spaceID, storyID int, uuid string) error
 }
 
 func (m *mockSyncAPI) GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error) {
@@ -78,9 +78,9 @@ type mockSyncItem struct {
 	isFolder   bool
 }
 
-func (m *mockSyncItem) GetStory() sb.Story   { return m.story }
-func (m *mockSyncItem) IsStartsWith() bool   { return m.startsWith }
-func (m *mockSyncItem) IsFolder() bool       { return m.isFolder }
+func (m *mockSyncItem) GetStory() sb.Story { return m.story }
+func (m *mockSyncItem) IsStartsWith() bool { return m.startsWith }
+func (m *mockSyncItem) IsFolder() bool     { return m.isFolder }
 
 func TestNewSyncOrchestrator(t *testing.T) {
 	api := &mockSyncAPI{}
@@ -255,20 +255,20 @@ func TestRunSyncItem_ContextCancellation(t *testing.T) {
 	}
 
 	cmd := orchestrator.RunSyncItem(ctx, 0, item)
-	
+
 	// Execute the command
 	msg := cmd()
-	
+
 	// Should return a cancelled result
 	result, ok := msg.(SyncResultMsg)
 	if !ok {
 		t.Fatalf("Expected SyncResultMsg, got %T", msg)
 	}
-	
+
 	if !result.Cancelled {
 		t.Error("Expected cancelled result for cancelled context")
 	}
-	
+
 	if result.Index != 0 {
 		t.Errorf("Expected index 0, got %d", result.Index)
 	}

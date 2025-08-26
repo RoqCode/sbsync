@@ -1,19 +1,19 @@
 package sync
 
 import (
-    "encoding/json"
-    "testing"
+	"encoding/json"
+	"testing"
 
-    "storyblok-sync/internal/sb"
+	"storyblok-sync/internal/sb"
 )
 
 func TestPrepareStoryForCreation(t *testing.T) {
-    story := sb.Story{
+	story := sb.Story{
 		ID:        123,
 		Name:      "Test Story",
 		Slug:      "test-story",
 		FullSlug:  "test-story",
-        Content:   json.RawMessage([]byte(`{"component":"page"}`)),
+		Content:   json.RawMessage([]byte(`{"component":"page"}`)),
 		UUID:      "test-uuid",
 		CreatedAt: "2023-01-01T00:00:00Z",
 		UpdatedAt: "2023-01-02T00:00:00Z",
@@ -68,12 +68,12 @@ func TestPrepareStoryForCreation(t *testing.T) {
 }
 
 func TestPrepareStoryForUpdate(t *testing.T) {
-    source := sb.Story{
+	source := sb.Story{
 		ID:        999, // This should be ignored
 		Name:      "Updated Name",
 		Slug:      "updated-slug",
 		FullSlug:  "updated-slug",
-        Content:   json.RawMessage([]byte(`{"component":"updated"}`)),
+		Content:   json.RawMessage([]byte(`{"component":"updated"}`)),
 		UUID:      "source-uuid",
 		CreatedAt: "2023-01-01T00:00:00Z", // Should be ignored
 		UpdatedAt: "2023-01-02T00:00:00Z", // Should be ignored
@@ -81,12 +81,12 @@ func TestPrepareStoryForUpdate(t *testing.T) {
 		FolderID:  &[]int{789}[0],
 	}
 
-    target := sb.Story{
+	target := sb.Story{
 		ID:        123, // This should be preserved
 		Name:      "Old Name",
 		Slug:      "old-slug",
 		FullSlug:  "old-slug",
-        Content:   json.RawMessage([]byte(`{"component":"old"}`)),
+		Content:   json.RawMessage([]byte(`{"component":"old"}`)),
 		UUID:      "target-uuid",
 		CreatedAt: "2022-01-01T00:00:00Z", // Should be preserved
 		UpdatedAt: "2022-01-02T00:00:00Z", // Should be cleared
@@ -127,15 +127,15 @@ func TestPrepareStoryForUpdate(t *testing.T) {
 		t.Errorf("Expected source UUID (%s), got %s", source.UUID, result.UUID)
 	}
 
-    if len(result.Content) == 0 {
+	if len(result.Content) == 0 {
 		t.Error("Expected Content to be set")
 	} else {
-        var tmp map[string]interface{}
-        _ = json.Unmarshal(result.Content, &tmp)
-        component := tmp["component"]
-        if component != "updated" {
-            t.Errorf("Expected source Content, got component: %v", component)
-        }
+		var tmp map[string]interface{}
+		_ = json.Unmarshal(result.Content, &tmp)
+		component := tmp["component"]
+		if component != "updated" {
+			t.Errorf("Expected source Content, got component: %v", component)
+		}
 	}
 
 	if result.Position != source.Position {
@@ -148,67 +148,67 @@ func TestPrepareStoryForUpdate(t *testing.T) {
 }
 
 func TestEnsureDefaultContent_NonFolder(t *testing.T) {
-    story := sb.Story{
+	story := sb.Story{
 		ID:       1,
 		Slug:     "test",
 		FullSlug: "test",
 		IsFolder: false,
-        Content:  nil, // No content initially
+		Content:  nil, // No content initially
 	}
 
 	result := EnsureDefaultContent(story)
 
-    if len(result.Content) == 0 {
+	if len(result.Content) == 0 {
 		t.Fatal("Expected Content to be created for non-folder story")
 	}
-    var tmp map[string]interface{}
-    _ = json.Unmarshal(result.Content, &tmp)
-    component := tmp["component"]
-    if component != "page" {
-        t.Errorf("Expected default component 'page', got %v", component)
-    }
+	var tmp map[string]interface{}
+	_ = json.Unmarshal(result.Content, &tmp)
+	component := tmp["component"]
+	if component != "page" {
+		t.Errorf("Expected default component 'page', got %v", component)
+	}
 }
 
 func TestEnsureDefaultContent_NonFolderWithExistingContent(t *testing.T) {
-    story := sb.Story{
+	story := sb.Story{
 		ID:       1,
 		Slug:     "test",
 		FullSlug: "test",
 		IsFolder: false,
-        Content:  json.RawMessage([]byte(`{"component":"article","title":"Existing"}`)),
+		Content:  json.RawMessage([]byte(`{"component":"article","title":"Existing"}`)),
 	}
 
 	result := EnsureDefaultContent(story)
 
-    if len(result.Content) == 0 {
+	if len(result.Content) == 0 {
 		t.Fatal("Expected Content to be preserved")
 	}
-    // Existing content should be preserved
-    var tmp map[string]interface{}
-    _ = json.Unmarshal(result.Content, &tmp)
-    component := tmp["component"]
-    if component != "article" {
-        t.Errorf("Expected existing component 'article', got %v", component)
-    }
-    title := tmp["title"]
-    if title != "Existing" {
-        t.Errorf("Expected existing title 'Existing', got %v", title)
-    }
+	// Existing content should be preserved
+	var tmp map[string]interface{}
+	_ = json.Unmarshal(result.Content, &tmp)
+	component := tmp["component"]
+	if component != "article" {
+		t.Errorf("Expected existing component 'article', got %v", component)
+	}
+	title := tmp["title"]
+	if title != "Existing" {
+		t.Errorf("Expected existing title 'Existing', got %v", title)
+	}
 }
 
 func TestEnsureDefaultContent_Folder(t *testing.T) {
-    story := sb.Story{
+	story := sb.Story{
 		ID:       1,
 		Slug:     "folder",
 		FullSlug: "folder",
 		IsFolder: true,
-        Content:  nil, // No content initially
+		Content:  nil, // No content initially
 	}
 
 	result := EnsureDefaultContent(story)
 
 	// Folders should not get default content
-    if len(result.Content) != 0 {
+	if len(result.Content) != 0 {
 		t.Errorf("Expected Content to remain nil for folders, got %v", result.Content)
 	}
 }
@@ -223,11 +223,11 @@ func TestGetFolderPaths_SingleLevel(t *testing.T) {
 func TestGetFolderPaths_TwoLevels(t *testing.T) {
 	paths := GetFolderPaths("folder/story")
 	expected := []string{"folder"}
-	
+
 	if len(paths) != 1 {
 		t.Fatalf("Expected 1 folder path, got %d: %v", len(paths), paths)
 	}
-	
+
 	if paths[0] != expected[0] {
 		t.Errorf("Expected path '%s', got '%s'", expected[0], paths[0])
 	}
@@ -236,11 +236,11 @@ func TestGetFolderPaths_TwoLevels(t *testing.T) {
 func TestGetFolderPaths_ThreeLevels(t *testing.T) {
 	paths := GetFolderPaths("app/section/story")
 	expected := []string{"app", "app/section"}
-	
+
 	if len(paths) != 2 {
 		t.Fatalf("Expected 2 folder paths, got %d: %v", len(paths), paths)
 	}
-	
+
 	for i, expectedPath := range expected {
 		if paths[i] != expectedPath {
 			t.Errorf("Expected path[%d] '%s', got '%s'", i, expectedPath, paths[i])
@@ -251,11 +251,11 @@ func TestGetFolderPaths_ThreeLevels(t *testing.T) {
 func TestGetFolderPaths_DeepNesting(t *testing.T) {
 	paths := GetFolderPaths("app/section/subsection/story")
 	expected := []string{"app", "app/section", "app/section/subsection"}
-	
+
 	if len(paths) != 3 {
 		t.Fatalf("Expected 3 folder paths, got %d: %v", len(paths), paths)
 	}
-	
+
 	for i, expectedPath := range expected {
 		if paths[i] != expectedPath {
 			t.Errorf("Expected path[%d] '%s', got '%s'", i, expectedPath, paths[i])
@@ -273,11 +273,11 @@ func TestGetFolderPaths_EmptyString(t *testing.T) {
 func TestGetFolderPaths_TrailingSlash(t *testing.T) {
 	paths := GetFolderPaths("folder/story/")
 	expected := []string{"folder", "folder/story"}
-	
+
 	if len(paths) != 2 {
 		t.Fatalf("Expected 2 folder paths, got %d: %v", len(paths), paths)
 	}
-	
+
 	for i, expectedPath := range expected {
 		if paths[i] != expectedPath {
 			t.Errorf("Expected path[%d] '%s', got '%s'", i, expectedPath, paths[i])

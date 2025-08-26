@@ -1,12 +1,12 @@
 package sync
 
 import (
-    "context"
-    "encoding/json"
-    "log"
-    "time"
+	"context"
+	"encoding/json"
+	"log"
+	"time"
 
-    "storyblok-sync/internal/sb"
+	"storyblok-sync/internal/sb"
 )
 
 // StorySyncer handles story and folder synchronization operations
@@ -56,7 +56,7 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		// Update existing story
 		existingStory := existing[0]
 		updateStory := PrepareStoryForUpdate(fullStory, existingStory)
-		
+
 		updated, err := ss.api.UpdateStory(ctx, ss.targetSpaceID, updateStory, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
@@ -74,7 +74,7 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 	} else {
 		// Create new story
 		createStory := PrepareStoryForCreation(fullStory)
-		
+
 		created, err := ss.api.CreateStoryWithPublish(ctx, ss.targetSpaceID, createStory, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
@@ -89,19 +89,19 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPublish bool) (sb.Story, error) {
 	log.Printf("Syncing folder: %s", folder.FullSlug)
 
-    // Ensure content is loaded for folder
-    fullFolder, err := ss.contentMgr.EnsureContent(ctx, folder)
+	// Ensure content is loaded for folder
+	fullFolder, err := ss.contentMgr.EnsureContent(ctx, folder)
 	if err != nil {
 		// If content loading fails, use folder as-is with minimal content
 		fullFolder = folder
-        if len(fullFolder.Content) == 0 {
-            fullFolder.Content = json.RawMessage([]byte(`{}`))
-        }
+		if len(fullFolder.Content) == 0 {
+			fullFolder.Content = json.RawMessage([]byte(`{}`))
+		}
 	}
 
-    // Debug logging
-    log.Printf("DEBUG: syncFolder %s has content: %t, is_folder: %t", 
-        folder.FullSlug, len(fullFolder.Content) > 0, fullFolder.IsFolder)
+	// Debug logging
+	log.Printf("DEBUG: syncFolder %s has content: %t, is_folder: %t",
+		folder.FullSlug, len(fullFolder.Content) > 0, fullFolder.IsFolder)
 
 	// Check if folder already exists in target
 	existing, err := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, folder.FullSlug)
@@ -119,7 +119,7 @@ func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPu
 		// Update existing folder
 		existingFolder := existing[0]
 		updateFolder := PrepareStoryForUpdate(fullFolder, existingFolder)
-		
+
 		updated, err := ss.api.UpdateStory(ctx, ss.targetSpaceID, updateFolder, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
@@ -137,12 +137,12 @@ func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPu
 	} else {
 		// Create new folder
 		createFolder := PrepareStoryForCreation(fullFolder)
-		
-    // Ensure folders have proper content structure
-    if createFolder.IsFolder && len(createFolder.Content) == 0 {
-        createFolder.Content = json.RawMessage([]byte(`{}`))
-    }
-		
+
+		// Ensure folders have proper content structure
+		if createFolder.IsFolder && len(createFolder.Content) == 0 {
+			createFolder.Content = json.RawMessage([]byte(`{}`))
+		}
+
 		created, err := ss.api.CreateStoryWithPublish(ctx, ss.targetSpaceID, createFolder, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err

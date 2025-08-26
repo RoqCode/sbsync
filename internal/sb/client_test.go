@@ -1,12 +1,12 @@
 package sb
 
 import (
-    "context"
-    "encoding/json"
-    "io"
-    "net/http"
-    "strings"
-    "testing"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -221,11 +221,11 @@ func TestGetStoryWithContentAndGetStory(t *testing.T) {
 		body := `{"story":{"id":2,"name":"story","content":{"body":{}}}}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	})}
-    st, err := c.GetStoryWithContent(context.Background(), 1, 2)
+	st, err := c.GetStoryWithContent(context.Background(), 1, 2)
 	if err != nil {
 		t.Fatalf("GetStoryWithContent returned error: %v", err)
 	}
-    if st.ID != 2 || len(st.Content) == 0 {
+	if st.ID != 2 || len(st.Content) == 0 {
 		t.Fatalf("unexpected story: %+v", st)
 	}
 	st2, err := c.GetStory(context.Background(), 1, 2)

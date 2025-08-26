@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	tree "github.com/charmbracelet/lipgloss/tree"
 )
 
 func (m *Model) updateBrowseViewport() {
@@ -53,36 +52,11 @@ func (m Model) renderBrowseContent() string {
 		return b.String()
 	}
 
-	// Sammle sichtbare Stories
-	stories := make([]sb.Story, total)
-	for i := 0; i < total; i++ {
-		stories[i] = m.itemAt(i)
-	}
+	// Sammle sichtbare Stories (shared helper)
+	stories, _ := m.visibleOrderBrowse()
 
-	// Erzeuge Tree-Struktur
-	tr := tree.New()
-	nodes := make(map[int]*tree.Tree, len(stories))
-	for _, st := range stories {
-		node := tree.Root(displayStory(st))
-		nodes[st.ID] = node
-	}
-
-	for _, st := range stories {
-		node := nodes[st.ID]
-		if st.FolderID != nil {
-			if parent, ok := nodes[*st.FolderID]; ok {
-				parent.Child(node)
-				continue
-			}
-		}
-		tr.Child(node)
-	}
-
-	// Render tree lines
-	lines := strings.Split(tr.String(), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
+	// Erzeuge Tree-Struktur (shared helper)
+	lines := generateTreeLinesFromStories(stories)
 
 	for i, st := range stories {
 		if i >= len(lines) {
@@ -101,18 +75,20 @@ func (m Model) renderBrowseContent() string {
 			cursorCell = cursorBarStyle.Render(" ")
 		}
 
-		markCell := " "
+		// Preflight has a stateCell; for consistency, browse also reserves a state cell.
+		// Here we render selection mark into that cell and keep same width budget.
+		stateCell := " "
 		if m.selection.selected[st.FullSlug] {
-			markCell = markBarStyle.Render(" ")
+			stateCell = markBarStyle.Render(" ")
 		} else if st.IsFolder {
 			if m.hasSelectedDirectChild(st.FullSlug) {
-				markCell = markNestedStyle.Render(":")
+				stateCell = markNestedStyle.Render(":")
 			} else if m.hasSelectedDescendant(st.FullSlug) {
-				markCell = markNestedStyle.Render("·")
+				stateCell = markNestedStyle.Render("·")
 			}
 		}
 
-		lines[i] = cursorCell + markCell + content
+		lines[i] = cursorCell + stateCell + content
 	}
 
 	b.WriteString(strings.Join(lines, "\n"))

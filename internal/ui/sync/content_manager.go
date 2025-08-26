@@ -3,8 +3,8 @@ package sync
 import (
 	"context"
 
+	"encoding/json"
 	"storyblok-sync/internal/sb"
-    "encoding/json"
 )
 
 // folderAPI interface defines the methods needed for content management
@@ -34,12 +34,12 @@ func NewContentManager(api folderAPI, spaceID int) *ContentManager {
 // EnsureContent fetches story content if not present, with caching
 func (cm *ContentManager) EnsureContent(ctx context.Context, story sb.Story) (sb.Story, error) {
 	// Return if content already exists
-    if len(story.Content) > 0 {
+	if len(story.Content) > 0 {
 		return story, nil
 	}
 
 	// Check cache first
-    if cached, exists := cm.cache[story.ID]; exists && len(cached.Content) > 0 {
+	if cached, exists := cm.cache[story.ID]; exists && len(cached.Content) > 0 {
 		cm.hitCount++
 		story.Content = cached.Content
 		return story, nil
@@ -52,10 +52,10 @@ func (cm *ContentManager) EnsureContent(ctx context.Context, story sb.Story) (sb
 	}
 
 	// Use fetched content or default
-    if len(fullStory.Content) > 0 {
+	if len(fullStory.Content) > 0 {
 		story.Content = fullStory.Content
 	} else {
-        story.Content = json.RawMessage([]byte(`{}`))
+		story.Content = json.RawMessage([]byte(`{}`))
 	}
 
 	// Cache the result with size limit

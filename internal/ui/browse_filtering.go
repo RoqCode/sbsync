@@ -77,10 +77,10 @@ func (m *Model) refreshVisible() {
 		}
 
 		story := m.storiesSource[idx]
-		
+
 		// If this item matches the filter, include it
 		shouldInclude := included[idx]
-		
+
 		if shouldInclude {
 			m.visibleIdx = append(m.visibleIdx, idx)
 		}

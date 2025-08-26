@@ -41,12 +41,12 @@ func (so *SyncOperations) RunSyncItem(ctx context.Context, idx int, item interfa
 
 		log.Printf("Starting sync for item %d", idx)
 		startTime := time.Now()
-		
+
 		// Implement sync logic here based on item type
 		// This is a placeholder for the actual sync implementation
-		
+
 		duration := time.Since(startTime).Milliseconds()
-		
+
 		// Return success result
 		return SyncResultMsg{
 			Index:    idx,
