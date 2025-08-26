@@ -21,12 +21,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// global shortcuts
 		if key == "ctrl+c" {
-			// If we're syncing, cancel the sync operations
+			// If we're syncing, cancel the sync operations but don't quit
 			if m.syncing && m.syncCancel != nil {
 				m.syncCancel()
 				m.statusMsg = "Sync cancelled by user (Ctrl+C)"
 				return m, nil
 			}
+			// If not syncing, quit the application
 			return m, tea.Quit
 		}
 		if key == "q" {
