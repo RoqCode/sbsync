@@ -1,10 +1,7 @@
 package ui
 
 import (
-    "strings"
-    
     "github.com/charmbracelet/lipgloss"
-    "storyblok-sync/internal/sb"
 )
 
 // ensureCursorVisible ensures the cursor stays within the viewport bounds
@@ -35,11 +32,8 @@ func (m *Model) calculateCursorLine() int {
 		return 0
 	}
 
-	// Get ALL visible stories (not just up to cursor)
-	stories := make([]sb.Story, total)
-	for i := 0; i < total; i++ {
-		stories[i] = m.itemAt(i)
-	}
+    // Get ALL visible stories (not just up to cursor) via shared helper
+    stories, _ := m.visibleOrderBrowse()
 
     // Generate the complete tree structure exactly as in view_browse.go
     treeLines := generateTreeLinesFromStories(stories)
@@ -65,9 +59,9 @@ func (m *Model) calculateCursorLine() int {
 		// Apply the same styling as in view_browse.go
 		styledContent := lipgloss.NewStyle().Width(contentWidth).Render(treeLines[i])
 		
-		// Count wrapped lines for this styled content
-		wrappedLines := m.countWrappedLines(styledContent)
-		totalLines += wrappedLines
+    // Count wrapped lines for this styled content
+    wrappedLines := m.countWrappedLines(styledContent)
+    totalLines += wrappedLines
 	}
 
 	return totalLines
@@ -78,13 +72,4 @@ func (m *Model) calculateCursorLine() int {
 
 
 // countWrappedLines counts how many display lines a piece of styled content takes
-func (m *Model) countWrappedLines(styledContent string) int {
-	// For the tree view, each story takes exactly one line
-	// The lipgloss styling doesn't introduce additional line breaks in our case
-	// Just count newlines in the content
-	if styledContent == "" {
-		return 1
-	}
-	lines := strings.Count(styledContent, "\n") + 1
-	return lines
-}
+// countWrappedLines moved to viewport_shared.go for reuse

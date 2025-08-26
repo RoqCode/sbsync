@@ -52,11 +52,8 @@ func (m Model) renderBrowseContent() string {
 		return b.String()
 	}
 
-	// Sammle sichtbare Stories
-	stories := make([]sb.Story, total)
-	for i := 0; i < total; i++ {
-		stories[i] = m.itemAt(i)
-	}
+    // Sammle sichtbare Stories (shared helper)
+    stories, _ := m.visibleOrderBrowse()
 
     // Erzeuge Tree-Struktur (shared helper)
     lines := generateTreeLinesFromStories(stories)

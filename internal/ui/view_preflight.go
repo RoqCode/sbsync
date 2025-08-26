@@ -5,7 +5,6 @@ import (
     "strings"
 
     "github.com/charmbracelet/lipgloss"
-    "storyblok-sync/internal/sb"
 )
 
 // Preflight is rendered via viewport header/content/footer.
@@ -49,18 +48,8 @@ func (m Model) renderPreflightContent() string {
 		return b.String()
 	}
 
-    // Build stories slice in preflight visible order
-    stories := make([]sb.Story, 0, len(m.preflight.items))
-    order := m.preflight.visibleIdx
-    if len(order) == 0 {
-        // fallback to sequential if visible not initialized
-        for i := range m.preflight.items {
-            order = append(order, i)
-        }
-    }
-    for _, idx := range order {
-        stories = append(stories, m.preflight.items[idx].Story)
-    }
+    // Build stories slice in preflight visible order (shared helper)
+    stories, order := m.visibleOrderPreflight()
     lines := generateTreeLinesFromStories(stories)
     for visPos, idx := range order {
         if visPos >= len(lines) {

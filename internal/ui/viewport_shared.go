@@ -27,3 +27,18 @@ func (m *Model) ensureCursorInViewport(cursorLine int) {
 		m.viewport.SetYOffset(target)
 	}
 }
+
+// countWrappedLines counts how many display lines a piece of styled content takes
+// Currently we count explicit newlines; lipgloss Width padding does not add newlines.
+func (m *Model) countWrappedLines(styledContent string) int {
+    if styledContent == "" {
+        return 1
+    }
+    lines := 1
+    for _, ch := range styledContent {
+        if ch == '\n' {
+            lines++
+        }
+    }
+    return lines
+}

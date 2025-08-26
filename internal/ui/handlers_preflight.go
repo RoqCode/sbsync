@@ -288,20 +288,8 @@ func (m *Model) calculatePreflightCursorLine() int {
         return 0
     }
 
-    // Visible order
-    order := m.preflight.visibleIdx
-    if len(order) == 0 {
-        order = make([]int, 0, total)
-        for i := 0; i < total; i++ {
-            order = append(order, i)
-        }
-    }
-
-    // Build tree lines for visible stories
-    stories := make([]sb.Story, 0, len(order))
-    for _, idx := range order {
-        stories = append(stories, m.preflight.items[idx].Story)
-    }
+    // Visible order and stories via shared helper
+    stories, order := m.visibleOrderPreflight()
     treeLines := generateTreeLinesFromStories(stories)
 
     // Width budget equals renderPreflightContent (cursorCell + stateCell + content)
