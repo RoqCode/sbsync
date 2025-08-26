@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"storyblok-sync/internal/sb"
+	"storyblok-sync/internal/ui/sync"
 )
 
 // Constants for sync operations and timeouts
@@ -19,112 +19,38 @@ const (
 	// API timeout constants
 	defaultTimeout = 15 * time.Second
 	longTimeout    = 30 * time.Second
-
-	// Operation types
-	operationCreate = "create"
-	operationUpdate = "update"
-	operationSkip   = "skip"
-
-	// Content defaults
-	defaultComponent = "page"
+	
+	// Operation types - use sync package constants
+	operationCreate = sync.OperationCreate
+	operationUpdate = sync.OperationUpdate
+	operationSkip   = sync.OperationSkip
 )
 
-// getContentKeys extracts keys from content map for debugging
-func getContentKeys(content map[string]interface{}) []string {
-	if content == nil {
-		return nil
-	}
-	keys := make([]string, 0, len(content))
-	for k := range content {
-		keys = append(keys, k)
-	}
-	return keys
-}
 
-// contentManager handles story content fetching and caching
+// Legacy wrapper for content management - now uses the extracted module
 type contentManager struct {
-	api      folderAPI
-	spaceID  int
-	cache    map[int]sb.Story
-	maxSize  int
-	hitCount int
+	*sync.ContentManager
 }
 
-// newContentManager creates a new content manager with cache size limit
+// newContentManager creates a new content manager using the extracted module
 func newContentManager(api folderAPI, spaceID int) *contentManager {
 	return &contentManager{
-		api:     api,
-		spaceID: spaceID,
-		cache:   make(map[int]sb.Story),
-		maxSize: 500, // Limit cache to 500 entries
+		ContentManager: sync.NewContentManager(api, spaceID),
 	}
 }
 
-// ensureContent fetches story content if not present, with caching
+// ensureContent is a legacy wrapper that calls the new EnsureContent method
 func (cm *contentManager) ensureContent(ctx context.Context, story sb.Story) (sb.Story, error) {
-	// Return if content already exists
-	if story.Content != nil {
-		return story, nil
-	}
-
-	// Check cache first
-	if cached, exists := cm.cache[story.ID]; exists && cached.Content != nil {
-		story.Content = cached.Content
-		return story, nil
-	}
-
-	// Fetch from API
-	fullStory, err := cm.api.GetStoryWithContent(ctx, cm.spaceID, story.ID)
-	if err != nil {
-		return story, err
-	}
-
-	// Use fetched content or default
-	if fullStory.Content != nil {
-		story.Content = fullStory.Content
-	} else {
-		story.Content = map[string]interface{}{}
-	}
-
-	// Cache the result with size limit
-	cm.addToCache(story)
-	return story, nil
+	return cm.EnsureContent(ctx, story)
 }
 
-// addToCache adds a story to the cache with LRU eviction when size limit is reached
-func (cm *contentManager) addToCache(story sb.Story) {
-	// If cache is at capacity, remove oldest entries
-	if len(cm.cache) >= cm.maxSize {
-		// Simple eviction: remove first 100 entries to make room
-		// In a production system, you might want proper LRU implementation
-		count := 0
-		for id := range cm.cache {
-			if count >= 100 {
-				break
-			}
-			delete(cm.cache, id)
-			count++
-		}
-	}
-	cm.cache[story.ID] = story
-}
-
-// prepareStoryForCreation prepares a story for creation by clearing read-only fields
+// Legacy wrappers for utility functions - now uses the extracted module
 func prepareStoryForCreation(story sb.Story) sb.Story {
-	story.ID = 0
-	story.CreatedAt = ""
-	story.UpdatedAt = ""
-	return story
+	return sync.PrepareStoryForCreation(story)
 }
 
-// prepareStoryForUpdate prepares a story for update by preserving necessary fields
 func prepareStoryForUpdate(source, target sb.Story) sb.Story {
-	// Keep target's ID and timestamps, but use source's content
-	source.ID = target.ID
-	source.CreatedAt = target.CreatedAt
-	// Don't set UpdatedAt - let API handle it
-	source.UpdatedAt = ""
-	return source
+	return sync.PrepareStoryForUpdate(source, target)
 }
 
 // resolveParentFolder resolves and sets the correct parent folder ID for a story
@@ -174,168 +100,32 @@ func (m *Model) syncUUID(ctx context.Context, targetStory sb.Story, sourceUUID s
 	return nil
 }
 
-// ensureDefaultContent ensures non-folder stories have content
 func ensureDefaultContent(story sb.Story) sb.Story {
-	if !story.IsFolder && story.Content == nil {
-		story.Content = map[string]interface{}{
-			"component": defaultComponent,
-		}
-	}
-	return story
+	return sync.EnsureDefaultContent(story)
 }
 
-type syncItemResult struct {
-	operation   string    // create|update|skip
-	targetStory *sb.Story // created/updated story
-	warning     string    // any warnings
-}
+// Legacy type aliases for backward compatibility
+type syncItemResult = sync.SyncItemResult
+type syncResultMsg = sync.SyncResultMsg
+type syncCancelledMsg = sync.SyncCancelledMsg
 
-type syncResultMsg struct {
-	index     int
-	err       error
-	result    *syncItemResult
-	duration  int64 // in milliseconds
-	cancelled bool  // true if operation was cancelled
-}
-
-type syncCancelledMsg struct {
-	message string
-}
-
-// logError logs comprehensive error information for debugging
+// Legacy wrapper for logging functions - now uses the extracted module
 func logError(operation, slug string, err error, story *sb.Story) {
-	log.Printf("ERROR: %s failed for %s: %v", operation, slug, err)
-
-	if story != nil {
-		// Log story context
-		log.Printf("ERROR CONTEXT for %s:", slug)
-		log.Printf("  Story ID: %d", story.ID)
-		log.Printf("  Story UUID: %s", story.UUID)
-		log.Printf("  Story Name: %s", story.Name)
-		log.Printf("  Full Slug: %s", story.FullSlug)
-		log.Printf("  Is Folder: %t", story.IsFolder)
-		log.Printf("  Published: %t", story.Published)
-
-		if story.FolderID != nil {
-			log.Printf("  Parent ID: %d", *story.FolderID)
-		}
-
-		if len(story.TagList) > 0 {
-			log.Printf("  Tags: %v", story.TagList)
-		}
-
-		if len(story.TranslatedSlugs) > 0 {
-			log.Printf("  Translated Slugs: %d entries", len(story.TranslatedSlugs))
-			for _, ts := range story.TranslatedSlugs {
-				log.Printf("    - %s: %s (%s)", ts.Lang, ts.Name, ts.Path)
-			}
-		}
-
-		// Log content summary (first level keys only, to avoid huge logs)
-		if story.Content != nil && len(story.Content) > 0 {
-			contentKeys := make([]string, 0, len(story.Content))
-			for key := range story.Content {
-				contentKeys = append(contentKeys, key)
-			}
-			log.Printf("  Content Keys: %v", contentKeys)
-
-			// Log component type if available
-			if component, ok := story.Content["component"].(string); ok {
-				log.Printf("  Component Type: %s", component)
-			}
-		}
-
-		// Log full story as JSON for complete debugging (only if content is small enough)
-		if storyJSON, err := json.Marshal(story); err == nil {
-			if len(storyJSON) < 2000 { // Only log if less than 2KB
-				log.Printf("  Full Story JSON: %s", string(storyJSON))
-			} else {
-				log.Printf("  Full Story JSON: [too large, %d bytes - see report file]", len(storyJSON))
-			}
-		}
-	}
-
-	// Log additional error context if available
-	logExtendedErrorContext(err)
+	sync.LogError(operation, slug, err, story)
 }
 
-// logWarning logs comprehensive warning information
 func logWarning(operation, slug, warning string, story *sb.Story) {
-	log.Printf("WARNING: %s for %s: %s", operation, slug, warning)
-
-	if story != nil {
-		log.Printf("WARNING CONTEXT for %s:", slug)
-		log.Printf("  Story ID: %d (UUID: %s)", story.ID, story.UUID)
-		log.Printf("  Full Slug: %s", story.FullSlug)
-		if story.FolderID != nil {
-			log.Printf("  Parent ID: %d", *story.FolderID)
-		}
-	}
+	sync.LogWarning(operation, slug, warning, story)
 }
 
-// logSuccess logs success with context information
 func logSuccess(operation, slug string, duration int64, targetStory *sb.Story) {
-	log.Printf("SUCCESS: %s completed for %s in %dms", operation, slug, duration)
-
-	if targetStory != nil {
-		log.Printf("SUCCESS CONTEXT for %s:", slug)
-		log.Printf("  Created/Updated Story ID: %d (UUID: %s)", targetStory.ID, targetStory.UUID)
-		if targetStory.FolderID != nil {
-			log.Printf("  Parent ID: %d", *targetStory.FolderID)
-		}
-		log.Printf("  Published: %t", targetStory.Published)
-	}
+	sync.LogSuccess(operation, slug, duration, targetStory)
 }
 
-// logExtendedErrorContext extracts and logs additional context from errors
-func logExtendedErrorContext(err error) {
-	if err == nil {
-		return
-	}
+// logExtendedErrorContext is now handled within the sync.LogError function
 
-	errStr := err.Error()
-
-	// Check for common API error patterns and log additional context
-	if strings.Contains(errStr, "status") {
-		log.Printf("  HTTP Error Details: %s", errStr)
-	}
-
-	if strings.Contains(errStr, "timeout") {
-		log.Printf("  Timeout Error - this may indicate network issues or server overload")
-	}
-
-	if strings.Contains(errStr, "401") || strings.Contains(errStr, "403") {
-		log.Printf("  Authentication/Authorization Error - check token permissions")
-	}
-
-	if strings.Contains(errStr, "404") {
-		log.Printf("  Resource Not Found - story or space may not exist")
-	}
-
-	if strings.Contains(errStr, "429") {
-		log.Printf("  Rate Limited - will retry with backoff")
-	}
-
-	if strings.Contains(errStr, "500") || strings.Contains(errStr, "502") || strings.Contains(errStr, "503") {
-		log.Printf("  Server Error - this may be temporary, will retry")
-	}
-}
-
-// getFolderPaths extracts all parent folder paths from a story slug
 func getFolderPaths(slug string) []string {
-	parts := strings.Split(slug, "/")
-	if len(parts) <= 1 {
-		return nil
-	}
-
-	paths := make([]string, 0, len(parts)-1)
-	for i := 1; i < len(parts); i++ {
-		path := strings.Join(parts[:i], "/")
-		if path != "" {
-			paths = append(paths, path)
-		}
-	}
-	return paths
+	return sync.GetFolderPaths(slug)
 }
 
 // buildTargetFolderMap creates a map of existing folders in target space for quick lookup
@@ -492,7 +282,7 @@ func (m *Model) runNextItem() tea.Cmd {
 		// Check if context is already cancelled before starting
 		select {
 		case <-ctx.Done():
-			return syncResultMsg{index: idx, cancelled: true}
+			return syncResultMsg{Index: idx, Cancelled: true}
 		default:
 		}
 
@@ -529,10 +319,10 @@ func (m *Model) runNextItem() tea.Cmd {
 		if err != nil {
 			logError("sync", it.Story.FullSlug, err, &it.Story)
 		} else if result != nil {
-			if result.warning != "" {
-				logWarning(result.operation, it.Story.FullSlug, result.warning, &it.Story)
+			if result.Warning != "" {
+				logWarning(result.Operation, it.Story.FullSlug, result.Warning, &it.Story)
 			} else {
-				logSuccess(result.operation, it.Story.FullSlug, duration, result.targetStory)
+				logSuccess(result.Operation, it.Story.FullSlug, duration, result.TargetStory)
 			}
 			time.Sleep(50 * time.Millisecond)
 		} else {
@@ -540,7 +330,7 @@ func (m *Model) runNextItem() tea.Cmd {
 			time.Sleep(50 * time.Millisecond)
 		}
 
-		return syncResultMsg{index: idx, err: err, result: result, duration: duration}
+		return syncResultMsg{Index: idx, Err: err, Result: result, Duration: duration}
 	}
 }
 
@@ -585,7 +375,7 @@ func (m *Model) syncWithRetry(operation func() error) error {
 
 	// Log final failure with additional context
 	log.Printf("RETRY FAILED: Operation failed after 3 attempts, final error: %v", lastErr)
-	logExtendedErrorContext(lastErr)
+	// Extended error context now handled in sync.LogError
 
 	return lastErr
 }
@@ -941,7 +731,7 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 	fullFolder, err := contentMgr.ensureContent(ctx, sourceFolder)
 	if err != nil {
 		log.Printf("Failed to ensure content for folder %s: %v", sourceFolder.FullSlug, err)
-		logExtendedErrorContext(err)
+		// Extended error context now handled in sync.LogError
 		return nil, err
 	}
 
@@ -951,7 +741,7 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 	existing, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, sourceFolder.FullSlug)
 	if err != nil {
 		log.Printf("Failed to check if target folder exists for %s: %v", sourceFolder.FullSlug, err)
-		logExtendedErrorContext(err)
+		// Extended error context now handled in sync.LogError
 		return nil, err
 	}
 
@@ -978,7 +768,7 @@ func (m *Model) executeSync(ctx context.Context, story sb.Story, existing []sb.S
 		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, story, m.shouldPublish())
 		if err != nil {
 			log.Printf("Failed to update %s (ID: %d): %v", story.FullSlug, story.ID, err)
-			logExtendedErrorContext(err)
+			// Extended error context now handled in sync.LogError
 			return nil, err
 		}
 
@@ -1002,7 +792,7 @@ func (m *Model) executeSync(ctx context.Context, story sb.Story, existing []sb.S
 		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, story, m.shouldPublish())
 		if err != nil {
 			log.Printf("Failed to create %s: %v", story.FullSlug, err)
-			logExtendedErrorContext(err)
+			// Extended error context now handled in sync.LogError
 			return nil, err
 		}
 
@@ -1021,9 +811,9 @@ func (m *Model) executeSync(ctx context.Context, story sb.Story, existing []sb.S
 	}
 
 	return &syncItemResult{
-		operation:   operation,
-		targetStory: targetStory,
-		warning:     warning,
+		Operation:   operation,
+		TargetStory: targetStory,
+		Warning:     warning,
 	}, nil
 }
 
@@ -1134,7 +924,7 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 	fullStory, err := contentMgr.ensureContent(ctx, sourceStory)
 	if err != nil {
 		log.Printf("Failed to ensure content for story %s: %v", sourceStory.FullSlug, err)
-		logExtendedErrorContext(err)
+		// Extended error context now handled in sync.LogError
 		return nil, err
 	}
 
@@ -1142,7 +932,7 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 	existing, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, sourceStory.FullSlug)
 	if err != nil {
 		log.Printf("Failed to check if target story exists for %s: %v", sourceStory.FullSlug, err)
-		logExtendedErrorContext(err)
+		// Extended error context now handled in sync.LogError
 		return nil, err
 	}
 
@@ -1304,14 +1094,14 @@ func (m *Model) syncStartsWithDetailed(slug string) (*syncItemResult, error) {
 		}
 
 		if result != nil {
-			if result.operation == "create" {
+			if result.Operation == "create" {
 				totalCreated++
-			} else if result.operation == "update" {
+			} else if result.Operation == "update" {
 				totalUpdated++
 			}
 
-			if result.warning != "" {
-				warnings = append(warnings, fmt.Sprintf("%s: %s", st.FullSlug, result.warning))
+			if result.Warning != "" {
+				warnings = append(warnings, fmt.Sprintf("%s: %s", st.FullSlug, result.Warning))
 			}
 		}
 	}
@@ -1324,8 +1114,8 @@ func (m *Model) syncStartsWithDetailed(slug string) (*syncItemResult, error) {
 
 	log.Printf("Completed syncing %d items starting with %s", len(toSync), slug)
 	return &syncItemResult{
-		operation: operation,
-		warning:   warning,
+		Operation: operation,
+		Warning:   warning,
 	}, nil
 }
 

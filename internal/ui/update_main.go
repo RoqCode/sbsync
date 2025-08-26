@@ -134,14 +134,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case syncResultMsg:
-		if msg.index < len(m.preflight.items) {
-			if msg.cancelled {
-				m.preflight.items[msg.index].Run = RunCancelled
-				it := m.preflight.items[msg.index]
+		if msg.Index < len(m.preflight.items) {
+			if msg.Cancelled {
+				m.preflight.items[msg.Index].Run = RunCancelled
+				it := m.preflight.items[msg.Index]
 				m.report.AddError(it.Story.FullSlug, "cancelled", "Sync cancelled by user", 0, &it.Story)
 
 				// Mark all remaining items as cancelled
-				for i := msg.index + 1; i < len(m.preflight.items); i++ {
+				for i := msg.Index + 1; i < len(m.preflight.items); i++ {
 					if m.preflight.items[i].Run == RunPending || m.preflight.items[i].Run == RunRunning {
 						m.preflight.items[i].Run = RunCancelled
 						it := m.preflight.items[i]
@@ -156,24 +156,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			m.preflight.items[msg.index].Run = RunDone
-			it := m.preflight.items[msg.index]
+			m.preflight.items[msg.Index].Run = RunDone
+			it := m.preflight.items[msg.Index]
 
-			if msg.err != nil {
+			if msg.Err != nil {
 				// Add error to report with complete source story
-				m.report.AddError(it.Story.FullSlug, "sync", msg.err.Error(), msg.duration, &it.Story)
-			} else if msg.result != nil {
+				m.report.AddError(it.Story.FullSlug, "sync", msg.Err.Error(), msg.Duration, &it.Story)
+			} else if msg.Result != nil {
 				// Add successful sync to report
-				if msg.result.warning != "" {
+				if msg.Result.Warning != "" {
 					// Success with warning
-					m.report.AddWarning(it.Story.FullSlug, msg.result.operation, msg.result.warning, msg.duration, &it.Story, msg.result.targetStory)
+					m.report.AddWarning(it.Story.FullSlug, msg.Result.Operation, msg.Result.Warning, msg.Duration, &it.Story, msg.Result.TargetStory)
 				} else {
 					// Pure success
-					m.report.AddSuccess(it.Story.FullSlug, msg.result.operation, msg.duration, msg.result.targetStory)
+					m.report.AddSuccess(it.Story.FullSlug, msg.Result.Operation, msg.Duration, msg.Result.TargetStory)
 				}
 			} else {
 				// Fallback for unexpected case
-				m.report.AddSuccess(it.Story.FullSlug, "unknown", msg.duration, nil)
+				m.report.AddSuccess(it.Story.FullSlug, "unknown", msg.Duration, nil)
 			}
 		}
 
