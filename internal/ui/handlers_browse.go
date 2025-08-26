@@ -4,7 +4,7 @@ package ui
 // All the main browse handling logic has been moved to specialized files:
 //
 // - browse_input.go: Input handling for search and filter modes
-// - browse_navigation.go: Tree navigation and cursor movement 
+// - browse_navigation.go: Tree navigation and cursor movement
 // - browse_selection.go: Item selection logic
 // - browse_viewport.go: Viewport scrolling and cursor positioning
 // - browse_filtering.go: Search and filter application logic

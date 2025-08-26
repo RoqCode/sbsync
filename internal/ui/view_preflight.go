@@ -1,10 +1,10 @@
 package ui
 
 import (
-    "fmt"
-    "strings"
+	"fmt"
+	"strings"
 
-    "github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Preflight is rendered via viewport header/content/footer.
@@ -48,30 +48,30 @@ func (m Model) renderPreflightContent() string {
 		return b.String()
 	}
 
-    // Build stories slice in preflight visible order (shared helper)
-    stories, order := m.visibleOrderPreflight()
-    lines := generateTreeLinesFromStories(stories)
-    for visPos, idx := range order {
-        if visPos >= len(lines) {
-            break
-        }
-        it := m.preflight.items[idx]
-        content := lines[visPos]
+	// Build stories slice in preflight visible order (shared helper)
+	stories, order := m.visibleOrderPreflight()
+	lines := generateTreeLinesFromStories(stories)
+	for visPos, idx := range order {
+		if visPos >= len(lines) {
+			break
+		}
+		it := m.preflight.items[idx]
+		content := lines[visPos]
 		if it.Collision {
 			content = collisionSign + " " + content
 		} else {
 			content = "  " + content
 		}
-        lineStyle := lipgloss.NewStyle().Width(m.width - 4)
-        if visPos == m.preflight.listIndex {
-            lineStyle = cursorLineStyle.Copy().Width(m.width - 4)
+		lineStyle := lipgloss.NewStyle().Width(m.width - 4)
+		if visPos == m.preflight.listIndex {
+			lineStyle = cursorLineStyle.Copy().Width(m.width - 4)
 		}
 		if it.State == StateSkip {
 			lineStyle = lineStyle.Faint(true)
 		}
 		content = lineStyle.Render(content)
 		cursorCell := " "
-        if visPos == m.preflight.listIndex {
+		if visPos == m.preflight.listIndex {
 			cursorCell = cursorBarStyle.Render(" ")
 		}
 		stateCell := " "
@@ -91,7 +91,7 @@ func (m Model) renderPreflightContent() string {
 				}
 			}
 		}
-        lines[visPos] = cursorCell + stateCell + content
+		lines[visPos] = cursorCell + stateCell + content
 	}
 	b.WriteString(strings.Join(lines, "\n"))
 	return b.String()

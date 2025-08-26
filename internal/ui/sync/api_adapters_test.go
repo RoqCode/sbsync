@@ -75,7 +75,7 @@ func (m *mockUpdateAPI) UpdateStoryUUID(ctx context.Context, spaceID, storyID in
 func TestNewAPIAdapter(t *testing.T) {
 	api := &mockCreateAPI{}
 	adapter := NewAPIAdapter(api)
-	
+
 	if adapter == nil {
 		t.Fatal("Expected API adapter to be created")
 	}
@@ -132,23 +132,23 @@ func TestIsDevModePublishLimit(t *testing.T) {
 func TestCreateStoryWithPublishRetry_Success(t *testing.T) {
 	api := &mockCreateAPI{}
 	adapter := NewAPIAdapter(api)
-	
+
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
-	
+
 	created, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
 	if err != nil {
 		t.Fatalf("Expected success, got error: %v", err)
 	}
-	
+
 	if len(api.calls) != 1 {
 		t.Errorf("Expected 1 API call, got %d", len(api.calls))
 	}
-	
+
 	if !api.calls[0] {
 		t.Error("Expected publish=true on first call")
 	}
-	
+
 	if created.ID == 0 {
 		t.Error("Expected created story to have ID set")
 	}
@@ -164,27 +164,27 @@ func TestCreateStoryWithPublishRetry_DevModeLimit(t *testing.T) {
 		},
 	}
 	adapter := NewAPIAdapter(api)
-	
+
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
-	
+
 	created, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
 	if err != nil {
 		t.Fatalf("Expected success after retry, got error: %v", err)
 	}
-	
+
 	if len(api.calls) != 2 {
 		t.Errorf("Expected 2 API calls, got %d", len(api.calls))
 	}
-	
+
 	if !api.calls[0] {
 		t.Error("Expected publish=true on first call")
 	}
-	
+
 	if api.calls[1] {
 		t.Error("Expected publish=false on retry call")
 	}
-	
+
 	if created.ID == 0 {
 		t.Error("Expected created story to have ID set")
 	}
@@ -198,15 +198,15 @@ func TestCreateStoryWithPublishRetry_PersistentError(t *testing.T) {
 		},
 	}
 	adapter := NewAPIAdapter(api)
-	
+
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
-	
+
 	_, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
 	if err != expectedErr {
 		t.Errorf("Expected persistent error, got: %v", err)
 	}
-	
+
 	if len(api.calls) != 1 {
 		t.Errorf("Expected 1 API call, got %d", len(api.calls))
 	}
@@ -215,23 +215,23 @@ func TestCreateStoryWithPublishRetry_PersistentError(t *testing.T) {
 func TestUpdateStoryWithPublishRetry_Success(t *testing.T) {
 	api := &mockUpdateAPI{}
 	adapter := NewAPIAdapter(api)
-	
+
 	story := sb.Story{ID: 1, Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
-	
+
 	updated, err := adapter.UpdateStoryWithPublishRetry(ctx, 1, story, true)
 	if err != nil {
 		t.Fatalf("Expected success, got error: %v", err)
 	}
-	
+
 	if len(api.calls) != 1 {
 		t.Errorf("Expected 1 API call, got %d", len(api.calls))
 	}
-	
+
 	if !api.calls[0] {
 		t.Error("Expected publish=true on first call")
 	}
-	
+
 	if updated.ID != story.ID {
 		t.Errorf("Expected updated story to preserve ID %d, got %d", story.ID, updated.ID)
 	}
@@ -247,23 +247,23 @@ func TestUpdateStoryWithPublishRetry_DevModeLimit(t *testing.T) {
 		},
 	}
 	adapter := NewAPIAdapter(api)
-	
+
 	story := sb.Story{ID: 1, Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
-	
+
 	_, err := adapter.UpdateStoryWithPublishRetry(ctx, 1, story, true)
 	if err != nil {
 		t.Fatalf("Expected success after retry, got error: %v", err)
 	}
-	
+
 	if len(api.calls) != 2 {
 		t.Errorf("Expected 2 API calls, got %d", len(api.calls))
 	}
-	
+
 	if !api.calls[0] {
 		t.Error("Expected publish=true on first call")
 	}
-	
+
 	if api.calls[1] {
 		t.Error("Expected publish=false on retry call")
 	}
@@ -272,19 +272,19 @@ func TestUpdateStoryWithPublishRetry_DevModeLimit(t *testing.T) {
 func TestExecuteSync_CreateNew(t *testing.T) {
 	api := &mockCreateAPI{}
 	adapter := NewAPIAdapter(api)
-	
+
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
-	
+
 	result, operation, err := adapter.ExecuteSync(ctx, 1, story, nil, true)
 	if err != nil {
 		t.Fatalf("Expected success, got error: %v", err)
 	}
-	
+
 	if operation != OperationCreate {
 		t.Errorf("Expected operation %s, got %s", OperationCreate, operation)
 	}
-	
+
 	if result.ID == 0 {
 		t.Error("Expected result to have ID set")
 	}
@@ -293,20 +293,20 @@ func TestExecuteSync_CreateNew(t *testing.T) {
 func TestExecuteSync_UpdateExisting(t *testing.T) {
 	api := &mockUpdateAPI{}
 	adapter := NewAPIAdapter(api)
-	
+
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	existing := &sb.Story{ID: 123, Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
-	
+
 	result, operation, err := adapter.ExecuteSync(ctx, 1, story, existing, true)
 	if err != nil {
 		t.Fatalf("Expected success, got error: %v", err)
 	}
-	
+
 	if operation != OperationUpdate {
 		t.Errorf("Expected operation %s, got %s", OperationUpdate, operation)
 	}
-	
+
 	if result.ID != existing.ID {
 		t.Errorf("Expected result ID to be %d, got %d", existing.ID, result.ID)
 	}

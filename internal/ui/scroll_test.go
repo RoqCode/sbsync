@@ -1,10 +1,10 @@
 package ui
 
 import (
-    "strings"
-    "testing"
+	"strings"
+	"testing"
 
-    "storyblok-sync/internal/sb"
+	"storyblok-sync/internal/sb"
 )
 
 func makeStories(n int) []sb.Story {
@@ -21,9 +21,9 @@ func TestBrowseEnsureCursorVisibleScrollsDownAndUp(t *testing.T) {
 	m.rebuildStoryIndex()
 	m.applyFilter()
 
-    m.viewport.Height = 5
-    m.viewport.SetContent(strings.Repeat("x\n", 100))
-    m.viewport.SetYOffset(0)
+	m.viewport.Height = 5
+	m.viewport.SetContent(strings.Repeat("x\n", 100))
+	m.viewport.SetYOffset(0)
 
 	// Move cursor to bottom edge -> should scroll down by margin logic (to 1)
 	m.selection.listIndex = 4
@@ -33,7 +33,7 @@ func TestBrowseEnsureCursorVisibleScrollsDownAndUp(t *testing.T) {
 	}
 
 	// Now set a high offset and move cursor above top margin -> scroll up
-    m.viewport.SetYOffset(10)
+	m.viewport.SetYOffset(10)
 	m.selection.listIndex = 8
 	m.ensureCursorVisible()
 	if m.viewport.YOffset != 7 {
@@ -51,9 +51,9 @@ func TestPreflightEnsureCursorVisibleScrollsDownAndUp(t *testing.T) {
 	m.preflight.items = items
 	m.refreshPreflightVisible()
 
-    m.viewport.Height = 5
-    m.viewport.SetContent(strings.Repeat("x\n", 100))
-    m.viewport.SetYOffset(0)
+	m.viewport.Height = 5
+	m.viewport.SetContent(strings.Repeat("x\n", 100))
+	m.viewport.SetYOffset(0)
 
 	// Move cursor to bottom edge -> should scroll down by margin logic (to 1)
 	m.preflight.listIndex = 4
@@ -63,7 +63,7 @@ func TestPreflightEnsureCursorVisibleScrollsDownAndUp(t *testing.T) {
 	}
 
 	// Now set a high offset and move cursor above top margin -> scroll up
-    m.viewport.SetYOffset(10)
+	m.viewport.SetYOffset(10)
 	m.preflight.listIndex = 8
 	m.ensurePreflightCursorVisible()
 	if m.viewport.YOffset != 7 {

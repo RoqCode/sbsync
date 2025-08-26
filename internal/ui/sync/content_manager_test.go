@@ -1,12 +1,12 @@
 package sync
 
 import (
-    "context"
-    "encoding/json"
-    "errors"
-    "testing"
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
 
-    "storyblok-sync/internal/sb"
+	"storyblok-sync/internal/sb"
 )
 
 // Mock for content manager testing
@@ -68,12 +68,12 @@ func TestNewContentManager(t *testing.T) {
 func TestEnsureContent_CacheHit(t *testing.T) {
 	api := &mockContentAPI{
 		storyContent: map[int]sb.Story{
-            1: {
-                ID:       1,
-                Slug:     "test",
-                FullSlug: "test",
-                Content:  json.RawMessage([]byte(`{"component":"page"}`)),
-            },
+			1: {
+				ID:       1,
+				Slug:     "test",
+				FullSlug: "test",
+				Content:  json.RawMessage([]byte(`{"component":"page"}`)),
+			},
 		},
 	}
 
@@ -107,9 +107,9 @@ func TestEnsureContent_CacheHit(t *testing.T) {
 		t.Error("Expected identical results from cache hit")
 	}
 
-    if len(result1.Content) == 0 || len(result2.Content) == 0 {
-        t.Error("Expected content to be preserved")
-    }
+	if len(result1.Content) == 0 || len(result2.Content) == 0 {
+		t.Error("Expected content to be preserved")
+	}
 }
 
 func TestEnsureContent_AlreadyHasContent(t *testing.T) {

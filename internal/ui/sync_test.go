@@ -1,13 +1,13 @@
 package ui
 
 import (
-    "context"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "testing"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"testing"
 
-    "storyblok-sync/internal/sb"
+	"storyblok-sync/internal/sb"
 )
 
 // TestSyncRetryLogic has been moved to test the extracted sync module
@@ -111,10 +111,10 @@ func (m *mockAPI) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb
 }
 
 func TestEnsureFolderPathCreatesFolders(t *testing.T) {
-    srcFolders := []sb.Story{
-        {ID: 1, Name: "foo", Slug: "foo", FullSlug: "foo", IsFolder: true, Content: json.RawMessage([]byte(`{"content_types":["page"],"lock_subfolders_content_types":false}`))},
-        {ID: 2, Name: "bar", Slug: "bar", FullSlug: "foo/bar", IsFolder: true, FolderID: &[]int{1}[0], Content: json.RawMessage([]byte(`{"content_types":["page"],"lock_subfolders_content_types":false}`))},
-    }
+	srcFolders := []sb.Story{
+		{ID: 1, Name: "foo", Slug: "foo", FullSlug: "foo", IsFolder: true, Content: json.RawMessage([]byte(`{"content_types":["page"],"lock_subfolders_content_types":false}`))},
+		{ID: 2, Name: "bar", Slug: "bar", FullSlug: "foo/bar", IsFolder: true, FolderID: &[]int{1}[0], Content: json.RawMessage([]byte(`{"content_types":["page"],"lock_subfolders_content_types":false}`))},
+	}
 	api := &mockAPI{
 		source: map[int]sb.Story{
 			1: srcFolders[0],
@@ -131,39 +131,39 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 	if len(created) != 2 {
 		t.Fatalf("expected 2 folders created, got %d", len(created))
 	}
-        if foo, ok := api.target["foo"]; !ok {
+	if foo, ok := api.target["foo"]; !ok {
 		t.Errorf("expected folder 'foo' to be created")
-    } else {
-        var tmp map[string]interface{}
-        _ = json.Unmarshal(foo.Content, &tmp)
-        v, ok := tmp["content_types"]
-        if !ok {
-            t.Errorf("expected folder 'foo' to keep content type 'page'")
-        } else {
-            arr, _ := v.([]interface{})
-            if len(arr) != 1 || arr[0] != "page" {
-                t.Errorf("expected folder 'foo' to keep content type 'page'")
-            }
-        }
-    }
+	} else {
+		var tmp map[string]interface{}
+		_ = json.Unmarshal(foo.Content, &tmp)
+		v, ok := tmp["content_types"]
+		if !ok {
+			t.Errorf("expected folder 'foo' to keep content type 'page'")
+		} else {
+			arr, _ := v.([]interface{})
+			if len(arr) != 1 || arr[0] != "page" {
+				t.Errorf("expected folder 'foo' to keep content type 'page'")
+			}
+		}
+	}
 	if bar, ok := api.target["foo/bar"]; !ok {
 		t.Errorf("expected folder 'foo/bar' to be created")
-    } else {
-        parent := api.target["foo"]
-        if bar.FolderID == nil || *bar.FolderID != parent.ID {
+	} else {
+		parent := api.target["foo"]
+		if bar.FolderID == nil || *bar.FolderID != parent.ID {
 			t.Errorf("expected 'foo/bar' to reference parent 'foo'")
 		}
-        var tmp map[string]interface{}
-        _ = json.Unmarshal(bar.Content, &tmp)
-        v, ok := tmp["content_types"]
-        if !ok {
-            t.Errorf("expected folder 'foo/bar' to keep content type 'page'")
-        } else {
-            arr, _ := v.([]interface{})
-            if len(arr) != 1 || arr[0] != "page" {
-                t.Errorf("expected folder 'foo/bar' to keep content type 'page'")
-            }
-        }
+		var tmp map[string]interface{}
+		_ = json.Unmarshal(bar.Content, &tmp)
+		v, ok := tmp["content_types"]
+		if !ok {
+			t.Errorf("expected folder 'foo/bar' to keep content type 'page'")
+		} else {
+			arr, _ := v.([]interface{})
+			if len(arr) != 1 || arr[0] != "page" {
+				t.Errorf("expected folder 'foo/bar' to keep content type 'page'")
+			}
+		}
 	}
 	if len(report.Entries) != 2 {
 		t.Fatalf("expected 2 report entries, got %d", len(report.Entries))
@@ -190,7 +190,7 @@ func (m *publishLimitCreateMock) CreateStoryWithPublish(ctx context.Context, spa
 }
 
 func TestCreateStoryWithPublishRetryDevMode(t *testing.T) {
-	// This test has been moved to the extracted sync module  
+	// This test has been moved to the extracted sync module
 	// The retry logic is now in sync.APIAdapter.CreateStoryWithPublishRetry
 	t.Skip("Publish retry logic has been moved to extracted sync module")
 }

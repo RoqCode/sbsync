@@ -1,17 +1,17 @@
 package ui
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "strings"
-    "time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+	"time"
 
-    tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 
-    "storyblok-sync/internal/sb"
-    "storyblok-sync/internal/ui/sync"
+	"storyblok-sync/internal/sb"
+	"storyblok-sync/internal/ui/sync"
 )
 
 // Constants for sync operations and timeouts
@@ -19,13 +19,12 @@ const (
 	// API timeout constants
 	defaultTimeout = 15 * time.Second
 	longTimeout    = 30 * time.Second
-	
+
 	// Operation types - use sync package constants
 	operationCreate = sync.OperationCreate
 	operationUpdate = sync.OperationUpdate
 	operationSkip   = sync.OperationSkip
 )
-
 
 // Legacy wrapper for content management - now uses the extracted module
 type contentManager struct {
@@ -137,11 +136,11 @@ func (m *Model) buildTargetFolderMap() map[string]sb.Story {
 // findMissingFolderPaths analyzes selected items and identifies missing parent folders
 func (m *Model) findMissingFolderPaths(items []PreflightItem) map[string]sb.Story {
 	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
-	
+
 	// Convert UI PreflightItems to sync PreflightItems
 	syncItems := convertToSyncPreflightItems(items)
 	missingFolders := planner.FindMissingFolderPaths(syncItems)
-	
+
 	// Convert slice to map for backward compatibility
 	folderMap := make(map[string]sb.Story)
 	for _, folder := range missingFolders {
@@ -153,11 +152,11 @@ func (m *Model) findMissingFolderPaths(items []PreflightItem) map[string]sb.Stor
 // optimizePreflight deduplicates entries, pre-plans missing folders, sorts by sync order (folders first), and merges full folder selections into starts_with tasks.
 func (m *Model) optimizePreflight() {
 	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
-	
+
 	// Convert UI PreflightItems to sync PreflightItems
 	syncItems := convertToSyncPreflightItems(m.preflight.items)
 	optimizedSyncItems := planner.OptimizePreflight(syncItems)
-	
+
 	// Convert back to UI PreflightItems
 	m.preflight.items = convertFromSyncPreflightItems(optimizedSyncItems)
 }
@@ -175,7 +174,7 @@ func (m *Model) runNextItem() tea.Cmd {
 
 	// Create a sync item adapter
 	item := &preflightItemAdapter{item: m.preflight.items[idx]}
-	
+
 	// Use orchestrator to run the sync operation
 	return orchestrator.RunSyncItem(m.syncContext, idx, item)
 }
@@ -221,7 +220,7 @@ func updateStoryWithPublishRetry(ctx context.Context, api updateAPI, spaceID int
 }
 
 func createStoryWithPublishRetry(ctx context.Context, api createAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	// TODO: Remove this legacy function completely - now handled by extracted modules  
+	// TODO: Remove this legacy function completely - now handled by extracted modules
 	return api.CreateStoryWithPublish(ctx, spaceID, st, publish)
 }
 
@@ -295,7 +294,7 @@ func (fpb *folderPathBuilder) prepareSourceFolder(ctx context.Context, path stri
 	folder = prepareStoryForCreation(folder)
 	folder.FolderID = parentID
 
-    log.Printf("DEBUG: Prepared source folder %s with content: %t", path, len(folder.Content) > 0)
+	log.Printf("DEBUG: Prepared source folder %s with content: %t", path, len(folder.Content) > 0)
 	return folder, nil
 }
 
@@ -397,34 +396,34 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 	fullFolder := sourceFolder
 
 	// DEBUG: Log content preservation
-    log.Printf("DEBUG: syncFolder %s has content: %t, is_folder: %t", sourceFolder.FullSlug, len(sourceFolder.Content) > 0, sourceFolder.IsFolder)
-    if len(sourceFolder.Content) > 0 {
-        contentKeys := sync.GetContentKeys(sourceFolder.Content)
-        log.Printf("DEBUG: syncFolder source content keys: %v", contentKeys)
+	log.Printf("DEBUG: syncFolder %s has content: %t, is_folder: %t", sourceFolder.FullSlug, len(sourceFolder.Content) > 0, sourceFolder.IsFolder)
+	if len(sourceFolder.Content) > 0 {
+		contentKeys := sync.GetContentKeys(sourceFolder.Content)
+		log.Printf("DEBUG: syncFolder source content keys: %v", contentKeys)
 
-        // Special logging for content_types field
-        if sourceFolder.IsFolder {
-            if v, ok := sync.GetContentField(sourceFolder.Content, "content_types"); ok {
-                log.Printf("DEBUG: syncFolder %s has content_types: %v", sourceFolder.FullSlug, v)
-            } else {
-                log.Printf("DEBUG: syncFolder %s missing content_types field", sourceFolder.FullSlug)
-            }
-        }
-    }
+		// Special logging for content_types field
+		if sourceFolder.IsFolder {
+			if v, ok := sync.GetContentField(sourceFolder.Content, "content_types"); ok {
+				log.Printf("DEBUG: syncFolder %s has content_types: %v", sourceFolder.FullSlug, v)
+			} else {
+				log.Printf("DEBUG: syncFolder %s missing content_types field", sourceFolder.FullSlug)
+			}
+		}
+	}
 	log.Printf("DEBUG: syncFolder %s ContentType field: '%s'", sourceFolder.FullSlug, sourceFolder.ContentType)
 
 	// If the source folder doesn't have content, try to fetch it from API
-    if len(fullFolder.Content) == 0 {
+	if len(fullFolder.Content) == 0 {
 		apiFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
 		if err != nil {
 			return err
 		}
 		// Preserve any content that came from the API
-        if len(apiFolder.Content) > 0 {
+		if len(apiFolder.Content) > 0 {
 			fullFolder.Content = apiFolder.Content
 		} else {
 			// Create minimal content structure for folders
-            fullFolder.Content = json.RawMessage([]byte(`{}`))
+			fullFolder.Content = json.RawMessage([]byte(`{}`))
 		}
 	}
 
@@ -478,8 +477,8 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 
 		// Ensure folders have proper content structure
-    if fullFolder.IsFolder && len(fullFolder.Content) == 0 {
-        fullFolder.Content = json.RawMessage([]byte(`{}`))
+		if fullFolder.IsFolder && len(fullFolder.Content) == 0 {
+			fullFolder.Content = json.RawMessage([]byte(`{}`))
 		}
 
 		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
@@ -575,11 +574,11 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 
 		// Ensure stories have content (required for Storyblok API)
-    if !fullStory.IsFolder && len(fullStory.Content) == 0 {
-        contentBytes, _ := json.Marshal(map[string]interface{}{
-            "component": "page",
-        })
-        fullStory.Content = json.RawMessage(contentBytes)
+		if !fullStory.IsFolder && len(fullStory.Content) == 0 {
+			contentBytes, _ := json.Marshal(map[string]interface{}{
+				"component": "page",
+			})
+			fullStory.Content = json.RawMessage(contentBytes)
 		}
 
 		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())

@@ -133,7 +133,7 @@ func (pp *PreflightPlanner) OptimizePreflight(items []PreflightItem) []Preflight
 	})
 
 	// Update the list
-	log.Printf("Optimized to %d items (%d missing folders auto-added), sync order: folders first, then stories", 
+	log.Printf("Optimized to %d items (%d missing folders auto-added), sync order: folders first, then stories",
 		len(optimized), len(missingFolders))
 
 	return optimized
@@ -145,12 +145,12 @@ func (pp *PreflightPlanner) FindMissingFolderPaths(items []PreflightItem) []sb.S
 	targetFolderMap := pp.BuildTargetFolderMap()
 
 	missingPaths := make(map[string]bool)
-	
+
 	// For each item, check if all parent folders exist
 	for _, item := range items {
 		// Get all parent paths for this story
 		folderPaths := GetFolderPaths(item.Story.FullSlug)
-		
+
 		for _, path := range folderPaths {
 			// Check if this folder path exists in target
 			if _, exists := targetFolderMap[path]; !exists {
