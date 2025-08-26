@@ -1,11 +1,12 @@
 package sync
 
 import (
-	"context"
-	"errors"
-	"testing"
+    "context"
+    "encoding/json"
+    "errors"
+    "testing"
 
-	"storyblok-sync/internal/sb"
+    "storyblok-sync/internal/sb"
 )
 
 // Mock for content manager testing
@@ -67,12 +68,12 @@ func TestNewContentManager(t *testing.T) {
 func TestEnsureContent_CacheHit(t *testing.T) {
 	api := &mockContentAPI{
 		storyContent: map[int]sb.Story{
-			1: {
-				ID:       1,
-				Slug:     "test",
-				FullSlug: "test",
-				Content:  map[string]interface{}{"component": "page"},
-			},
+            1: {
+                ID:       1,
+                Slug:     "test",
+                FullSlug: "test",
+                Content:  json.RawMessage([]byte(`{"component":"page"}`)),
+            },
 		},
 	}
 
@@ -106,9 +107,9 @@ func TestEnsureContent_CacheHit(t *testing.T) {
 		t.Error("Expected identical results from cache hit")
 	}
 
-	if result1.Content == nil || result2.Content == nil {
-		t.Error("Expected content to be preserved")
-	}
+    if len(result1.Content) == 0 || len(result2.Content) == 0 {
+        t.Error("Expected content to be preserved")
+    }
 }
 
 func TestEnsureContent_AlreadyHasContent(t *testing.T) {
@@ -121,7 +122,7 @@ func TestEnsureContent_AlreadyHasContent(t *testing.T) {
 		ID:       1,
 		Slug:     "test",
 		FullSlug: "test",
-		Content:  map[string]interface{}{"component": "existing"},
+		Content:  json.RawMessage([]byte(`{"component":"existing"}`)),
 	}
 
 	result, err := cm.EnsureContent(ctx, story)
@@ -133,11 +134,13 @@ func TestEnsureContent_AlreadyHasContent(t *testing.T) {
 		t.Errorf("Expected 0 API calls when story already has content, got %d", api.callCount)
 	}
 
-	if result.Content == nil {
+	if len(result.Content) == 0 {
 		t.Error("Expected content to be preserved")
 	}
 
-	component := result.Content["component"]
+	var tmp map[string]interface{}
+	_ = json.Unmarshal(result.Content, &tmp)
+	component := tmp["component"]
 	if component != "existing" {
 		t.Errorf("Expected existing content to be preserved, got %v", component)
 	}
@@ -172,7 +175,7 @@ func TestAddToCache_Basic(t *testing.T) {
 		ID:       1,
 		Slug:     "test",
 		FullSlug: "test",
-		Content:  map[string]interface{}{"component": "page"},
+		Content:  json.RawMessage([]byte(`{"component":"page"}`)),
 	}
 
 	cm.addToCache(story)
@@ -199,9 +202,9 @@ func TestAddToCache_EvictionStrategy(t *testing.T) {
 
 	// Add three stories to trigger eviction
 	stories := []sb.Story{
-		{ID: 1, FullSlug: "story1", Content: map[string]interface{}{"component": "page"}},
-		{ID: 2, FullSlug: "story2", Content: map[string]interface{}{"component": "page"}},
-		{ID: 3, FullSlug: "story3", Content: map[string]interface{}{"component": "page"}},
+		{ID: 1, FullSlug: "story1", Content: json.RawMessage([]byte(`{"component":"page"}`))},
+		{ID: 2, FullSlug: "story2", Content: json.RawMessage([]byte(`{"component":"page"}`))},
+		{ID: 3, FullSlug: "story3", Content: json.RawMessage([]byte(`{"component":"page"}`))},
 	}
 
 	for _, story := range stories {
@@ -231,7 +234,7 @@ func TestCacheStats(t *testing.T) {
 		storyContent: map[int]sb.Story{
 			1: {
 				ID:      1,
-				Content: map[string]interface{}{"component": "page"},
+				Content: json.RawMessage([]byte(`{"component":"page"}`)),
 			},
 		},
 	}
@@ -279,7 +282,7 @@ func TestEnsureContent_EmptyCache(t *testing.T) {
 				ID:       1,
 				Slug:     "test",
 				FullSlug: "test",
-				Content:  map[string]interface{}{"component": "page"},
+				Content:  json.RawMessage([]byte(`{"component":"page"}`)),
 			},
 		},
 	}
@@ -300,7 +303,7 @@ func TestEnsureContent_EmptyCache(t *testing.T) {
 	}
 
 	// Verify content was fetched and cached
-	if result.Content == nil {
+	if len(result.Content) == 0 {
 		t.Error("Expected content to be fetched")
 	}
 
@@ -312,9 +315,9 @@ func TestEnsureContent_EmptyCache(t *testing.T) {
 func TestEnsureContent_ConcurrentAccess(t *testing.T) {
 	api := &mockContentAPI{
 		storyContent: map[int]sb.Story{
-			1: {ID: 1, Content: map[string]interface{}{"component": "page"}},
-			2: {ID: 2, Content: map[string]interface{}{"component": "article"}},
-			3: {ID: 3, Content: map[string]interface{}{"component": "blog"}},
+			1: {ID: 1, Content: json.RawMessage([]byte(`{"component":"page"}`))},
+			2: {ID: 2, Content: json.RawMessage([]byte(`{"component":"article"}`))},
+			3: {ID: 3, Content: json.RawMessage([]byte(`{"component":"blog"}`))},
 		},
 	}
 
@@ -334,7 +337,7 @@ func TestEnsureContent_ConcurrentAccess(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Expected success for story %d, got error: %v", story.ID, err)
 		}
-		if result.Content == nil {
+		if len(result.Content) == 0 {
 			t.Errorf("Expected content for story %d", story.ID)
 		}
 	}

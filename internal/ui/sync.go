@@ -1,16 +1,17 @@
 package ui
 
 import (
-	"context"
-	"fmt"
-	"log"
-	"strings"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "strings"
+    "time"
 
-	tea "github.com/charmbracelet/bubbletea"
+    tea "github.com/charmbracelet/bubbletea"
 
-	"storyblok-sync/internal/sb"
-	"storyblok-sync/internal/ui/sync"
+    "storyblok-sync/internal/sb"
+    "storyblok-sync/internal/ui/sync"
 )
 
 // Constants for sync operations and timeouts
@@ -294,7 +295,7 @@ func (fpb *folderPathBuilder) prepareSourceFolder(ctx context.Context, path stri
 	folder = prepareStoryForCreation(folder)
 	folder.FolderID = parentID
 
-	log.Printf("DEBUG: Prepared source folder %s with content: %t", path, folder.Content != nil)
+    log.Printf("DEBUG: Prepared source folder %s with content: %t", path, len(folder.Content) > 0)
 	return folder, nil
 }
 
@@ -396,37 +397,34 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 	fullFolder := sourceFolder
 
 	// DEBUG: Log content preservation
-	log.Printf("DEBUG: syncFolder %s has content: %t, is_folder: %t", sourceFolder.FullSlug, sourceFolder.Content != nil, sourceFolder.IsFolder)
-	if sourceFolder.Content != nil {
-		contentKeys := make([]string, 0, len(sourceFolder.Content))
-		for k := range sourceFolder.Content {
-			contentKeys = append(contentKeys, k)
-		}
-		log.Printf("DEBUG: syncFolder source content keys: %v", contentKeys)
+    log.Printf("DEBUG: syncFolder %s has content: %t, is_folder: %t", sourceFolder.FullSlug, len(sourceFolder.Content) > 0, sourceFolder.IsFolder)
+    if len(sourceFolder.Content) > 0 {
+        contentKeys := sync.GetContentKeys(sourceFolder.Content)
+        log.Printf("DEBUG: syncFolder source content keys: %v", contentKeys)
 
-		// Special logging for content_types field
-		if sourceFolder.IsFolder {
-			if contentTypes, ok := sourceFolder.Content["content_types"]; ok {
-				log.Printf("DEBUG: syncFolder %s has content_types: %v", sourceFolder.FullSlug, contentTypes)
-			} else {
-				log.Printf("DEBUG: syncFolder %s missing content_types field", sourceFolder.FullSlug)
-			}
-		}
-	}
+        // Special logging for content_types field
+        if sourceFolder.IsFolder {
+            if v, ok := sync.GetContentField(sourceFolder.Content, "content_types"); ok {
+                log.Printf("DEBUG: syncFolder %s has content_types: %v", sourceFolder.FullSlug, v)
+            } else {
+                log.Printf("DEBUG: syncFolder %s missing content_types field", sourceFolder.FullSlug)
+            }
+        }
+    }
 	log.Printf("DEBUG: syncFolder %s ContentType field: '%s'", sourceFolder.FullSlug, sourceFolder.ContentType)
 
 	// If the source folder doesn't have content, try to fetch it from API
-	if fullFolder.Content == nil {
+    if len(fullFolder.Content) == 0 {
 		apiFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
 		if err != nil {
 			return err
 		}
 		// Preserve any content that came from the API
-		if apiFolder.Content != nil {
+        if len(apiFolder.Content) > 0 {
 			fullFolder.Content = apiFolder.Content
 		} else {
 			// Create minimal content structure for folders
-			fullFolder.Content = map[string]interface{}{}
+            fullFolder.Content = json.RawMessage([]byte(`{}`))
 		}
 	}
 
@@ -480,8 +478,8 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 
 		// Ensure folders have proper content structure
-		if fullFolder.IsFolder && fullFolder.Content == nil {
-			fullFolder.Content = map[string]interface{}{}
+    if fullFolder.IsFolder && len(fullFolder.Content) == 0 {
+        fullFolder.Content = json.RawMessage([]byte(`{}`))
 		}
 
 		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
@@ -577,10 +575,11 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
 
 		// Ensure stories have content (required for Storyblok API)
-		if !fullStory.IsFolder && fullStory.Content == nil {
-			fullStory.Content = map[string]interface{}{
-				"component": "page", // Default component type
-			}
+    if !fullStory.IsFolder && len(fullStory.Content) == 0 {
+        contentBytes, _ := json.Marshal(map[string]interface{}{
+            "component": "page",
+        })
+        fullStory.Content = json.RawMessage(contentBytes)
 		}
 
 		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())

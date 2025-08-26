@@ -1,18 +1,19 @@
 package sync
 
 import (
-	"testing"
+    "encoding/json"
+    "testing"
 
-	"storyblok-sync/internal/sb"
+    "storyblok-sync/internal/sb"
 )
 
 func TestPrepareStoryForCreation(t *testing.T) {
-	story := sb.Story{
+    story := sb.Story{
 		ID:        123,
 		Name:      "Test Story",
 		Slug:      "test-story",
 		FullSlug:  "test-story",
-		Content:   map[string]interface{}{"component": "page"},
+        Content:   json.RawMessage([]byte(`{"component":"page"}`)),
 		UUID:      "test-uuid",
 		CreatedAt: "2023-01-01T00:00:00Z",
 		UpdatedAt: "2023-01-02T00:00:00Z",
@@ -67,12 +68,12 @@ func TestPrepareStoryForCreation(t *testing.T) {
 }
 
 func TestPrepareStoryForUpdate(t *testing.T) {
-	source := sb.Story{
+    source := sb.Story{
 		ID:        999, // This should be ignored
 		Name:      "Updated Name",
 		Slug:      "updated-slug",
 		FullSlug:  "updated-slug",
-		Content:   map[string]interface{}{"component": "updated"},
+        Content:   json.RawMessage([]byte(`{"component":"updated"}`)),
 		UUID:      "source-uuid",
 		CreatedAt: "2023-01-01T00:00:00Z", // Should be ignored
 		UpdatedAt: "2023-01-02T00:00:00Z", // Should be ignored
@@ -80,12 +81,12 @@ func TestPrepareStoryForUpdate(t *testing.T) {
 		FolderID:  &[]int{789}[0],
 	}
 
-	target := sb.Story{
+    target := sb.Story{
 		ID:        123, // This should be preserved
 		Name:      "Old Name",
 		Slug:      "old-slug",
 		FullSlug:  "old-slug",
-		Content:   map[string]interface{}{"component": "old"},
+        Content:   json.RawMessage([]byte(`{"component":"old"}`)),
 		UUID:      "target-uuid",
 		CreatedAt: "2022-01-01T00:00:00Z", // Should be preserved
 		UpdatedAt: "2022-01-02T00:00:00Z", // Should be cleared
@@ -126,13 +127,15 @@ func TestPrepareStoryForUpdate(t *testing.T) {
 		t.Errorf("Expected source UUID (%s), got %s", source.UUID, result.UUID)
 	}
 
-	if result.Content == nil {
+    if len(result.Content) == 0 {
 		t.Error("Expected Content to be set")
 	} else {
-		component := result.Content["component"]
-		if component != "updated" {
-			t.Errorf("Expected source Content, got component: %v", component)
-		}
+        var tmp map[string]interface{}
+        _ = json.Unmarshal(result.Content, &tmp)
+        component := tmp["component"]
+        if component != "updated" {
+            t.Errorf("Expected source Content, got component: %v", component)
+        }
 	}
 
 	if result.Position != source.Position {
@@ -145,66 +148,67 @@ func TestPrepareStoryForUpdate(t *testing.T) {
 }
 
 func TestEnsureDefaultContent_NonFolder(t *testing.T) {
-	story := sb.Story{
+    story := sb.Story{
 		ID:       1,
 		Slug:     "test",
 		FullSlug: "test",
 		IsFolder: false,
-		Content:  nil, // No content initially
+        Content:  nil, // No content initially
 	}
 
 	result := EnsureDefaultContent(story)
 
-	if result.Content == nil {
+    if len(result.Content) == 0 {
 		t.Fatal("Expected Content to be created for non-folder story")
 	}
-
-	component := result.Content["component"]
-	if component != "page" {
-		t.Errorf("Expected default component 'page', got %v", component)
-	}
+    var tmp map[string]interface{}
+    _ = json.Unmarshal(result.Content, &tmp)
+    component := tmp["component"]
+    if component != "page" {
+        t.Errorf("Expected default component 'page', got %v", component)
+    }
 }
 
 func TestEnsureDefaultContent_NonFolderWithExistingContent(t *testing.T) {
-	story := sb.Story{
+    story := sb.Story{
 		ID:       1,
 		Slug:     "test",
 		FullSlug: "test",
 		IsFolder: false,
-		Content:  map[string]interface{}{"component": "article", "title": "Existing"},
+        Content:  json.RawMessage([]byte(`{"component":"article","title":"Existing"}`)),
 	}
 
 	result := EnsureDefaultContent(story)
 
-	if result.Content == nil {
+    if len(result.Content) == 0 {
 		t.Fatal("Expected Content to be preserved")
 	}
-
-	// Existing content should be preserved
-	component := result.Content["component"]
-	if component != "article" {
-		t.Errorf("Expected existing component 'article', got %v", component)
-	}
-
-	title := result.Content["title"]
-	if title != "Existing" {
-		t.Errorf("Expected existing title 'Existing', got %v", title)
-	}
+    // Existing content should be preserved
+    var tmp map[string]interface{}
+    _ = json.Unmarshal(result.Content, &tmp)
+    component := tmp["component"]
+    if component != "article" {
+        t.Errorf("Expected existing component 'article', got %v", component)
+    }
+    title := tmp["title"]
+    if title != "Existing" {
+        t.Errorf("Expected existing title 'Existing', got %v", title)
+    }
 }
 
 func TestEnsureDefaultContent_Folder(t *testing.T) {
-	story := sb.Story{
+    story := sb.Story{
 		ID:       1,
 		Slug:     "folder",
 		FullSlug: "folder",
 		IsFolder: true,
-		Content:  nil, // No content initially
+        Content:  nil, // No content initially
 	}
 
 	result := EnsureDefaultContent(story)
 
 	// Folders should not get default content
-	if result.Content != nil {
+    if len(result.Content) != 0 {
 		t.Errorf("Expected Content to remain nil for folders, got %v", result.Content)
 	}
 }

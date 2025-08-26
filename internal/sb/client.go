@@ -1,17 +1,17 @@
 package sb
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
+    "bytes"
+    "context"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "net/url"
+    "strings"
+    "time"
 )
 
 const base = "https://mapi.storyblok.com/v1"
@@ -82,7 +82,7 @@ type Story struct {
 	Name                      string                 `json:"name"`
 	Slug                      string                 `json:"slug"`
 	FullSlug                  string                 `json:"full_slug"`
-	Content                   map[string]interface{} `json:"content,omitempty"`
+    Content                   json.RawMessage        `json:"content,omitempty"`
 	ContentType               string                 `json:"content_type,omitempty"`
 	FolderID                  *int                   `json:"parent_id,omitempty"`
 	CreatedAt                 string                 `json:"created_at,omitempty"`
@@ -273,14 +273,10 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 
 	// DEBUG: Log the payload before marshalling
 	log.Printf("DEBUG: Creating story - Before marshal:")
-	log.Printf("DEBUG: Story has content: %t", st.Content != nil)
-	if st.Content != nil {
-		contentKeys := make([]string, 0, len(st.Content))
-		for k := range st.Content {
-			contentKeys = append(contentKeys, k)
-		}
-		log.Printf("DEBUG: Content keys: %v", contentKeys)
-	}
+    log.Printf("DEBUG: Story has content: %t", len(st.Content) > 0)
+    if len(st.Content) > 0 {
+        log.Printf("DEBUG: Content keys: %v", contentKeysFromRaw(st.Content))
+    }
 	log.Printf("DEBUG: Story is folder: %t", st.IsFolder)
 	log.Printf("DEBUG: Story published: %t", st.Published)
 
@@ -433,16 +429,12 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 
 	// DEBUG: Log what we received from the API
 	story := payload.Story
-	log.Printf("DEBUG: Fetched story %d (%s) - Content present: %t", story.ID, story.FullSlug, story.Content != nil)
-	if story.Content != nil {
-		contentKeys := make([]string, 0, len(story.Content))
-		for k := range story.Content {
-			contentKeys = append(contentKeys, k)
-		}
-		log.Printf("DEBUG: Fetched content keys: %v", contentKeys)
-	} else {
-		log.Printf("DEBUG: Story content is nil - this is likely the issue!")
-	}
+    log.Printf("DEBUG: Fetched story %d (%s) - Content present: %t", story.ID, story.FullSlug, len(story.Content) > 0)
+    if len(story.Content) > 0 {
+        log.Printf("DEBUG: Fetched content keys: %v", contentKeysFromRaw(story.Content))
+    } else {
+        log.Printf("DEBUG: Story content is empty - this is likely the issue!")
+    }
 
 	return story, nil
 }
@@ -477,4 +469,20 @@ func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, 
 		return Story{}, err
 	}
 	return payload.Story, nil
+}
+
+// contentKeysFromRaw extracts top-level keys from a JSON raw message.
+func contentKeysFromRaw(raw json.RawMessage) []string {
+    if len(raw) == 0 {
+        return nil
+    }
+    var tmp map[string]interface{}
+    if err := json.Unmarshal(raw, &tmp); err != nil {
+        return nil
+    }
+    keys := make([]string, 0, len(tmp))
+    for k := range tmp {
+        keys = append(keys, k)
+    }
+    return keys
 }

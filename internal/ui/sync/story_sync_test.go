@@ -1,11 +1,12 @@
 package sync
 
 import (
-	"context"
-	"errors"
-	"testing"
+    "context"
+    "encoding/json"
+    "errors"
+    "testing"
 
-	"storyblok-sync/internal/sb"
+    "storyblok-sync/internal/sb"
 )
 
 // Extended mock for story sync testing
@@ -92,12 +93,12 @@ func TestSyncStory_CreateNew(t *testing.T) {
 	api := &mockStorySyncAPI{
 		stories: make(map[string][]sb.Story),
 		storyContent: map[int]sb.Story{
-			1: {
-				ID:       1,
-				Slug:     "test",
-				FullSlug: "test",
-				Content:  map[string]interface{}{"component": "page"},
-			},
+            1: {
+                ID:       1,
+                Slug:     "test",
+                FullSlug: "test",
+                Content:  json.RawMessage([]byte(`{"component":"page"}`)),
+            },
 		},
 	}
 
@@ -130,11 +131,11 @@ func TestSyncStory_CreateNew(t *testing.T) {
 }
 
 func TestSyncStory_UpdateExisting(t *testing.T) {
-	existingStory := sb.Story{
+    existingStory := sb.Story{
 		ID:       123,
 		Slug:     "test",
 		FullSlug: "test",
-		Content:  map[string]interface{}{"component": "page"},
+        Content:  json.RawMessage([]byte(`{"component":"page"}`)),
 	}
 
 	api := &mockStorySyncAPI{
@@ -142,13 +143,13 @@ func TestSyncStory_UpdateExisting(t *testing.T) {
 			"test": {existingStory},
 		},
 		storyContent: map[int]sb.Story{
-			1: {
-				ID:       1,
-				Slug:     "test",
-				FullSlug: "test",
-				Content:  map[string]interface{}{"component": "page"},
-				UUID:     "source-uuid",
-			},
+            1: {
+                ID:       1,
+                Slug:     "test",
+                FullSlug: "test",
+                Content:  json.RawMessage([]byte(`{"component":"page"}`)),
+                UUID:     "source-uuid",
+            },
 		},
 	}
 
@@ -182,12 +183,12 @@ func TestSyncStory_UpdateExisting(t *testing.T) {
 }
 
 func TestSyncStory_UUIDUpdate(t *testing.T) {
-	existingStory := sb.Story{
+    existingStory := sb.Story{
 		ID:       123,
 		Slug:     "test",
 		FullSlug: "test",
 		UUID:     "existing-uuid",
-		Content:  map[string]interface{}{"component": "page"},
+        Content:  json.RawMessage([]byte(`{"component":"page"}`)),
 	}
 
 	api := &mockStorySyncAPI{
@@ -195,13 +196,13 @@ func TestSyncStory_UUIDUpdate(t *testing.T) {
 			"test": {existingStory},
 		},
 		storyContent: map[int]sb.Story{
-			1: {
-				ID:       1,
-				Slug:     "test",
-				FullSlug: "test",
-				Content:  map[string]interface{}{"component": "page"},
-				UUID:     "source-uuid",
-			},
+            1: {
+                ID:       1,
+                Slug:     "test",
+                FullSlug: "test",
+                Content:  json.RawMessage([]byte(`{"component":"page"}`)),
+                UUID:     "source-uuid",
+            },
 		},
 		uuidUpdates:            make(map[int]string), // Initialize the map
 		returnExistingOnUpdate: true,
@@ -237,13 +238,13 @@ func TestSyncFolder_CreateNew(t *testing.T) {
 	api := &mockStorySyncAPI{
 		stories: make(map[string][]sb.Story),
 		storyContent: map[int]sb.Story{
-			1: {
-				ID:       1,
-				Slug:     "folder",
-				FullSlug: "folder",
-				IsFolder: true,
-				Content:  map[string]interface{}{"content_types": []string{"page"}},
-			},
+            1: {
+                ID:       1,
+                Slug:     "folder",
+                FullSlug: "folder",
+                IsFolder: true,
+                Content:  json.RawMessage([]byte(`{"content_types":["page"]}`)),
+            },
 		},
 	}
 
@@ -277,12 +278,12 @@ func TestSyncFolder_CreateNew(t *testing.T) {
 }
 
 func TestSyncFolder_UpdateExisting(t *testing.T) {
-	existingFolder := sb.Story{
+    existingFolder := sb.Story{
 		ID:       123,
 		Slug:     "folder",
 		FullSlug: "folder",
 		IsFolder: true,
-		Content:  map[string]interface{}{"content_types": []string{"page"}},
+        Content:  json.RawMessage([]byte(`{"content_types":["page"]}`)),
 	}
 
 	api := &mockStorySyncAPI{
@@ -290,13 +291,13 @@ func TestSyncFolder_UpdateExisting(t *testing.T) {
 			"folder": {existingFolder},
 		},
 		storyContent: map[int]sb.Story{
-			1: {
-				ID:       1,
-				Slug:     "folder",
-				FullSlug: "folder",
-				IsFolder: true,
-				Content:  map[string]interface{}{"content_types": []string{"page"}},
-			},
+            1: {
+                ID:       1,
+                Slug:     "folder",
+                FullSlug: "folder",
+                IsFolder: true,
+                Content:  json.RawMessage([]byte(`{"content_types":["page"]}`)),
+            },
 		},
 	}
 
@@ -330,12 +331,12 @@ func TestSyncStoryDetailed_OperationDetection(t *testing.T) {
 	api := &mockStorySyncAPI{
 		stories: make(map[string][]sb.Story),
 		storyContent: map[int]sb.Story{
-			1: {
-				ID:       1,
-				Slug:     "test",
-				FullSlug: "test",
-				Content:  map[string]interface{}{"component": "page"},
-			},
+            1: {
+                ID:       1,
+                Slug:     "test",
+                FullSlug: "test",
+                Content:  json.RawMessage([]byte(`{"component":"page"}`)),
+            },
 		},
 	}
 

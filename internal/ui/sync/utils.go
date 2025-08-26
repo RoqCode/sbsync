@@ -1,11 +1,11 @@
 package sync
 
 import (
-	"encoding/json"
-	"log"
-	"strings"
+    "encoding/json"
+    "log"
+    "strings"
 
-	"storyblok-sync/internal/sb"
+    "storyblok-sync/internal/sb"
 )
 
 // Constants for sync operations
@@ -36,24 +36,43 @@ func PrepareStoryForUpdate(source, target sb.Story) sb.Story {
 
 // EnsureDefaultContent ensures non-folder stories have content
 func EnsureDefaultContent(story sb.Story) sb.Story {
-	if !story.IsFolder && story.Content == nil {
-		story.Content = map[string]interface{}{
-			"component": DefaultComponent,
-		}
-	}
-	return story
+    if !story.IsFolder && len(story.Content) == 0 {
+        // {"component":"page"}
+        contentBytes, _ := json.Marshal(map[string]interface{}{
+            "component": DefaultComponent,
+        })
+        story.Content = json.RawMessage(contentBytes)
+    }
+    return story
 }
 
-// GetContentKeys extracts keys from content map for debugging
-func GetContentKeys(content map[string]interface{}) []string {
-	if content == nil {
-		return nil
-	}
-	keys := make([]string, 0, len(content))
-	for k := range content {
-		keys = append(keys, k)
-	}
-	return keys
+// GetContentKeys extracts keys from a JSON content blob for debugging
+func GetContentKeys(content json.RawMessage) []string {
+    if len(content) == 0 {
+        return nil
+    }
+    var tmp map[string]interface{}
+    if err := json.Unmarshal(content, &tmp); err != nil {
+        return nil
+    }
+    keys := make([]string, 0, len(tmp))
+    for k := range tmp {
+        keys = append(keys, k)
+    }
+    return keys
+}
+
+// GetContentField returns an arbitrary field from JSON content as interface{}
+func GetContentField(content json.RawMessage, key string) (interface{}, bool) {
+    if len(content) == 0 {
+        return nil, false
+    }
+    var tmp map[string]interface{}
+    if err := json.Unmarshal(content, &tmp); err != nil {
+        return nil, false
+    }
+    v, ok := tmp[key]
+    return v, ok
 }
 
 // GetFolderPaths extracts all parent folder paths from a story slug
@@ -77,7 +96,7 @@ func GetFolderPaths(slug string) []string {
 func LogError(operation, slug string, err error, story *sb.Story) {
 	log.Printf("ERROR: %s failed for %s: %v", operation, slug, err)
 
-	if story != nil {
+    if story != nil {
 		// Log story context
 		log.Printf("ERROR CONTEXT for %s:", slug)
 		log.Printf("  Story ID: %d", story.ID)
@@ -103,15 +122,17 @@ func LogError(operation, slug string, err error, story *sb.Story) {
 		}
 
 		// Log content summary (first level keys only, to avoid huge logs)
-		if story.Content != nil && len(story.Content) > 0 {
-			contentKeys := GetContentKeys(story.Content)
-			log.Printf("  Content Keys: %v", contentKeys)
+        if len(story.Content) > 0 {
+            contentKeys := GetContentKeys(story.Content)
+            log.Printf("  Content Keys: %v", contentKeys)
 
-			// Log component type if available
-			if component, ok := story.Content["component"].(string); ok {
-				log.Printf("  Component Type: %s", component)
-			}
-		}
+            // Log component type if available
+            if v, ok := GetContentField(story.Content, "component"); ok {
+                if component, _ := v.(string); component != "" {
+                    log.Printf("  Component Type: %s", component)
+                }
+            }
+        }
 
 		// Log full story as JSON for complete debugging (only if content is small enough)
 		if storyJSON, err := json.Marshal(story); err == nil {

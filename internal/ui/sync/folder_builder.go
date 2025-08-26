@@ -91,7 +91,7 @@ func (fpb *FolderPathBuilder) PrepareSourceFolder(ctx context.Context, path stri
 	folder = PrepareStoryForCreation(folder)
 	folder.FolderID = parentID
 
-	log.Printf("DEBUG: Prepared source folder %s with content: %t", path, folder.Content != nil)
+    log.Printf("DEBUG: Prepared source folder %s with content: %t", path, len(folder.Content) > 0)
 	return folder, nil
 }
 
