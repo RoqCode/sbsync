@@ -54,122 +54,95 @@ func (m *Model) ensureCursorVisible() {
 
 // calculateCursorLine calculates the actual visual line number where the cursor appears
 func (m *Model) calculateCursorLine() int {
-	// We need to recreate the exact same tree rendering logic as view_browse.go
-	if len(m.visibleIdx) == 0 {
+	total := m.itemsLen()
+	if total == 0 || m.selection.listIndex < 0 {
 		return 0
 	}
 
-	// Group stories by parent ID for tree rendering
-	stories := make([]sb.Story, 0, len(m.visibleIdx))
-	for _, idx := range m.visibleIdx {
-		if idx < len(m.storiesSource) {
-			stories = append(stories, m.storiesSource[idx])
-		}
+	// Get ALL visible stories (not just up to cursor)
+	stories := make([]sb.Story, total)
+	for i := 0; i < total; i++ {
+		stories[i] = m.itemAt(i)
 	}
 
-	return m.generateTreeLines(stories, m.selection.listIndex)
-}
+	// Generate the complete tree structure exactly as in view_browse.go
+	treeLines := m.generateTreeLines(stories)
 
-// generateTreeLines generates tree structure and returns the line number for a given cursor index
-func (m *Model) generateTreeLines(stories []sb.Story, targetIndex int) int {
-	if len(stories) == 0 {
-		return 0
-	}
-
-	// Create tree structure
-	nodes := make(map[int]*tree.Tree, len(stories))
-	rootNodes := []*tree.Tree{}
-
-	// First pass: create nodes for all stories
-	for i, st := range stories {
-		var styleFunc func(...string) string
-		if st.IsFolder {
-			styleFunc = lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Render
-		} else {
-			styleFunc = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render
-		}
-
-		displayName := m.displayStoryName(st)
-		node := tree.Root(styleFunc(displayName))
-		nodes[st.ID] = node
-
-		// Check if this is the target cursor position
-		if i == targetIndex {
-			// This is the cursor line - count previous lines
-			return len(rootNodes)
-		}
-
-		if st.FolderID == nil {
-			rootNodes = append(rootNodes, node)
-		}
-	}
-
-	// Second pass: build hierarchy
-	for i, st := range stories {
-		if i == targetIndex {
-			return len(rootNodes) // This would be more complex in real tree rendering
-		}
-
-		if st.FolderID != nil {
-			if parentNode, exists := nodes[*st.FolderID]; exists {
-				parentNode.Child(nodes[st.ID])
-			}
-		}
-	}
-
-	return 0 // Default fallback
-}
-
-// displayStoryName formats a story name for tree display
-func (m *Model) displayStoryName(st sb.Story) string {
-	// Build the display string
-	var parts []string
-
-	// Add symbol
-	if st.IsFolder {
-		if m.folderCollapsed[st.ID] {
-			parts = append(parts, "▶")
-		} else {
-			parts = append(parts, "▼")
-		}
-		parts = append(parts, "F")
-	} else {
-		parts = append(parts, " ", "S")
-	}
-
-	// Add name and slug
-	if st.Name != "" {
-		parts = append(parts, st.Name)
-	}
-	if st.Slug != "" && st.Slug != st.Name {
-		parts = append(parts, "("+st.Slug+")")
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// countWrappedLines counts how many display lines a piece of content takes
-func (m *Model) countWrappedLines(content string) int {
-	if m.viewport.Width <= 0 {
-		return 1
-	}
-
-	lines := strings.Split(content, "\n")
+	// Calculate visual lines up to the cursor position
 	totalLines := 0
+	contentWidth := m.width - 4 // Same as view: cursorCell + markCell + content styled width
+	if contentWidth <= 0 {
+		contentWidth = 80
+	}
 
-	for _, line := range lines {
-		if len(line) == 0 {
-			totalLines++
-			continue
+	// Count lines up to (but not including) the cursor position
+	cursorPos := m.selection.listIndex
+	if cursorPos > len(treeLines) {
+		cursorPos = len(treeLines)
+	}
+
+	for i := 0; i < cursorPos; i++ {
+		if i >= len(treeLines) {
+			break
 		}
-		// Calculate wrapped lines
-		lineWidth := lipgloss.Width(line)
-		wrappedLines := (lineWidth + m.viewport.Width - 1) / m.viewport.Width
-		if wrappedLines == 0 {
-			wrappedLines = 1
-		}
+		
+		// Apply the same styling as in view_browse.go
+		styledContent := lipgloss.NewStyle().Width(contentWidth).Render(treeLines[i])
+		
+		// Count wrapped lines for this styled content
+		wrappedLines := m.countWrappedLines(styledContent)
 		totalLines += wrappedLines
 	}
 
 	return totalLines
+}
+
+// generateTreeLines generates tree structure exactly as in view_browse.go
+func (m *Model) generateTreeLines(stories []sb.Story) []string {
+	if len(stories) == 0 {
+		return []string{}
+	}
+
+	// Recreate the exact same tree generation logic as view_browse.go (lines 63-85)
+	tr := tree.New()
+	nodes := make(map[int]*tree.Tree, len(stories))
+	
+	// First pass: create all nodes
+	for _, st := range stories {
+		node := tree.Root(displayStory(st))
+		nodes[st.ID] = node
+	}
+
+	// Second pass: build parent-child relationships
+	for _, st := range stories {
+		node := nodes[st.ID]
+		if st.FolderID != nil {
+			if parent, ok := nodes[*st.FolderID]; ok {
+				parent.Child(node)
+				continue
+			}
+		}
+		tr.Child(node)
+	}
+
+	// Render tree lines exactly as in view_browse.go
+	lines := strings.Split(tr.String(), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return lines
+}
+
+
+// countWrappedLines counts how many display lines a piece of styled content takes
+func (m *Model) countWrappedLines(styledContent string) int {
+	// For the tree view, each story takes exactly one line
+	// The lipgloss styling doesn't introduce additional line breaks in our case
+	// Just count newlines in the content
+	if styledContent == "" {
+		return 1
+	}
+	lines := strings.Count(styledContent, "\n") + 1
+	return lines
 }

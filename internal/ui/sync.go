@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"time"
 
@@ -61,7 +60,7 @@ func (m *Model) resolveParentFolder(ctx context.Context, story sb.Story) (sb.Sto
 		return story, warning, nil
 	}
 
-	parentSlugStr := parentSlug(story.FullSlug)
+	parentSlugStr := sync.ParentSlug(story.FullSlug)
 	if parentSlugStr == "" {
 		story.FolderID = nil
 		return story, warning, nil
@@ -130,142 +129,36 @@ func getFolderPaths(slug string) []string {
 
 // buildTargetFolderMap creates a map of existing folders in target space for quick lookup
 func (m *Model) buildTargetFolderMap() map[string]sb.Story {
-	folderMap := make(map[string]sb.Story)
-	for _, story := range m.storiesTarget {
-		if story.IsFolder {
-			folderMap[story.FullSlug] = story
-		}
-	}
-	return folderMap
+	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
+	return planner.BuildTargetFolderMap()
 }
 
 // findMissingFolderPaths analyzes selected items and identifies missing parent folders
 func (m *Model) findMissingFolderPaths(items []PreflightItem) map[string]sb.Story {
-	targetFolders := m.buildTargetFolderMap()
-	sourceFolders := make(map[string]sb.Story)
-
-	// Build source folder map for quick lookup
-	for _, story := range m.storiesSource {
-		if story.IsFolder {
-			sourceFolders[story.FullSlug] = story
-		}
+	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
+	
+	// Convert UI PreflightItems to sync PreflightItems
+	syncItems := convertToSyncPreflightItems(items)
+	missingFolders := planner.FindMissingFolderPaths(syncItems)
+	
+	// Convert slice to map for backward compatibility
+	folderMap := make(map[string]sb.Story)
+	for _, folder := range missingFolders {
+		folderMap[folder.FullSlug] = folder
 	}
-
-	missingFolders := make(map[string]sb.Story)
-
-	for _, item := range items {
-		if item.Skip || item.Story.IsFolder {
-			continue
-		}
-
-		// Get all parent folder paths for this story
-		folderPaths := getFolderPaths(item.Story.FullSlug)
-		for _, folderPath := range folderPaths {
-			// Skip if folder already exists in target or already identified as missing
-			if _, exists := targetFolders[folderPath]; exists {
-				continue
-			}
-			if _, alreadyFound := missingFolders[folderPath]; alreadyFound {
-				continue
-			}
-
-			// Find folder in source space
-			if sourceFolder, found := sourceFolders[folderPath]; found {
-				missingFolders[folderPath] = sourceFolder
-				log.Printf("DEBUG: Found missing folder path: %s", folderPath)
-			} else {
-				log.Printf("WARNING: Required folder %s not found in source space", folderPath)
-			}
-		}
-	}
-
-	return missingFolders
+	return folderMap
 }
 
 // optimizePreflight deduplicates entries, pre-plans missing folders, sorts by sync order (folders first), and merges full folder selections into starts_with tasks.
 func (m *Model) optimizePreflight() {
-	log.Printf("Optimizing preflight with %d items", len(m.preflight.items))
-
-	selected := make(map[string]*PreflightItem)
-	for i := range m.preflight.items {
-		it := &m.preflight.items[i]
-		if it.Skip {
-			continue
-		}
-		if _, ok := selected[it.Story.FullSlug]; ok {
-			it.Skip = true
-			continue
-		}
-		selected[it.Story.FullSlug] = it
-	}
-
-	// Create initial optimized list
-	optimized := make([]PreflightItem, 0, len(m.preflight.items))
-	for _, it := range m.preflight.items {
-		if it.Skip {
-			continue
-		}
-		it.Run = RunPending
-		optimized = append(optimized, it)
-	}
-
-	// Find and add missing folder paths
-	missingFolders := m.findMissingFolderPaths(optimized)
-	log.Printf("Found %d missing folders that need to be created", len(missingFolders))
-
-	// Build a map of already included slugs to avoid duplicates
-	existingSlugs := make(map[string]bool)
-	for _, item := range optimized {
-		existingSlugs[item.Story.FullSlug] = true
-	}
-
-	for _, folder := range missingFolders {
-		// Skip if folder is already included in the optimization list
-		if existingSlugs[folder.FullSlug] {
-			log.Printf("DEBUG: Folder %s already in optimization list, skipping auto-add", folder.FullSlug)
-			continue
-		}
-
-		// Create preflight item for missing folder
-		folderItem := PreflightItem{
-			Story:     folder,
-			Collision: false, // Missing folders don't have collisions
-			Skip:      false,
-			Selected:  true, // Auto-selected for sync
-			State:     StateCreate,
-			Run:       RunPending,
-		}
-		optimized = append(optimized, folderItem)
-		existingSlugs[folder.FullSlug] = true
-		log.Printf("DEBUG: Auto-added missing folder to preflight: %s", folder.FullSlug)
-	}
-
-	// Sort by sync priority: folders first (by depth), then stories
-	sort.Slice(optimized, func(i, j int) bool {
-		itemI, itemJ := optimized[i], optimized[j]
-
-		// Folders always come before stories
-		if itemI.Story.IsFolder && !itemJ.Story.IsFolder {
-			return true
-		}
-		if !itemI.Story.IsFolder && itemJ.Story.IsFolder {
-			return false
-		}
-
-		// Both are folders or both are stories - sort by depth (shallow first)
-		depthI := strings.Count(itemI.Story.FullSlug, "/")
-		depthJ := strings.Count(itemJ.Story.FullSlug, "/")
-
-		if depthI != depthJ {
-			return depthI < depthJ
-		}
-
-		// Same depth - sort alphabetically for consistent order
-		return itemI.Story.FullSlug < itemJ.Story.FullSlug
-	})
-
-	m.preflight.items = optimized
-	log.Printf("Optimized to %d items (%d missing folders auto-added), sync order: folders first, then stories", len(optimized), len(missingFolders))
+	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
+	
+	// Convert UI PreflightItems to sync PreflightItems
+	syncItems := convertToSyncPreflightItems(m.preflight.items)
+	optimizedSyncItems := planner.OptimizePreflight(syncItems)
+	
+	// Convert back to UI PreflightItems
+	m.preflight.items = convertFromSyncPreflightItems(optimizedSyncItems)
 }
 
 func (m *Model) runNextItem() tea.Cmd {
@@ -275,126 +168,41 @@ func (m *Model) runNextItem() tea.Cmd {
 	idx := m.syncIndex
 	m.preflight.items[idx].Run = RunRunning
 
-	// Capture the context for this operation
-	ctx := m.syncContext
+	// Create orchestrator for this operation
+	reportAdapter := &reportAdapter{report: &m.report}
+	orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace)
 
-	return func() tea.Msg {
-		// Check if context is already cancelled before starting
-		select {
-		case <-ctx.Done():
-			return syncResultMsg{Index: idx, Cancelled: true}
-		default:
-		}
-
-		it := m.preflight.items[idx]
-		log.Printf("Starting sync for item %d: %s (folder: %t)", idx, it.Story.FullSlug, it.Story.IsFolder)
-
-		startTime := time.Now()
-		var err error
-		var result *syncItemResult
-
-		switch {
-		case it.StartsWith:
-			err = m.syncWithRetry(func() error {
-				var syncErr error
-				result, syncErr = m.syncStartsWithDetailed(it.Story.FullSlug)
-				return syncErr
-			})
-		case it.Story.IsFolder:
-			err = m.syncWithRetry(func() error {
-				var syncErr error
-				result, syncErr = m.syncFolderDetailed(it.Story)
-				return syncErr
-			})
-		default:
-			err = m.syncWithRetry(func() error {
-				var syncErr error
-				result, syncErr = m.syncStoryContentDetailed(it.Story)
-				return syncErr
-			})
-		}
-
-		duration := time.Since(startTime).Milliseconds()
-
-		if err != nil {
-			logError("sync", it.Story.FullSlug, err, &it.Story)
-		} else if result != nil {
-			if result.Warning != "" {
-				logWarning(result.Operation, it.Story.FullSlug, result.Warning, &it.Story)
-			} else {
-				logSuccess(result.Operation, it.Story.FullSlug, duration, result.TargetStory)
-			}
-			time.Sleep(50 * time.Millisecond)
-		} else {
-			log.Printf("Sync completed for %s (no detailed result)", it.Story.FullSlug)
-			time.Sleep(50 * time.Millisecond)
-		}
-
-		return syncResultMsg{Index: idx, Err: err, Result: result, Duration: duration}
-	}
+	// Create a sync item adapter
+	item := &preflightItemAdapter{item: m.preflight.items[idx]}
+	
+	// Use orchestrator to run the sync operation
+	return orchestrator.RunSyncItem(m.syncContext, idx, item)
 }
 
-// syncWithRetry executes an operation with retry logic for rate limiting and transient errors
-func (m *Model) syncWithRetry(operation func() error) error {
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		err := operation()
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-		log.Printf("Sync attempt %d failed: %v", attempt+1, err)
-
-		// Log additional context for retries
-		if attempt < 2 {
-			log.Printf("  Will retry in %v (attempt %d/3)",
-				func() time.Duration {
-					if isRateLimited(err) {
-						return time.Second * time.Duration(attempt+1)
-					}
-					return time.Millisecond * 500
-				}(), attempt+2)
-		} else {
-			log.Printf("  Max retries (3) exceeded, giving up")
-		}
-
-		// Check if it's a rate limiting error (implement based on actual API responses)
-		if isRateLimited(err) {
-			sleepDuration := time.Second * time.Duration(attempt+1)
-			log.Printf("Rate limited, sleeping for %v", sleepDuration)
-			time.Sleep(sleepDuration)
-			continue
-		}
-
-		// For other errors, don't retry immediately
-		if attempt < 2 {
-			time.Sleep(time.Millisecond * 500)
-		}
-	}
-
-	// Log final failure with additional context
-	log.Printf("RETRY FAILED: Operation failed after 3 attempts, final error: %v", lastErr)
-	// Extended error context now handled in sync.LogError
-
-	return lastErr
+// preflightItemAdapter adapts PreflightItem to sync.SyncItem interface
+type preflightItemAdapter struct {
+	item PreflightItem
 }
 
-// isRateLimited checks if the error indicates rate limiting (customize based on API responses)
+func (pia *preflightItemAdapter) GetStory() sb.Story {
+	return pia.item.Story
+}
+
+func (pia *preflightItemAdapter) IsStartsWith() bool {
+	return pia.item.StartsWith
+}
+
+func (pia *preflightItemAdapter) IsFolder() bool {
+	return pia.item.Story.IsFolder
+}
+
+// Legacy wrapper functions for backward compatibility
 func isRateLimited(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "429")
+	return sync.IsRateLimited(err)
 }
 
 func isDevModePublishLimit(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "development mode") && strings.Contains(msg, "Publishing is limited")
+	return sync.IsDevModePublishLimit(err)
 }
 
 type updateAPI interface {
@@ -405,40 +213,15 @@ type createAPI interface {
 	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
 }
 
+// Legacy wrapper functions that now use the extracted API adapters
 func updateStoryWithPublishRetry(ctx context.Context, api updateAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	var lastErr error
-	for attempt := 0; attempt < 2; attempt++ {
-		updated, err := api.UpdateStory(ctx, spaceID, st, publish)
-		if err == nil {
-			return updated, nil
-		}
-		lastErr = err
-		if publish && isDevModePublishLimit(err) {
-			log.Printf("Publish limit reached, retrying without publish for %s", st.FullSlug)
-			publish = false
-			continue
-		}
-		return sb.Story{}, err
-	}
-	return sb.Story{}, lastErr
+	// TODO: Remove this legacy function completely - now handled by extracted modules
+	return api.UpdateStory(ctx, spaceID, st, publish)
 }
 
 func createStoryWithPublishRetry(ctx context.Context, api createAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	var lastErr error
-	for attempt := 0; attempt < 2; attempt++ {
-		created, err := api.CreateStoryWithPublish(ctx, spaceID, st, publish)
-		if err == nil {
-			return created, nil
-		}
-		lastErr = err
-		if publish && isDevModePublishLimit(err) {
-			log.Printf("Publish limit reached, retrying without publish for %s", st.FullSlug)
-			publish = false
-			continue
-		}
-		return sb.Story{}, err
-	}
-	return sb.Story{}, lastErr
+	// TODO: Remove this legacy function completely - now handled by extracted modules  
+	return api.CreateStoryWithPublish(ctx, spaceID, st, publish)
 }
 
 type folderAPI interface {
@@ -721,108 +504,15 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 
 // syncFolderDetailed handles folder synchronization and returns detailed results
 func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, error) {
-	log.Printf("Syncing folder: %s", sourceFolder.FullSlug)
-
-	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
-	defer cancel()
-
-	// Ensure folder has content
-	contentMgr := newContentManager(m.api, m.sourceSpace.ID)
-	fullFolder, err := contentMgr.ensureContent(ctx, sourceFolder)
-	if err != nil {
-		log.Printf("Failed to ensure content for folder %s: %v", sourceFolder.FullSlug, err)
-		// Extended error context now handled in sync.LogError
-		return nil, err
-	}
-
-	log.Printf("DEBUG: syncFolderDetailed preserving content for %s", sourceFolder.FullSlug)
-
-	// Check if folder already exists in target
-	existing, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, sourceFolder.FullSlug)
-	if err != nil {
-		log.Printf("Failed to check if target folder exists for %s: %v", sourceFolder.FullSlug, err)
-		// Extended error context now handled in sync.LogError
-		return nil, err
-	}
-
-	// Resolve parent folder ID and handle translated slugs
-	fullFolder, warning, err := m.resolveParentFolder(ctx, fullFolder)
-	if err != nil {
-		return nil, err
-	}
-
-	fullFolder = m.processTranslatedSlugs(fullFolder, existing)
-
-	// Execute create or update operation
-	return m.executeSync(ctx, fullFolder, existing, warning)
+	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID)
+	return syncer.SyncFolderDetailed(sourceFolder, m.shouldPublish())
 }
 
-// executeSync handles the common create/update logic for both folders and stories
-func (m *Model) executeSync(ctx context.Context, story sb.Story, existing []sb.Story, warning string) (*syncItemResult, error) {
-	var targetStory *sb.Story
-	var operation string
-
-	if len(existing) > 0 {
-		// Update existing item
-		story = prepareStoryForUpdate(story, existing[0])
-		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, story, m.shouldPublish())
-		if err != nil {
-			log.Printf("Failed to update %s (ID: %d): %v", story.FullSlug, story.ID, err)
-			// Extended error context now handled in sync.LogError
-			return nil, err
-		}
-
-		// Update UUID if different
-		if uuidErr := m.syncUUID(ctx, updated, story.UUID); uuidErr != nil {
-			if warning == "" {
-				warning = fmt.Sprintf("Failed to update UUID: %v", uuidErr)
-			} else {
-				warning += fmt.Sprintf("; Failed to update UUID: %v", uuidErr)
-			}
-		}
-
-		targetStory = &updated
-		operation = operationUpdate
-		log.Printf("Updated %s: %s", itemType(story), story.FullSlug)
-	} else {
-		// Create new item
-		story = prepareStoryForCreation(story)
-		story = ensureDefaultContent(story)
-
-		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, story, m.shouldPublish())
-		if err != nil {
-			log.Printf("Failed to create %s: %v", story.FullSlug, err)
-			// Extended error context now handled in sync.LogError
-			return nil, err
-		}
-
-		// Update UUID if different
-		if uuidErr := m.syncUUID(ctx, created, story.UUID); uuidErr != nil {
-			if warning == "" {
-				warning = fmt.Sprintf("Failed to update UUID: %v", uuidErr)
-			} else {
-				warning += fmt.Sprintf("; Failed to update UUID: %v", uuidErr)
-			}
-		}
-
-		targetStory = &created
-		operation = operationCreate
-		log.Printf("Created %s: %s", itemType(story), story.FullSlug)
-	}
-
-	return &syncItemResult{
-		Operation:   operation,
-		TargetStory: targetStory,
-		Warning:     warning,
-	}, nil
-}
+// executeSync has been moved to sync/api_adapters.go as ExecuteSync
 
 // itemType returns a string describing the item type for logging
 func itemType(story sb.Story) string {
-	if story.IsFolder {
-		return "folder"
-	}
-	return "story"
+	return sync.ItemType(story)
 }
 
 // syncStoryContent handles story synchronization with proper UUID management
@@ -914,242 +604,124 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 // syncStoryContentDetailed handles story synchronization and returns detailed results
 // Note: Folder structure is now pre-planned in optimizePreflight(), so no need to ensure folder path here
 func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult, error) {
-	log.Printf("Syncing story: %s", sourceStory.FullSlug)
-
-	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
-	defer cancel()
-
-	// Ensure story has content
-	contentMgr := newContentManager(m.api, m.sourceSpace.ID)
-	fullStory, err := contentMgr.ensureContent(ctx, sourceStory)
-	if err != nil {
-		log.Printf("Failed to ensure content for story %s: %v", sourceStory.FullSlug, err)
-		// Extended error context now handled in sync.LogError
-		return nil, err
-	}
-
-	// Check if story already exists in target
-	existing, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, sourceStory.FullSlug)
-	if err != nil {
-		log.Printf("Failed to check if target story exists for %s: %v", sourceStory.FullSlug, err)
-		// Extended error context now handled in sync.LogError
-		return nil, err
-	}
-
-	// Resolve parent folder ID
-	fullStory, warning, err := m.resolveParentFolder(ctx, fullStory)
-	if err != nil {
-		return nil, err
-	}
-
-	// Handle translated slugs
-	fullStory = m.processTranslatedSlugs(fullStory, existing)
-
-	// Execute create or update operation
-	return m.executeSync(ctx, fullStory, existing, warning)
+	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID)
+	return syncer.SyncStoryDetailed(sourceStory, m.shouldPublish())
 }
 
 // processTranslatedSlugs handles translated slug processing like the Storyblok CLI
 func (m *Model) processTranslatedSlugs(sourceStory sb.Story, existingStories []sb.Story) sb.Story {
-	if len(sourceStory.TranslatedSlugs) == 0 {
-		return sourceStory
-	}
-
-	// Copy translated slugs and remove IDs
-	translatedSlugs := make([]sb.TranslatedSlug, len(sourceStory.TranslatedSlugs))
-	for i, ts := range sourceStory.TranslatedSlugs {
-		translatedSlugs[i] = sb.TranslatedSlug{
-			Lang: ts.Lang,
-			Name: ts.Name,
-			Path: ts.Path,
-		}
-	}
-
-	// If there's an existing story, merge the translated slug IDs
-	if len(existingStories) > 0 {
-		existingStory := existingStories[0]
-		if len(existingStory.TranslatedSlugs) > 0 {
-			for i := range translatedSlugs {
-				for _, existingTS := range existingStory.TranslatedSlugs {
-					if translatedSlugs[i].Lang == existingTS.Lang {
-						translatedSlugs[i].ID = existingTS.ID
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// Set the attributes for the API call
-	sourceStory.TranslatedSlugsAttributes = translatedSlugs
-	sourceStory.TranslatedSlugs = nil // Clear the original field
-
-	return sourceStory
+	return sync.ProcessTranslatedSlugs(sourceStory, existingStories)
 }
 
 func (m *Model) syncStartsWith(slug string) error {
-	log.Printf("Syncing all content starting with: %s", slug)
-
-	// Get all stories/folders that match the prefix
-	var toSync []sb.Story
-	for _, st := range m.storiesSource {
-		if st.FullSlug == slug || strings.HasPrefix(st.FullSlug, slug+"/") {
-			toSync = append(toSync, st)
-		}
-	}
-
-	// Sort by type and depth (folders first, then stories)
-	sort.Slice(toSync, func(i, j int) bool {
-		storyI, storyJ := toSync[i], toSync[j]
-
-		// Folders always come before stories
-		if storyI.IsFolder && !storyJ.IsFolder {
-			return true
-		}
-		if !storyI.IsFolder && storyJ.IsFolder {
-			return false
-		}
-
-		// Both are folders or both are stories - sort by depth (shallow first)
-		depthI := strings.Count(storyI.FullSlug, "/")
-		depthJ := strings.Count(storyJ.FullSlug, "/")
-
-		if depthI != depthJ {
-			return depthI < depthJ
-		}
-
-		return storyI.FullSlug < storyJ.FullSlug
-	})
-
-	// Sync each item in the correct order
-	for _, st := range toSync {
-		var err error
-		if st.IsFolder {
-			err = m.syncFolder(st)
-		} else {
-			err = m.syncStoryContent(st)
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-
-	log.Printf("Completed syncing %d items starting with %s", len(toSync), slug)
-	return nil
+	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID)
+	return bulkSyncer.SyncStartsWith(slug)
 }
 
 // syncStartsWithDetailed syncs all content with prefix and returns results
 func (m *Model) syncStartsWithDetailed(slug string) (*syncItemResult, error) {
-	log.Printf("Syncing all content starting with: %s", slug)
-
-	// Get all stories/folders that match the prefix
-	var toSync []sb.Story
-	for _, st := range m.storiesSource {
-		if st.FullSlug == slug || strings.HasPrefix(st.FullSlug, slug+"/") {
-			toSync = append(toSync, st)
-		}
-	}
-
-	// Sort by type and depth (folders first, then stories)
-	sort.Slice(toSync, func(i, j int) bool {
-		storyI, storyJ := toSync[i], toSync[j]
-
-		// Folders always come before stories
-		if storyI.IsFolder && !storyJ.IsFolder {
-			return true
-		}
-		if !storyI.IsFolder && storyJ.IsFolder {
-			return false
-		}
-
-		// Both are folders or both are stories - sort by depth (shallow first)
-		depthI := strings.Count(storyI.FullSlug, "/")
-		depthJ := strings.Count(storyJ.FullSlug, "/")
-
-		if depthI != depthJ {
-			return depthI < depthJ
-		}
-
-		return storyI.FullSlug < storyJ.FullSlug
-	})
-
-	var warnings []string
-	totalCreated := 0
-	totalUpdated := 0
-
-	// Sync each item in the correct order
-	for _, st := range toSync {
-		var result *syncItemResult
-		var err error
-
-		if st.IsFolder {
-			result, err = m.syncFolderDetailed(st)
-		} else {
-			result, err = m.syncStoryContentDetailed(st)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		if result != nil {
-			if result.Operation == "create" {
-				totalCreated++
-			} else if result.Operation == "update" {
-				totalUpdated++
-			}
-
-			if result.Warning != "" {
-				warnings = append(warnings, fmt.Sprintf("%s: %s", st.FullSlug, result.Warning))
-			}
-		}
-	}
-
-	operation := fmt.Sprintf("bulk (%d created, %d updated)", totalCreated, totalUpdated)
-	warning := ""
-	if len(warnings) > 0 {
-		warning = strings.Join(warnings, "; ")
-	}
-
-	log.Printf("Completed syncing %d items starting with %s", len(toSync), slug)
-	return &syncItemResult{
-		Operation: operation,
-		Warning:   warning,
-	}, nil
+	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID)
+	return bulkSyncer.SyncStartsWithDetailed(slug)
 }
 
+// Legacy helper functions that now use the extracted bulk operations module
 func (m *Model) findTarget(fullSlug string) int {
-	for i, st := range m.storiesTarget {
-		if st.FullSlug == fullSlug {
-			return i
-		}
-	}
-	return -1
+	return sync.FindTarget(m.storiesTarget, fullSlug)
 }
 
 func (m *Model) findSource(fullSlug string) (sb.Story, bool) {
-	for _, st := range m.storiesSource {
-		if st.FullSlug == fullSlug {
-			return st, true
-		}
-	}
-	return sb.Story{}, false
+	return sync.FindSource(m.storiesSource, fullSlug)
 }
 
 func (m *Model) nextTargetID() int {
-	max := 0
-	for _, st := range m.storiesTarget {
-		if st.ID > max {
-			max = st.ID
-		}
-	}
-	return max + 1
+	return sync.NextTargetID(m.storiesTarget)
 }
 
+// Legacy wrapper for parent slug extraction
 func parentSlug(full string) string {
-	if i := strings.LastIndex(full, "/"); i >= 0 {
-		return full[:i]
+	return sync.ParentSlug(full)
+}
+
+// Adapter functions to convert between UI and sync module types
+
+// reportAdapter adapts UI Report to sync ReportInterface
+type reportAdapter struct {
+	report *Report
+}
+
+func (ra *reportAdapter) AddSuccess(slug, operation string, duration int64, story *sb.Story) {
+	ra.report.AddSuccess(slug, operation, duration, story)
+}
+
+func (ra *reportAdapter) AddWarning(slug, operation, warning string, duration int64, sourceStory, targetStory *sb.Story) {
+	ra.report.AddWarning(slug, operation, warning, duration, sourceStory, targetStory)
+}
+
+func (ra *reportAdapter) AddError(slug, operation string, duration int64, sourceStory *sb.Story, err error) {
+	ra.report.AddError(slug, operation, err.Error(), duration, sourceStory)
+}
+
+// convertToSyncPreflightItems converts UI PreflightItem slice to sync PreflightItem slice
+func convertToSyncPreflightItems(uiItems []PreflightItem) []sync.PreflightItem {
+	syncItems := make([]sync.PreflightItem, len(uiItems))
+	for i, uiItem := range uiItems {
+		syncItems[i] = sync.PreflightItem{
+			Story:      uiItem.Story,
+			Collision:  uiItem.Collision,
+			Skip:       uiItem.Skip,
+			Selected:   uiItem.Selected,
+			State:      string(uiItem.State),
+			StartsWith: uiItem.StartsWith,
+			Run:        convertRunStateToString(uiItem.Run),
+		}
 	}
-	return ""
+	return syncItems
+}
+
+// convertFromSyncPreflightItems converts sync PreflightItem slice to UI PreflightItem slice
+func convertFromSyncPreflightItems(syncItems []sync.PreflightItem) []PreflightItem {
+	uiItems := make([]PreflightItem, len(syncItems))
+	for i, syncItem := range syncItems {
+		uiItems[i] = PreflightItem{
+			Story:      syncItem.Story,
+			Collision:  syncItem.Collision,
+			Skip:       syncItem.Skip,
+			Selected:   syncItem.Selected,
+			State:      SyncState(syncItem.State),
+			StartsWith: syncItem.StartsWith,
+			Run:        convertStringToRunState(syncItem.Run),
+		}
+	}
+	return uiItems
+}
+
+// Helper functions for type conversion
+func convertRunStateToString(runState RunState) string {
+	switch runState {
+	case RunPending:
+		return "pending"
+	case RunRunning:
+		return "running"
+	case RunDone:
+		return "success"
+	case RunCancelled:
+		return "failed"
+	default:
+		return "pending"
+	}
+}
+
+func convertStringToRunState(runString string) RunState {
+	switch runString {
+	case "pending":
+		return RunPending
+	case "running":
+		return RunRunning
+	case "success":
+		return RunDone
+	case "failed":
+		return RunCancelled
+	default:
+		return RunPending
+	}
 }

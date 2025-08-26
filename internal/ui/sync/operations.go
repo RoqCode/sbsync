@@ -108,12 +108,4 @@ func (so *SyncOperations) ShouldPublish() bool {
 	return true
 }
 
-// IsRateLimited checks if an error indicates rate limiting
-func IsRateLimited(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Simple check for rate limiting - could be expanded based on actual API responses
-	errStr := err.Error()
-	return len(errStr) > 0 && (errStr[0] == '4' && len(errStr) > 2 && errStr[1] == '2' && errStr[2] == '9')
-}
+// Note: IsRateLimited is now in api_adapters.go
