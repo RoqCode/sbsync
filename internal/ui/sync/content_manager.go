@@ -39,6 +39,7 @@ func (cm *ContentManager) EnsureContent(ctx context.Context, story sb.Story) (sb
 
 	// Check cache first
 	if cached, exists := cm.cache[story.ID]; exists && cached.Content != nil {
+		cm.hitCount++
 		story.Content = cached.Content
 		return story, nil
 	}
@@ -63,13 +64,13 @@ func (cm *ContentManager) EnsureContent(ctx context.Context, story sb.Story) (sb
 
 // addToCache adds a story to the cache with LRU eviction when size limit is reached
 func (cm *ContentManager) addToCache(story sb.Story) {
-	// If cache is at capacity, remove oldest entries
+	// If cache is at capacity, remove oldest entries to make room
 	if len(cm.cache) >= cm.maxSize {
-		// Simple eviction: remove first 100 entries to make room
-		// In a production system, you might want proper LRU implementation
+		// Simple eviction: remove entries until we're under the limit
+		removeCount := len(cm.cache) - cm.maxSize + 1
 		count := 0
 		for id := range cm.cache {
-			if count >= 100 {
+			if count >= removeCount {
 				break
 			}
 			delete(cm.cache, id)
