@@ -98,10 +98,10 @@ func TestSortByTypeAndDepth(t *testing.T) {
 	syncer.sortByTypeAndDepth(stories)
 
 	expected := []string{
-		"app",        // folder, depth 0
-		"zzz",        // folder, depth 0 (alphabetical)
-		"app/sub",    // folder, depth 1
-		"app/page",   // story, depth 1
+		"app",          // folder, depth 0
+		"zzz",          // folder, depth 0 (alphabetical)
+		"app/sub",      // folder, depth 1
+		"app/page",     // story, depth 1
 		"app/sub/page", // story, depth 2
 	}
 

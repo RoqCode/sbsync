@@ -74,7 +74,7 @@ func TestOptimizePreflight_Basic(t *testing.T) {
 
 func TestOptimizePreflight_SkipDuplicates(t *testing.T) {
 	story := sb.Story{ID: 1, FullSlug: "test", IsFolder: false}
-	
+
 	sourceStories := []sb.Story{story}
 	planner := NewPreflightPlanner(sourceStories, []sb.Story{})
 
@@ -171,7 +171,7 @@ func TestOptimizePreflight_AddMissingFolders(t *testing.T) {
 	// Auto-added folders should be marked for creation
 	for i := 0; i < 2; i++ { // First two are folders
 		if optimized[i].State != StateCreate {
-			t.Errorf("Auto-added folder %s should have state %s, got %s", 
+			t.Errorf("Auto-added folder %s should have state %s, got %s",
 				optimized[i].Story.FullSlug, StateCreate, optimized[i].State)
 		}
 		if !optimized[i].Selected {
@@ -230,9 +230,9 @@ func TestFindMissingFolderPaths(t *testing.T) {
 	planner := NewPreflightPlanner(sourceStories, targetStories)
 
 	items := []PreflightItem{
-		{Story: sb.Story{FullSlug: "app/sub/page"}},        // Needs app/sub
-		{Story: sb.Story{FullSlug: "other/page"}},          // Needs other
-		{Story: sb.Story{FullSlug: "app/existing/page"}},   // Needs app/existing (not in source)
+		{Story: sb.Story{FullSlug: "app/sub/page"}},      // Needs app/sub
+		{Story: sb.Story{FullSlug: "other/page"}},        // Needs other
+		{Story: sb.Story{FullSlug: "app/existing/page"}}, // Needs app/existing (not in source)
 	}
 
 	missing := planner.FindMissingFolderPaths(items)

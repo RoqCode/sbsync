@@ -177,14 +177,14 @@ func TestLogError(t *testing.T) {
 
 	// Test with full story
 	story := &sb.Story{
-		ID:       123,
-		UUID:     "test-uuid",
-		Name:     "Test Story",
-		FullSlug: "test/story",
-		IsFolder: false,
+		ID:        123,
+		UUID:      "test-uuid",
+		Name:      "Test Story",
+		FullSlug:  "test/story",
+		IsFolder:  false,
 		Published: true,
-		FolderID: &[]int{456}[0],
-		TagList:  []string{"tag1", "tag2"},
+		FolderID:  &[]int{456}[0],
+		TagList:   []string{"tag1", "tag2"},
 		TranslatedSlugs: []sb.TranslatedSlug{
 			{Lang: "en", Name: "Test Story", Path: "test/story"},
 			{Lang: "de", Name: "Test Geschichte", Path: "test/geschichte"},
