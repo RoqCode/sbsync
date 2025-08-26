@@ -76,6 +76,7 @@ func TestHandleBrowseTreeNavigation(t *testing.T) {
 			for k, v := range tt.initialCollapsed {
 				testModel.folderCollapsed[k] = v
 			}
+			testModel.refreshVisible() // Refresh visible items after setting folder states
 
 			result, _ := testModel.handleBrowseTreeNavigation(tt.key)
 
@@ -111,6 +112,10 @@ func TestHandleBrowseTreeNavigationEmptyList(t *testing.T) {
 func TestHandleBrowseCursorMovement(t *testing.T) {
 	m := createTestModel()
 	m.addTestStories()
+
+	// Expand folders so all items are visible for cursor movement tests
+	m.folderCollapsed = map[int]bool{2: false}
+	m.refreshVisible()
 
 	tests := []struct {
 		name           string
@@ -295,6 +300,10 @@ func TestHandleBrowseCursorMovementPaging(t *testing.T) {
 	m := createTestModel()
 	m.addExtendedTestStories()
 	m.viewport.Height = 3 // Small viewport for testing paging
+
+	// Expand all folders so all items are visible for paging tests
+	m.folderCollapsed = map[int]bool{2: false, 5: false}
+	m.refreshVisible()
 
 	// Test page down from beginning
 	m.selection.listIndex = 0

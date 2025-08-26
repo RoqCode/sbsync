@@ -3,12 +3,11 @@ package ui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"storyblok-sync/internal/config"
 	"storyblok-sync/internal/sb"
 )
 
-func TestHandleWelcomeKey(t *testing.T) {
+func TestHandleWelcomeKeyVariants(t *testing.T) {
 	tests := []struct {
 		name          string
 		key           string
@@ -104,8 +103,7 @@ func TestHandleTokenPromptKey(t *testing.T) {
 			testModel := m
 			testModel.ti.SetValue(tt.inputValue)
 
-			msg := tea.KeyMsg{}
-			msg.SetString(tt.key)
+			msg := createKeyMsg(tt.key)
 
 			result, cmd := testModel.handleTokenPromptKey(msg)
 
@@ -367,8 +365,7 @@ func TestTokenPromptStateFlow(t *testing.T) {
 	m.state = stateTokenPrompt
 	m.ti.SetValue("new-token")
 
-	msg := tea.KeyMsg{}
-	msg.SetString("enter")
+	msg := createKeyMsg("enter")
 
 	result, cmd := m.handleTokenPromptKey(msg)
 

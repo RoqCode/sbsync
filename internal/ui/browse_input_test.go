@@ -8,6 +8,31 @@ import (
 	"storyblok-sync/internal/sb"
 )
 
+// createKeyMsg creates a KeyMsg from a string representation
+func createKeyMsg(key string) tea.KeyMsg {
+	switch key {
+	case "enter":
+		return tea.KeyMsg{Type: tea.KeyEnter}
+	case "esc":
+		return tea.KeyMsg{Type: tea.KeyEscape}
+	case "tab":
+		return tea.KeyMsg{Type: tea.KeyTab}
+	case "ctrl+c":
+		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down":
+		return tea.KeyMsg{Type: tea.KeyDown}
+	default:
+		// Handle single character keys
+		if len(key) == 1 {
+			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{rune(key[0])}}
+		}
+		// For unhandled multi-character keys, treat as runes
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+	}
+}
+
 func TestHandlePrefixFilterInput(t *testing.T) {
 	m := createTestModel()
 	m.filter.prefixing = true
@@ -58,8 +83,7 @@ func TestHandlePrefixFilterInput(t *testing.T) {
 				testModel.filter.prefixInput.SetValue("test-prefix")
 			}
 
-			msg := tea.KeyMsg{}
-			msg.SetString(tt.key)
+			msg := createKeyMsg(tt.key)
 
 			result, cmd := testModel.handlePrefixFilterInput(msg)
 
@@ -136,8 +160,7 @@ func TestHandleSearchInput(t *testing.T) {
 			testModel.search.searchInput.SetValue(tt.initialValue)
 			testModel.search.query = tt.initialValue
 
-			msg := tea.KeyMsg{}
-			msg.SetString(tt.key)
+			msg := createKeyMsg(tt.key)
 
 			result, cmd := testModel.handleSearchInput(msg)
 
@@ -177,8 +200,7 @@ func TestHandleSearchInputLiveUpdate(t *testing.T) {
 	updatedInput.SetValue("test-new")
 
 	// This simulates the case where the user types and the input value changes
-	msg := tea.KeyMsg{}
-	msg.SetString("a") // any regular key
+	msg := createKeyMsg("a") // any regular key
 
 	// Set the search input to the new value to simulate the update
 	m.search.searchInput.SetValue("test-new")
