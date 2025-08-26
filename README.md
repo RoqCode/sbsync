@@ -31,10 +31,10 @@ Interrupts: `r` to rescan, `q` to abort.
 - [x] **T4 – Scan + List View:** scan both spaces and display a flat list of stories.
 - [x] **T5 – Fuzzy Search:** filter stories by name, slug or path.
 - [x] **T6 – Preflight Collisions:** detect path/slug collisions and let users skip or overwrite.
-- [ ] **T7 – Sync Executor:** apply create/update operations with progress and retry logic.
-- [ ] **T8 – Report & Rescan:** final summary and option to rescan or quit.
-- [ ] **T9 – Keybind Help:** context-sensitive shortcut overlay.
-- [ ] **T10 – Logging:** structured logging, no telemetry.
+- [x] **T7 – Sync Executor:** apply create/update operations with progress and retry logic.
+- [x] **T8 – Report & Rescan:** final summary and option to rescan or quit.
+- [x] **T9 – Keybind Help:** context-sensitive shortcut overlay.
+- [x] **T10 – Logging:** structured logging, no telemetry.
 
 ## Project Structure
 
