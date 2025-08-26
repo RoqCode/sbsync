@@ -1,12 +1,11 @@
 package ui
 
 import (
-	"fmt"
-	"storyblok-sync/internal/sb"
-	"strings"
+    "fmt"
+    "storyblok-sync/internal/sb"
+    "strings"
 
-	"github.com/charmbracelet/lipgloss"
-	tree "github.com/charmbracelet/lipgloss/tree"
+    "github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) updateBrowseViewport() {
@@ -59,39 +58,17 @@ func (m Model) renderBrowseContent() string {
 		stories[i] = m.itemAt(i)
 	}
 
-	// Erzeuge Tree-Struktur
-	tr := tree.New()
-	nodes := make(map[int]*tree.Tree, len(stories))
-	for _, st := range stories {
-		node := tree.Root(displayStory(st))
-		nodes[st.ID] = node
-	}
-
-	for _, st := range stories {
-		node := nodes[st.ID]
-		if st.FolderID != nil {
-			if parent, ok := nodes[*st.FolderID]; ok {
-				parent.Child(node)
-				continue
-			}
-		}
-		tr.Child(node)
-	}
-
-	// Render tree lines
-	lines := strings.Split(tr.String(), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
+    // Erzeuge Tree-Struktur (shared helper)
+    lines := generateTreeLinesFromStories(stories)
 
 	for i, st := range stories {
 		if i >= len(lines) {
 			break
 		}
 
-		content := lines[i]
+        content := lines[i]
 		if i == m.selection.listIndex {
-			content = cursorLineStyle.Width(m.width - 4).Render(content)
+            content = cursorLineStyle.Width(m.width - 4).Render(content)
 		} else {
 			content = lipgloss.NewStyle().Width(m.width - 4).Render(content)
 		}
@@ -101,21 +78,23 @@ func (m Model) renderBrowseContent() string {
 			cursorCell = cursorBarStyle.Render(" ")
 		}
 
-		markCell := " "
-		if m.selection.selected[st.FullSlug] {
-			markCell = markBarStyle.Render(" ")
-		} else if st.IsFolder {
-			if m.hasSelectedDirectChild(st.FullSlug) {
-				markCell = markNestedStyle.Render(":")
-			} else if m.hasSelectedDescendant(st.FullSlug) {
-				markCell = markNestedStyle.Render("·")
-			}
-		}
+        // Preflight has a stateCell; for consistency, browse also reserves a state cell.
+        // Here we render selection mark into that cell and keep same width budget.
+        stateCell := " "
+        if m.selection.selected[st.FullSlug] {
+            stateCell = markBarStyle.Render(" ")
+        } else if st.IsFolder {
+            if m.hasSelectedDirectChild(st.FullSlug) {
+                stateCell = markNestedStyle.Render(":")
+            } else if m.hasSelectedDescendant(st.FullSlug) {
+                stateCell = markNestedStyle.Render("·")
+            }
+        }
 
-		lines[i] = cursorCell + markCell + content
+        lines[i] = cursorCell + stateCell + content
 	}
 
-	b.WriteString(strings.Join(lines, "\n"))
+    b.WriteString(strings.Join(lines, "\n"))
 	return b.String()
 }
 
@@ -135,11 +114,11 @@ func (m Model) renderBrowseFooter() string {
 	}
 	statusLine := fmt.Sprintf("Total: %d | Markiert: %d%s", total, checked, suffix)
 
-	return renderFooter(
-		statusLine,
-		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden",
-		"p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück",
-	)
+    return renderFooter(
+        statusLine,
+        "j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden",
+        "p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück",
+    )
 }
 
 func displayStory(st sb.Story) string {

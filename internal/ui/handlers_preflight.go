@@ -1,13 +1,13 @@
 package ui
 
 import (
-	"context"
-	"fmt"
+    "context"
+    "fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+    tea "github.com/charmbracelet/bubbletea"
+    "github.com/charmbracelet/lipgloss"
 
-	"storyblok-sync/internal/sb"
+    "storyblok-sync/internal/sb"
 )
 
 func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -16,8 +16,67 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	key := msg.String()
 	switch key {
+    case "l":
+        // Expand folder under cursor
+        if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
+            // Find actual item index from visible order
+            if m.preflight.listIndex >= 0 && m.preflight.listIndex < len(m.preflight.visibleIdx) {
+                idx := m.preflight.visibleIdx[m.preflight.listIndex]
+                st := m.preflight.items[idx].Story
+                if st.IsFolder {
+                    m.folderCollapsed[st.ID] = false
+                    m.refreshPreflightVisible()
+                    m.updateViewportContent()
+                }
+            }
+        }
+    case "h":
+        // Collapse folder or parent
+        if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
+            if m.preflight.listIndex >= 0 && m.preflight.listIndex < len(m.preflight.visibleIdx) {
+                idx := m.preflight.visibleIdx[m.preflight.listIndex]
+                st := m.preflight.items[idx].Story
+                if st.IsFolder {
+                    m.folderCollapsed[st.ID] = true
+                    m.refreshPreflightVisible()
+                    m.updateViewportContent()
+                } else if st.FolderID != nil {
+                    pid := *st.FolderID
+                    m.folderCollapsed[pid] = true
+                    m.refreshPreflightVisible()
+                    // Move cursor to parent if visible
+                    for vis, ii := range m.preflight.visibleIdx {
+                        if m.preflight.items[ii].Story.ID == pid {
+                            m.preflight.listIndex = vis
+                            break
+                        }
+                    }
+                    m.ensurePreflightCursorVisible()
+                    m.updateViewportContent()
+                }
+            }
+        }
+    case "H":
+        // Collapse all folders
+        for id := range m.folderCollapsed {
+            m.folderCollapsed[id] = true
+        }
+        m.refreshPreflightVisible()
+        m.updateViewportContent()
+    case "L":
+        // Expand all folders
+        for id := range m.folderCollapsed {
+            m.folderCollapsed[id] = false
+        }
+        m.refreshPreflightVisible()
+        m.updateViewportContent()
 	case "j", "down":
-		if m.preflight.listIndex < len(m.preflight.items)-1 {
+        // Use visible list length
+        maxIdx := len(m.preflight.visibleIdx)
+        if maxIdx == 0 {
+            maxIdx = len(m.preflight.items)
+        }
+        if m.preflight.listIndex < maxIdx-1 {
 			m.preflight.listIndex++
 			m.ensurePreflightCursorVisible()
 			m.updateViewportContent()
@@ -33,10 +92,14 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if jump <= 0 {
 			jump = 10
 		}
-		if m.preflight.listIndex+jump < len(m.preflight.items) {
+        maxIdx := len(m.preflight.visibleIdx)
+        if maxIdx == 0 {
+            maxIdx = len(m.preflight.items)
+        }
+        if m.preflight.listIndex+jump < maxIdx {
 			m.preflight.listIndex += jump
 		} else {
-			m.preflight.listIndex = len(m.preflight.items) - 1
+            m.preflight.listIndex = maxIdx - 1
 		}
 		m.ensurePreflightCursorVisible()
 		m.updateViewportContent()
@@ -80,10 +143,20 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if removed {
 			m.startPreflight()
 		}
-	case "esc", "q":
-		m.state = stateBrowseList
-		m.updateViewportContent()
-		return m, nil
+    case "esc", "q":
+        // restore browse collapse state
+        if m.collapsedBeforePreflight != nil {
+            for id := range m.folderCollapsed {
+                if prev, ok := m.collapsedBeforePreflight[id]; ok {
+                    m.folderCollapsed[id] = prev
+                }
+            }
+            m.collapsedBeforePreflight = nil
+        }
+        m.refreshVisible()
+        m.state = stateBrowseList
+        m.updateViewportContent()
+        return m, nil
 	case "enter":
 		m.optimizePreflight()
 		if len(m.preflight.items) == 0 {
@@ -164,7 +237,20 @@ func (m *Model) startPreflight() {
 	for _, r := range roots {
 		walk(r)
 	}
-	m.preflight = PreflightState{items: items, listIndex: 0}
+    // Initialize preflight state; preflight view should start fully expanded.
+    // We'll build visibleIdx like browse does, using current folderCollapsed but ensure all expanded at start.
+    // Save previous collapse state to restore later if needed.
+    // preserve previous collapse state and start preflight fully expanded
+    m.collapsedBeforePreflight = make(map[int]bool, len(m.folderCollapsed))
+    for id, v := range m.folderCollapsed {
+        m.collapsedBeforePreflight[id] = v
+    }
+    for id := range m.folderCollapsed {
+        m.folderCollapsed[id] = false
+    }
+
+    m.preflight = PreflightState{items: items, listIndex: 0}
+    m.refreshPreflightVisible()
 	m.state = statePreflight
 	collisions := 0
 	for _, it := range items {
@@ -173,7 +259,7 @@ func (m *Model) startPreflight() {
 		}
 	}
 	m.statusMsg = fmt.Sprintf("Preflight: %d Items, %d Kollisionen", len(items), collisions)
-	m.updateViewportContent()
+    m.updateViewportContent()
 }
 
 func (m *Model) ensurePreflightCursorVisible() {
@@ -188,97 +274,101 @@ func (m *Model) ensurePreflightCursorVisible() {
 	if m.preflight.listIndex > n-1 {
 		m.preflight.listIndex = n - 1
 	}
-	// Calculate which line in the viewport content the cursor is on
-	cursorLine := m.calculatePreflightCursorLine()
+    // Calculate which line in the viewport content the cursor is on
+    cursorLine := m.calculatePreflightCursorLine()
 
-	// Check if cursor line is visible in viewport
-	topLine := m.viewport.YOffset
-	bottomLine := topLine + m.viewport.Height - 1
-
-	// Scroll margin - start scrolling when cursor approaches edges
-	scrollMargin := 3
-	if m.viewport.Height < 8 {
-		scrollMargin = 1
-	}
-
-	if cursorLine < topLine+scrollMargin {
-		// Cursor too close to top - scroll up
-		targetLine := cursorLine - scrollMargin
-		if targetLine < 0 {
-			targetLine = 0
-		}
-		m.viewport.SetYOffset(targetLine)
-	} else if cursorLine > bottomLine-scrollMargin {
-		// Cursor too close to bottom - scroll down
-		targetLine := cursorLine - m.viewport.Height + scrollMargin + 1
-		if targetLine < 0 {
-			targetLine = 0
-		}
-		m.viewport.SetYOffset(targetLine)
-	}
+    // Adjust viewport using shared helper
+    m.ensureCursorInViewport(cursorLine)
 }
 
 func (m *Model) calculatePreflightCursorLine() int {
-	// Calculate the actual visual line number where the cursor appears
-	// This must match exactly how preflight view renders each line
+    // Match renderPreflightContent exactly, including wrapping
+    total := len(m.preflight.items)
+    if total == 0 || m.preflight.listIndex <= 0 {
+        return 0
+    }
 
-	totalLines := 0
+    // Visible order
+    order := m.preflight.visibleIdx
+    if len(order) == 0 {
+        order = make([]int, 0, total)
+        for i := 0; i < total; i++ {
+            order = append(order, i)
+        }
+    }
 
-	// Preflight view uses width - 2 for content (cursorCell + stateCell + content)
-	contentWidth := m.width - 2
-	if contentWidth <= 0 {
-		contentWidth = 80
-	}
+    // Build tree lines for visible stories
+    stories := make([]sb.Story, 0, len(order))
+    for _, idx := range order {
+        stories = append(stories, m.preflight.items[idx].Story)
+    }
+    treeLines := generateTreeLinesFromStories(stories)
 
-	for i := 0; i < m.preflight.listIndex && i < len(m.preflight.items); i++ {
-		item := m.preflight.items[i]
+    // Width budget equals renderPreflightContent (cursorCell + stateCell + content)
+    contentWidth := m.width - 4
+    if contentWidth <= 0 {
+        contentWidth = 80
+    }
 
-		// Recreate the exact content formatting from view_preflight.go
-		content := m.formatPreflightContent(item)
+    // Sum wrapped lines up to the cursor's visible position (exclusive)
+    sum := 0
+    max := m.preflight.listIndex
+    if max > len(order) {
+        max = len(order)
+    }
+    for visPos := 0; visPos < max; visPos++ {
+        if visPos >= len(treeLines) {
+            break
+        }
+        idx := order[visPos]
+        it := m.preflight.items[idx]
 
-		// Apply the exact same styling as in view_preflight.go
-		lineStyle := lipgloss.NewStyle().Width(contentWidth)
-		if i == m.preflight.listIndex-1 { // If this will be the cursor item
-			lineStyle = cursorLineStyle.Copy().Width(contentWidth)
-		}
-		if item.State == StateSkip {
-			lineStyle = lineStyle.Faint(true)
-		}
+        // Recreate exact content prefix (collision sign/padding)
+        content := treeLines[visPos]
+        if it.Collision {
+            content = collisionSign + " " + content
+        } else {
+            content = "  " + content
+        }
 
-		styledContent := lineStyle.Render(content)
-
-		// Count wrapped lines in styled content
-		wrappedLines := m.countPreflightWrappedLines(styledContent)
-		totalLines += wrappedLines
-	}
-
-	return totalLines
+        // Apply same styling (without cursor highlight)
+        lineStyle := lipgloss.NewStyle().Width(contentWidth)
+        if it.State == StateSkip {
+            lineStyle = lineStyle.Faint(true)
+        }
+        styled := lineStyle.Render(content)
+        sum += m.countWrappedLines(styled)
+    }
+    return sum
 }
 
-func (m *Model) formatPreflightContent(item PreflightItem) string {
-	// Recreate the exact content formatting from view_preflight.go
-	story := item.Story
+// refreshPreflightVisible builds visibleIdx for preflight items based on folderCollapsed
+func (m *Model) refreshPreflightVisible() {
+    // Construct children map using storiesSource relationships for consistent IDs
+    children := make(map[int][]int)
+    for pi, it := range m.preflight.items {
+        st := it.Story
+        if st.FolderID != nil {
+            children[*st.FolderID] = append(children[*st.FolderID], pi)
+        }
+    }
 
-	// Create story display content
-	content := fmt.Sprintf("%s  (%s)", story.Name, story.FullSlug)
+    m.preflight.visibleIdx = m.preflight.visibleIdx[:0]
 
-	// Add collision indicator exactly as in view_preflight.go
-	if item.Collision {
-		content = collisionSign + " " + content
-	} else {
-		content = "  " + content
-	}
+    var addVisible func(int)
+    addVisible = func(idx int) {
+        st := m.preflight.items[idx].Story
+        m.preflight.visibleIdx = append(m.preflight.visibleIdx, idx)
+        if st.IsFolder && !m.folderCollapsed[st.ID] {
+            for _, ch := range children[st.ID] {
+                addVisible(ch)
+            }
+        }
+    }
 
-	return content
-}
-
-func (m *Model) countPreflightWrappedLines(styledContent string) int {
-	// Count actual newlines in the styled content
-	lines := 1
-	for _, char := range styledContent {
-		if char == '\n' {
-			lines++
-		}
-	}
-	return lines
+    for i, it := range m.preflight.items {
+        if it.Story.FolderID == nil {
+            addVisible(i)
+        }
+    }
 }

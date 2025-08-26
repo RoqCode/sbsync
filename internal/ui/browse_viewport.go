@@ -1,11 +1,10 @@
 package ui
 
 import (
-	"strings"
-	
-	"github.com/charmbracelet/lipgloss"
-	tree "github.com/charmbracelet/lipgloss/tree"
-	"storyblok-sync/internal/sb"
+    "strings"
+    
+    "github.com/charmbracelet/lipgloss"
+    "storyblok-sync/internal/sb"
 )
 
 // ensureCursorVisible ensures the cursor stays within the viewport bounds
@@ -25,31 +24,8 @@ func (m *Model) ensureCursorVisible() {
 	// Calculate which line in the viewport content the cursor is on
 	cursorLine := m.calculateCursorLine()
 
-	// Check if cursor line is visible in viewport
-	topLine := m.viewport.YOffset
-	bottomLine := topLine + m.viewport.Height - 1
-
-	// Scroll margin - start scrolling when cursor approaches edges
-	scrollMargin := 3
-	if m.viewport.Height < 8 {
-		scrollMargin = 1
-	}
-
-	if cursorLine < topLine+scrollMargin {
-		// Cursor too close to top - scroll up
-		targetLine := cursorLine - scrollMargin
-		if targetLine < 0 {
-			targetLine = 0
-		}
-		m.viewport.SetYOffset(targetLine)
-	} else if cursorLine > bottomLine-scrollMargin {
-		// Cursor too close to bottom - scroll down
-		targetLine := cursorLine - m.viewport.Height + scrollMargin + 1
-		if targetLine < 0 {
-			targetLine = 0
-		}
-		m.viewport.SetYOffset(targetLine)
-	}
+    // Adjust viewport using shared helper
+    m.ensureCursorInViewport(cursorLine)
 }
 
 // calculateCursorLine calculates the actual visual line number where the cursor appears
@@ -65,8 +41,8 @@ func (m *Model) calculateCursorLine() int {
 		stories[i] = m.itemAt(i)
 	}
 
-	// Generate the complete tree structure exactly as in view_browse.go
-	treeLines := m.generateTreeLines(stories)
+    // Generate the complete tree structure exactly as in view_browse.go
+    treeLines := generateTreeLinesFromStories(stories)
 
 	// Calculate visual lines up to the cursor position
 	totalLines := 0
@@ -98,41 +74,7 @@ func (m *Model) calculateCursorLine() int {
 }
 
 // generateTreeLines generates tree structure exactly as in view_browse.go
-func (m *Model) generateTreeLines(stories []sb.Story) []string {
-	if len(stories) == 0 {
-		return []string{}
-	}
-
-	// Recreate the exact same tree generation logic as view_browse.go (lines 63-85)
-	tr := tree.New()
-	nodes := make(map[int]*tree.Tree, len(stories))
-	
-	// First pass: create all nodes
-	for _, st := range stories {
-		node := tree.Root(displayStory(st))
-		nodes[st.ID] = node
-	}
-
-	// Second pass: build parent-child relationships
-	for _, st := range stories {
-		node := nodes[st.ID]
-		if st.FolderID != nil {
-			if parent, ok := nodes[*st.FolderID]; ok {
-				parent.Child(node)
-				continue
-			}
-		}
-		tr.Child(node)
-	}
-
-	// Render tree lines exactly as in view_browse.go
-	lines := strings.Split(tr.String(), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-
-	return lines
-}
+// generateTreeLines is now shared in tree_lines.go
 
 
 // countWrappedLines counts how many display lines a piece of styled content takes
