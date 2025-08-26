@@ -285,41 +285,4 @@ func TestGetFolderPaths_TrailingSlash(t *testing.T) {
 	}
 }
 
-func TestParentSlug(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-		name     string
-	}{
-		{"story", "", "single level"},
-		{"folder/story", "folder", "two levels"},
-		{"app/section/story", "app/section", "three levels"},
-		{"app/section/subsection/story", "app/section/subsection", "deep nesting"},
-		{"", "", "empty string"},
-		{"/story", "", "leading slash"},
-		{"folder/", "folder", "trailing slash"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			result := ParentSlug(test.input)
-			if result != test.expected {
-				t.Errorf("ParentSlug(%q) = %q, expected %q", test.input, result, test.expected)
-			}
-		})
-	}
-}
-
-func TestItemType(t *testing.T) {
-	// Test folder
-	folder := sb.Story{IsFolder: true}
-	if ItemType(folder) != "folder" {
-		t.Errorf("Expected 'folder' for folder story, got %s", ItemType(folder))
-	}
-
-	// Test story
-	story := sb.Story{IsFolder: false}
-	if ItemType(story) != "story" {
-		t.Errorf("Expected 'story' for non-folder story, got %s", ItemType(story))
-	}
-}
+// TestParentSlug and TestItemType moved to preflight_comprehensive_test.go to avoid duplication
