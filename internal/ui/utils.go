@@ -78,3 +78,18 @@ func (m Model) hasSelectedDirectChild(slug string) bool {
 	}
 	return false
 }
+
+// selectableSpaces returns the list of spaces available for the current selection step.
+// When selecting the target space, it excludes the already picked source space.
+func (m Model) selectableSpaces() []sb.Space {
+	if m.selectingSource || m.sourceSpace == nil {
+		return m.spaces
+	}
+	filtered := make([]sb.Space, 0, len(m.spaces))
+	for _, sp := range m.spaces {
+		if sp.ID != m.sourceSpace.ID {
+			filtered = append(filtered, sp)
+		}
+	}
+	return filtered
+}

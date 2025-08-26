@@ -85,10 +85,11 @@ func (m Model) viewSpaceSelect() string {
 	}
 
 	var content strings.Builder
-	if len(m.spaces) == 0 {
+	visible := m.selectableSpaces()
+	if len(visible) == 0 {
 		content.WriteString(warnStyle.Render("❌ Keine Spaces gefunden"))
 	} else {
-		for i, sp := range m.spaces {
+		for i, sp := range visible {
 			var line string
 			spaceInfo := fmt.Sprintf("%s (ID: %d)", sp.Name, sp.ID)
 

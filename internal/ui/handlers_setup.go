@@ -52,9 +52,12 @@ func (m Model) handleValidatingKey(key string) (Model, tea.Cmd) {
 }
 
 func (m Model) handleSpaceSelectKey(key string) (Model, tea.Cmd) {
+	// Work off the selectable list (filters out source during target pick)
+	visible := m.selectableSpaces()
+
 	switch key {
 	case "j", "down":
-		if m.selectedIndex < len(m.spaces)-1 {
+		if m.selectedIndex < len(visible)-1 {
 			m.selectedIndex++
 		}
 	case "k", "up":
@@ -62,18 +65,16 @@ func (m Model) handleSpaceSelectKey(key string) (Model, tea.Cmd) {
 			m.selectedIndex--
 		}
 	case "enter":
-		if len(m.spaces) == 0 {
+		if len(visible) == 0 {
 			return m, nil
 		}
-		chosen := m.spaces[m.selectedIndex]
+		chosen := visible[m.selectedIndex]
 		if m.selectingSource {
 			// Source wählen; Target-Auswahl vorbereiten
 			m.sourceSpace = &chosen
 			m.selectingSource = false
-			// optional: Target nicht gleich Source erlauben?
-			// wir lassen es erstmal zu; man kann später coden, dass source!=target sein muss.
 			m.statusMsg = fmt.Sprintf("Source gesetzt: %s (%d). Wähle jetzt Target.", chosen.Name, chosen.ID)
-			// Reset index für Target-Auswahl
+			// Reset index, as the visible list will change (source removed)
 			m.selectedIndex = 0
 		} else {
 			m.targetSpace = &chosen

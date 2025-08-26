@@ -168,6 +168,7 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 		expectSourceSet bool
 		expectTargetSet bool
 		expectScanStart bool
+		setSameAsSource bool
 	}{
 		{
 			name:            "j moves down",
@@ -229,12 +230,23 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 		{
 			name:            "enter on target selection starts scan",
 			key:             "enter",
-			initialIndex:    2,
+			initialIndex:    1,
 			selectingSource: false,
-			expectedIndex:   2,
+			expectedIndex:   1,
 			expectedState:   stateScanning,
 			expectTargetSet: true,
 			expectScanStart: true,
+		},
+		{
+			name:            "enter on target selection excludes source from list",
+			key:             "enter",
+			initialIndex:    1, // index in filtered list
+			selectingSource: false,
+			expectedIndex:   1,
+			expectedState:   stateScanning,
+			expectTargetSet: true,
+			expectScanStart: true,
+			setSameAsSource: true,
 		},
 		{
 			name:            "unknown key does nothing",
@@ -254,7 +266,17 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 			testModel.sourceSpace = nil
 			testModel.targetSpace = nil
 
-			result, cmd := testModel.handleSpaceSelectKey(tt.key)
+			// If we're testing target selection, ensure source is set
+			if !tt.selectingSource {
+				// set source to Space 2 for deterministic test
+				ss := m.spaces[1]
+				testModel.sourceSpace = &ss
+				// In filtered list, space with ID 2 should not be present
+				// initialIndex therefore refers to index within selectableSpaces()
+			}
+
+            visibleBefore := testModel.selectableSpaces()
+            result, cmd := testModel.handleSpaceSelectKey(tt.key)
 
 			if result.selectedIndex != tt.expectedIndex {
 				t.Errorf("Expected index %d, got %d", tt.expectedIndex, result.selectedIndex)
@@ -264,22 +286,29 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 				t.Errorf("Expected state %v, got %v", tt.expectedState, result.state)
 			}
 
-			if tt.expectSourceSet {
+            if tt.expectSourceSet {
 				if result.sourceSpace == nil {
 					t.Error("Expected source space to be set")
-				} else if result.sourceSpace.ID != m.spaces[tt.initialIndex].ID {
-					t.Errorf("Expected source space ID %d, got %d", m.spaces[tt.initialIndex].ID, result.sourceSpace.ID)
+                } else if result.sourceSpace.ID != visibleBefore[tt.initialIndex].ID {
+                    t.Errorf("Expected source space ID %d, got %d", visibleBefore[tt.initialIndex].ID, result.sourceSpace.ID)
 				}
 				if result.selectingSource {
 					t.Error("Expected selectingSource to be false after setting source")
 				}
 			}
 
-			if tt.expectTargetSet {
+            if tt.expectTargetSet {
 				if result.targetSpace == nil {
 					t.Error("Expected target space to be set")
-				} else if result.targetSpace.ID != m.spaces[tt.initialIndex].ID {
-					t.Errorf("Expected target space ID %d, got %d", m.spaces[tt.initialIndex].ID, result.targetSpace.ID)
+                } else if result.targetSpace.ID != visibleBefore[tt.initialIndex].ID {
+                    t.Errorf("Expected target space ID %d, got %d", visibleBefore[tt.initialIndex].ID, result.targetSpace.ID)
+				}
+			}
+
+			// With filtering, selecting same as source cannot happen; ensure target != source
+			if tt.setSameAsSource {
+				if result.targetSpace != nil && result.sourceSpace != nil && result.targetSpace.ID == result.sourceSpace.ID {
+					t.Error("Filtered list should exclude source; target equals source")
 				}
 			}
 
