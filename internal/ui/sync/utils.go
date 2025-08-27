@@ -77,10 +77,12 @@ func GetContentField(content json.RawMessage, key string) (interface{}, bool) {
 
 // ToRawMap converts a json.RawMessage into a map for raw payloads
 func ToRawMap(content json.RawMessage) map[string]interface{} {
-    if len(content) == 0 { return map[string]interface{}{} }
-    var m map[string]interface{}
-    _ = json.Unmarshal(content, &m)
-    return m
+	if len(content) == 0 {
+		return map[string]interface{}{}
+	}
+	var m map[string]interface{}
+	_ = json.Unmarshal(content, &m)
+	return m
 }
 
 // GetFolderPaths extracts all parent folder paths from a story slug

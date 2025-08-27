@@ -227,7 +227,7 @@ func createStoryWithPublishRetry(ctx context.Context, api createAPI, spaceID int
 type folderAPI interface {
 	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
 	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
-    CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
+	CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
 }
 
 // folderPathBuilder handles the creation of folder hierarchies
@@ -301,17 +301,21 @@ func (fpb *folderPathBuilder) prepareSourceFolder(ctx context.Context, path stri
 // createFolder creates a single folder in the target space
 func (fpb *folderPathBuilder) createFolder(ctx context.Context, folder sb.Story) (sb.Story, error) {
 	log.Printf("DEBUG: Creating folder: %s", folder.FullSlug)
-    // Convert typed folder to raw minimal for creation
-    raw := map[string]interface{}{
-        "uuid":      folder.UUID,
-        "name":      folder.Name,
-        "slug":      folder.Slug,
-        "full_slug": folder.FullSlug,
-        "content":   sync.ToRawMap(folder.Content),
-        "is_folder": true,
-    }
-    if folder.FolderID != nil { raw["parent_id"] = *folder.FolderID } else { raw["parent_id"] = 0 }
-    created, err := fpb.api.CreateStoryRawWithPublish(ctx, fpb.tgtSpaceID, raw, false)
+	// Convert typed folder to raw minimal for creation
+	raw := map[string]interface{}{
+		"uuid":      folder.UUID,
+		"name":      folder.Name,
+		"slug":      folder.Slug,
+		"full_slug": folder.FullSlug,
+		"content":   sync.ToRawMap(folder.Content),
+		"is_folder": true,
+	}
+	if folder.FolderID != nil {
+		raw["parent_id"] = *folder.FolderID
+	} else {
+		raw["parent_id"] = 0
+	}
+	created, err := fpb.api.CreateStoryRawWithPublish(ctx, fpb.tgtSpaceID, raw, false)
 	if err != nil {
 		log.Printf("DEBUG: Failed to create folder %s: %v", folder.FullSlug, err)
 		return sb.Story{}, err

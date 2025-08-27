@@ -42,20 +42,22 @@ func (m *mockStorySyncAPI) GetStoryWithContent(ctx context.Context, spaceID, sto
 }
 
 // Raw-capable mocks to satisfy SyncAPI
-func (m *mockStorySyncAPI) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) { return map[string]interface{}{}, nil }
+func (m *mockStorySyncAPI) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) {
+	return map[string]interface{}{}, nil
+}
 func (m *mockStorySyncAPI) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error) {
-    // Mark folder when is_folder true
-    st := sb.Story{ID: len(m.createCalls) + 100}
-    if v, ok := story["is_folder"].(bool); ok && v {
-        st.IsFolder = true
-    }
-    m.createCalls = append(m.createCalls, st)
-    return st, nil
+	// Mark folder when is_folder true
+	st := sb.Story{ID: len(m.createCalls) + 100}
+	if v, ok := story["is_folder"].(bool); ok && v {
+		st.IsFolder = true
+	}
+	m.createCalls = append(m.createCalls, st)
+	return st, nil
 }
 func (m *mockStorySyncAPI) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error) {
-    st := sb.Story{ID: storyID}
-    m.updateCalls = append(m.updateCalls, st)
-    return st, nil
+	st := sb.Story{ID: storyID}
+	m.updateCalls = append(m.updateCalls, st)
+	return st, nil
 }
 
 func (m *mockStorySyncAPI) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error {

@@ -31,7 +31,11 @@ func (m Model) renderBrowseHeader() string {
 	if m.filter.prefixing {
 		b.WriteString("Prefix: " + m.filter.prefixInput.View())
 	} else {
-		b.WriteString(subtleStyle.Render("Prefix:" + m.filter.prefix))
+		if m.filter.prefix != "" {
+			b.WriteString("Prefix:" + m.filter.prefix)
+		} else {
+			b.WriteString(subtleStyle.Render("Prefix:"))
+		}
 	}
 
 	return b.String()

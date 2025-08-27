@@ -117,14 +117,16 @@ func (api *loggingAPI) CreateStoryRawWithPublish(ctx context.Context, spaceID in
 }
 
 func (api *loggingAPI) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error) {
-    // Simulate target update from raw
-    slug, _ := story["full_slug"].(string)
-    st := api.targetBySlug[slug]
-    if st.ID == 0 { st = sb.Story{ID: storyID, FullSlug: slug} }
-    api.targetBySlug[slug] = st
-    api.logPushRaw = append(api.logPushRaw, story)
-    api.logJSON("PUSH_RAW_UPDATE", story)
-    return st, nil
+	// Simulate target update from raw
+	slug, _ := story["full_slug"].(string)
+	st := api.targetBySlug[slug]
+	if st.ID == 0 {
+		st = sb.Story{ID: storyID, FullSlug: slug}
+	}
+	api.targetBySlug[slug] = st
+	api.logPushRaw = append(api.logPushRaw, story)
+	api.logJSON("PUSH_RAW_UPDATE", story)
+	return st, nil
 }
 
 // ---- Test ----
@@ -159,7 +161,7 @@ func TestDataFlowLogging_TwoFoldersTwoStories(t *testing.T) {
 	api.sourceRawByID[10] = rawFolderA
 	api.sourceRawByID[11] = rawFolderB
 
-    // Source stories with full typed content and raw
+	// Source stories with full typed content and raw
 	story1 := sb.Story{
 		ID:       20,
 		Slug:     "page1",
@@ -176,16 +178,16 @@ func TestDataFlowLogging_TwoFoldersTwoStories(t *testing.T) {
 	}
 	api.sourceContent[20] = story1
 	api.sourceContent[21] = story2
-    api.sourceRawByID[20] = map[string]interface{}{
-        "uuid": "uuid-story-page1", "name": "Page1", "slug": "page1", "full_slug": "a/page1",
-        "content": map[string]interface{}{"component": "article", "meta": map[string]interface{}{"x": 1}, "extra_field": map[string]interface{}{"y": "z"}},
-        "is_folder": false,
-    }
-    api.sourceRawByID[21] = map[string]interface{}{
-        "uuid": "uuid-story-page2", "name": "Page2", "slug": "page2", "full_slug": "b/page2",
-        "content": map[string]interface{}{"component": "article", "meta": map[string]interface{}{"k": "v"}},
-        "is_folder": false,
-    }
+	api.sourceRawByID[20] = map[string]interface{}{
+		"uuid": "uuid-story-page1", "name": "Page1", "slug": "page1", "full_slug": "a/page1",
+		"content":   map[string]interface{}{"component": "article", "meta": map[string]interface{}{"x": 1}, "extra_field": map[string]interface{}{"y": "z"}},
+		"is_folder": false,
+	}
+	api.sourceRawByID[21] = map[string]interface{}{
+		"uuid": "uuid-story-page2", "name": "Page2", "slug": "page2", "full_slug": "b/page2",
+		"content":   map[string]interface{}{"component": "article", "meta": map[string]interface{}{"k": "v"}},
+		"is_folder": false,
+	}
 
 	// 1) Ensure full folder paths for both stories
 	report := &mockFolderReport{}

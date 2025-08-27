@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewBulkSyncer(t *testing.T) {
-    api := &mockStorySyncAPI{}
+	api := &mockStorySyncAPI{}
 	sourceStories := []sb.Story{
 		{ID: 1, FullSlug: "test", IsFolder: false},
 		{ID: 2, FullSlug: "folder", IsFolder: true},
@@ -148,9 +148,9 @@ func TestSyncStartsWith(t *testing.T) {
 		t.Fatalf("Expected success, got error: %v", err)
 	}
 
-    // Verify that both items were processed (we can't count calls reliably in raw-only mocks)
-    // Sanity check: stories exist in logs (created via raw in StorySyncer)
-    // This test previously asserted typed call order; raw path ensures folders-first by sort logic.
+	// Verify that both items were processed (we can't count calls reliably in raw-only mocks)
+	// Sanity check: stories exist in logs (created via raw in StorySyncer)
+	// This test previously asserted typed call order; raw path ensures folders-first by sort logic.
 }
 
 func TestSyncStartsWithDetailed(t *testing.T) {
@@ -332,8 +332,8 @@ type mockStorySyncAPIWithWarnings struct {
 }
 
 func (m *mockStorySyncAPIWithWarnings) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error) {
-    st := sb.Story{ID: 100}
-    return st, nil
+	st := sb.Story{ID: 100}
+	return st, nil
 }
 
 // We need to test the StorySyncer methods that return detailed results with warnings

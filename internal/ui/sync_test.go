@@ -103,29 +103,35 @@ func (m *mockAPI) GetStoryWithContent(ctx context.Context, spaceID, storyID int)
 }
 
 func (m *mockAPI) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) {
-    // Build raw from source for folder creation
-    if s, ok := m.source[storyID]; ok {
-        var content map[string]interface{}
-        _ = json.Unmarshal(s.Content, &content)
-        raw := map[string]interface{}{
-            "uuid": s.UUID, "name": s.Name, "slug": s.Slug, "full_slug": s.FullSlug, "content": content, "is_folder": s.IsFolder,
-        }
-        if s.FolderID != nil { raw["parent_id"] = *s.FolderID } else { raw["parent_id"] = 0 }
-        return raw, nil
-    }
-    return map[string]interface{}{}, nil
+	// Build raw from source for folder creation
+	if s, ok := m.source[storyID]; ok {
+		var content map[string]interface{}
+		_ = json.Unmarshal(s.Content, &content)
+		raw := map[string]interface{}{
+			"uuid": s.UUID, "name": s.Name, "slug": s.Slug, "full_slug": s.FullSlug, "content": content, "is_folder": s.IsFolder,
+		}
+		if s.FolderID != nil {
+			raw["parent_id"] = *s.FolderID
+		} else {
+			raw["parent_id"] = 0
+		}
+		return raw, nil
+	}
+	return map[string]interface{}{}, nil
 }
 
 func (m *mockAPI) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error) {
-    m.publishCalls = append(m.publishCalls, publish)
-    m.nextID++
-    st := sb.Story{ID: m.nextID, FullSlug: story["full_slug"].(string), IsFolder: true}
-    // Store minimal typed representation
-    b, _ := json.Marshal(story["content"])
-    st.Content = json.RawMessage(b)
-    if pid, ok := story["parent_id"].(int); ok { st.FolderID = &pid }
-    m.target[st.FullSlug] = st
-    return st, nil
+	m.publishCalls = append(m.publishCalls, publish)
+	m.nextID++
+	st := sb.Story{ID: m.nextID, FullSlug: story["full_slug"].(string), IsFolder: true}
+	// Store minimal typed representation
+	b, _ := json.Marshal(story["content"])
+	st.Content = json.RawMessage(b)
+	if pid, ok := story["parent_id"].(int); ok {
+		st.FolderID = &pid
+	}
+	m.target[st.FullSlug] = st
+	return st, nil
 }
 
 func TestEnsureFolderPathCreatesFolders(t *testing.T) {
@@ -142,14 +148,14 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 	}
 	report := Report{}
 
-    created, err := ensureFolderPathImpl(api, &report, srcFolders, 1, 2, "foo/bar/baz", false)
+	created, err := ensureFolderPathImpl(api, &report, srcFolders, 1, 2, "foo/bar/baz", false)
 	if err != nil {
 		t.Fatalf("ensureFolderPathImpl returned error: %v", err)
 	}
-    if len(created) != 2 {
+	if len(created) != 2 {
 		t.Fatalf("expected 2 folders created, got %d", len(created))
 	}
-    if foo, ok := api.target["foo"]; !ok {
+	if foo, ok := api.target["foo"]; !ok {
 		t.Errorf("expected folder 'foo' to be created")
 	} else {
 		var tmp map[string]interface{}
@@ -164,7 +170,7 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 			}
 		}
 	}
-    if bar, ok := api.target["foo/bar"]; !ok {
+	if bar, ok := api.target["foo/bar"]; !ok {
 		t.Errorf("expected folder 'foo/bar' to be created")
 	} else {
 		parent := api.target["foo"]
@@ -189,7 +195,7 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 	if report.Entries[0].Operation != "create" {
 		t.Errorf("expected operation 'create', got %s", report.Entries[0].Operation)
 	}
-    // In raw path, folders are never published; no publish flags expected
+	// In raw path, folders are never published; no publish flags expected
 }
 
 type publishLimitCreateMock struct {

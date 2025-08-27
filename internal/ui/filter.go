@@ -19,8 +19,11 @@ type FilterConfig struct {
 func filterByPrefix(stories []sb.Story, prefix string) []int {
 	idx := make([]int, 0, len(stories))
 	if prefix != "" {
+		// Include items that start with the prefix (matches),
+		// and also include ancestors of the prefix so the tree can render.
 		for i, st := range stories {
-			if strings.HasPrefix(strings.ToLower(st.FullSlug), prefix) {
+			slug := strings.ToLower(st.FullSlug)
+			if strings.HasPrefix(slug, prefix) || strings.HasPrefix(prefix, slug+"/") {
 				idx = append(idx, i)
 			}
 		}

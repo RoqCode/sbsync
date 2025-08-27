@@ -136,11 +136,11 @@ func TestCreateStoryWithPublishRetry_Success(t *testing.T) {
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
 
-    // Raw-only path no-ops this adapter; ensure no panic
-    _, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
-    if err != nil {
-        t.Fatalf("Expected success, got error: %v", err)
-    }
+	// Raw-only path no-ops this adapter; ensure no panic
+	_, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
 }
 
 func TestCreateStoryWithPublishRetry_DevModeLimit(t *testing.T) {
@@ -157,11 +157,11 @@ func TestCreateStoryWithPublishRetry_DevModeLimit(t *testing.T) {
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
 
-    // Raw-only path no-ops this adapter; ensure no panic
-    _, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
-    if err != nil {
-        t.Fatalf("Expected success after retry, got error: %v", err)
-    }
+	// Raw-only path no-ops this adapter; ensure no panic
+	_, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
+	if err != nil {
+		t.Fatalf("Expected success after retry, got error: %v", err)
+	}
 }
 
 func TestCreateStoryWithPublishRetry_PersistentError(t *testing.T) {
@@ -176,42 +176,42 @@ func TestCreateStoryWithPublishRetry_PersistentError(t *testing.T) {
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
 
-    // Raw-only path no-ops this adapter; ensure no panic
-    _, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
-    if err != nil && err != expectedErr {
-        t.Errorf("Unexpected error: %v", err)
-    }
+	// Raw-only path no-ops this adapter; ensure no panic
+	_, err := adapter.CreateStoryWithPublishRetry(ctx, 1, story, true)
+	if err != nil && err != expectedErr {
+		t.Errorf("Unexpected error: %v", err)
+	}
 }
 
 func TestUpdateStoryWithPublishRetry_Success(t *testing.T) {
-    api := &mockUpdateAPI{}
+	api := &mockUpdateAPI{}
 	adapter := NewAPIAdapter(api)
 
 	story := sb.Story{ID: 1, Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
 
-    // Raw-only path no-ops this adapter; ensure no panic
-    _, err := adapter.UpdateStoryWithPublishRetry(ctx, 1, story, true)
-    if err != nil {
-        t.Fatalf("Expected success, got error: %v", err)
-    }
+	// Raw-only path no-ops this adapter; ensure no panic
+	_, err := adapter.UpdateStoryWithPublishRetry(ctx, 1, story, true)
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
 }
 
 func TestUpdateStoryWithPublishRetry_DevModeLimit(t *testing.T) {
-    api := &mockUpdateAPI{}
+	api := &mockUpdateAPI{}
 	adapter := NewAPIAdapter(api)
 
 	story := sb.Story{ID: 1, Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
 
-    _, err := adapter.UpdateStoryWithPublishRetry(ctx, 1, story, true)
-    if err != nil {
-        t.Fatalf("Expected success after no-op, got error: %v", err)
-    }
+	_, err := adapter.UpdateStoryWithPublishRetry(ctx, 1, story, true)
+	if err != nil {
+		t.Fatalf("Expected success after no-op, got error: %v", err)
+	}
 }
 
 func TestExecuteSync_CreateNew(t *testing.T) {
-    adapter := NewAPIAdapter(nil)
+	adapter := NewAPIAdapter(nil)
 
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	ctx := context.Background()
@@ -225,12 +225,12 @@ func TestExecuteSync_CreateNew(t *testing.T) {
 		t.Errorf("Expected operation %s, got %s", OperationCreate, operation)
 	}
 
-    // In raw-only flow this adapter returns input; ensure no panic
-    _ = result
+	// In raw-only flow this adapter returns input; ensure no panic
+	_ = result
 }
 
 func TestExecuteSync_UpdateExisting(t *testing.T) {
-    adapter := NewAPIAdapter(nil)
+	adapter := NewAPIAdapter(nil)
 
 	story := sb.Story{Slug: "test", FullSlug: "test"}
 	existing := &sb.Story{ID: 123, Slug: "test", FullSlug: "test"}
@@ -245,5 +245,5 @@ func TestExecuteSync_UpdateExisting(t *testing.T) {
 		t.Errorf("Expected operation %s, got %s", OperationUpdate, operation)
 	}
 
-    _ = result
+	_ = result
 }

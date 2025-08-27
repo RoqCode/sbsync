@@ -1,10 +1,10 @@
 package sync
 
 import (
-    "context"
-    "strings"
+	"context"
+	"strings"
 
-    "storyblok-sync/internal/sb"
+	"storyblok-sync/internal/sb"
 )
 
 // APIAdapter provides API operations with retry and error handling logic
@@ -40,14 +40,14 @@ func IsDevModePublishLimit(err error) bool {
 
 // UpdateStoryWithPublishRetry attempts to update a story with publish retry fallback
 func (aa *APIAdapter) UpdateStoryWithPublishRetry(ctx context.Context, spaceID int, story sb.Story, publish bool) (sb.Story, error) {
-    // Deprecated in raw-only flow; return input for compatibility
-    return story, nil
+	// Deprecated in raw-only flow; return input for compatibility
+	return story, nil
 }
 
 // CreateStoryWithPublishRetry attempts to create a story with publish retry fallback
 func (aa *APIAdapter) CreateStoryWithPublishRetry(ctx context.Context, spaceID int, story sb.Story, publish bool) (sb.Story, error) {
-    // Deprecated in raw-only flow; return input for compatibility
-    return story, nil
+	// Deprecated in raw-only flow; return input for compatibility
+	return story, nil
 }
 
 // ExecuteSync performs common create/update logic based on whether target exists

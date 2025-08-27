@@ -13,20 +13,34 @@ func (m Model) handlePrefixFilterInput(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.filter.prefixInput.Blur()
+		old := strings.TrimSpace(m.filter.prefix)
 		trimmed := strings.TrimSpace(m.filter.prefixInput.Value())
 		if trimmed == "" {
 			m.filter.prefix = ""
 		} else {
 			m.filter.prefix = trimmed
 		}
+		// Expand/collapse based on transition empty <-> non-empty
+		if old == "" && m.filter.prefix != "" {
+			m.expandAllFolders()
+		} else if old != "" && m.filter.prefix == "" {
+			m.collapseAllFolders()
+		}
 		m.filter.prefixing = false
 		m.applyFilter()
 		m.updateBrowseViewport()
 		return m, nil
 	case "enter":
-		m.filter.prefix = strings.TrimSpace(m.filter.prefixInput.Value())
+		old := strings.TrimSpace(m.filter.prefix)
+		newPref := strings.TrimSpace(m.filter.prefixInput.Value())
+		m.filter.prefix = newPref
 		m.filter.prefixing = false
 		m.filter.prefixInput.Blur()
+		if old == "" && newPref != "" {
+			m.expandAllFolders()
+		} else if old != "" && newPref == "" {
+			m.collapseAllFolders()
+		}
 		m.applyFilter()
 		m.updateBrowseViewport()
 		return m, nil
@@ -116,17 +130,28 @@ func (m Model) handleBrowseSearchAndFilterControls(key string) (Model, tea.Cmd) 
 		m.updateBrowseViewport()
 		return m, nil
 
-	case "p", "P":
-		// Toggle prefix filter
+	case "p":
+		// Toggle prefix filter input
 		if !m.filter.prefixing {
 			m.filter.prefixing = true
 			m.filter.prefixInput.Focus()
 			return m, m.filter.prefixInput.Focus()
-		} else {
-			m.filter.prefixing = false
-			m.filter.prefixInput.Blur()
-			return m, nil
 		}
+		m.filter.prefixing = false
+		m.filter.prefixInput.Blur()
+		return m, nil
+
+	case "P":
+		// Clear prefix filter
+		hadPrefix := strings.TrimSpace(m.filter.prefix) != ""
+		m.filter.prefix = ""
+		m.filter.prefixInput.SetValue("")
+		if hadPrefix {
+			m.collapseAllFolders()
+		}
+		m.applyFilter()
+		m.updateBrowseViewport()
+		return m, nil
 
 	case "c":
 		// Clear all filters and selections

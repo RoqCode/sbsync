@@ -253,10 +253,11 @@ func TestHandleBrowseSearchAndFilterControls(t *testing.T) {
 			expectedPrefixing: true,
 		},
 		{
-			name:              "P toggles prefix filter on",
-			key:               "P",
-			initialPrefixing:  false,
-			expectedPrefixing: true,
+			name:               "P clears prefix filter",
+			key:                "P",
+			initialPrefixing:   false,
+			expectedPrefixing:  false,
+			expectedQueryEmpty: false,
 		},
 		{
 			name:              "p toggles prefix filter off",
@@ -298,6 +299,16 @@ func TestHandleBrowseSearchAndFilterControls(t *testing.T) {
 				}
 				if result.filter.prefix != "" {
 					t.Errorf("Expected empty prefix, got '%s'", result.filter.prefix)
+				}
+			}
+
+			// Additional assertions for specific keys
+			if tt.key == "P" {
+				if result.filter.prefix != "" {
+					t.Errorf("Expected prefix cleared by 'P', got '%s'", result.filter.prefix)
+				}
+				if result.search.query != "test-query" {
+					t.Errorf("Expected search query unchanged by 'P', got '%s'", result.search.query)
 				}
 			}
 
