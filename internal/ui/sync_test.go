@@ -275,3 +275,33 @@ func TestShouldPublishChecksPlanLevel(t *testing.T) {
 		t.Errorf("expected shouldPublish true for plan level 1")
 	}
 }
+
+func TestResumeLogicFindsNextPendingAndStarts(t *testing.T) {
+	m := InitialModel()
+	// Seed preflight with 3 items, mark first done, second pending, third pending
+	m.preflight.items = []PreflightItem{{Run: RunDone}, {Run: RunPending}, {Run: RunPending}}
+	m.state = stateSync
+	m.syncing = false
+	// Provide minimal spaces and API to satisfy orchestrator construction
+	src := sb.Space{ID: 1, Name: "src"}
+	tgt := sb.Space{ID: 2, Name: "tgt"}
+	m.sourceSpace = &src
+	m.targetSpace = &tgt
+	m.api = sb.New("")
+
+	// Simulate pressing 'r'
+	model, cmd := m.handleSyncKey("r")
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned on resume")
+	}
+	resumed, ok := model.(Model)
+	if !ok {
+		t.Fatalf("expected Model type after resume")
+	}
+	if !resumed.syncing {
+		t.Fatalf("expected syncing=true after resume")
+	}
+	if resumed.syncIndex != 1 {
+		t.Fatalf("expected syncIndex=1 (first pending), got %d", resumed.syncIndex)
+	}
+}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,6 +17,23 @@ func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 		m.statusMsg = "Returning to scan screen for new sync…"
 		return m, m.scanStoriesCmd()
 	case "r":
+		// Resume any pending work first; else retry failures if any
+		next := -1
+		for i, it := range m.preflight.items {
+			if it.Run == RunPending {
+				next = i
+				break
+			}
+		}
+		if next >= 0 {
+			m.state = stateSync
+			m.syncing = true
+			m.syncIndex = next
+			m.syncContext, m.syncCancel = context.WithCancel(context.Background())
+			m.statusMsg = "Resuming sync…"
+			return m, tea.Batch(m.spinner.Tick, m.runNextItem())
+		}
+		// No pending items; fall back to retry failures pathway below
 		// Retry failures - rebuild preflight with only failed items
 		if m.report.Summary.Failure > 0 {
 			failedItems := m.getFailedItemsForRetry()
