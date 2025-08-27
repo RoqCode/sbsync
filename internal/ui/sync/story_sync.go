@@ -371,16 +371,15 @@ func (ss *StorySyncer) SyncStoryDetailed(story sb.Story, shouldPublish bool) (*S
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Determine operation type based on whether story exists BEFORE syncing
+	operation := OperationCreate
+	if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug); len(existing) > 0 {
+		operation = OperationUpdate
+	}
+
 	targetStory, err := ss.SyncStory(ctx, story, shouldPublish)
 	if err != nil {
 		return nil, err
-	}
-
-	// Determine operation type based on whether story existed
-	operation := OperationCreate
-	existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug)
-	if len(existing) > 0 {
-		operation = OperationUpdate
 	}
 
 	return &SyncItemResult{
@@ -395,16 +394,15 @@ func (ss *StorySyncer) SyncFolderDetailed(folder sb.Story, shouldPublish bool) (
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Determine operation type based on whether folder exists BEFORE syncing
+	operation := OperationCreate
+	if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, folder.FullSlug); len(existing) > 0 {
+		operation = OperationUpdate
+	}
+
 	targetFolder, err := ss.SyncFolder(ctx, folder, shouldPublish)
 	if err != nil {
 		return nil, err
-	}
-
-	// Determine operation type based on whether folder existed
-	operation := OperationCreate
-	existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, folder.FullSlug)
-	if len(existing) > 0 {
-		operation = OperationUpdate
 	}
 
 	return &SyncItemResult{

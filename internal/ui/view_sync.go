@@ -99,30 +99,30 @@ func (m *Model) updateSyncViewport() {
 	content.WriteString(progressBar)
 	content.WriteString("\n\n")
 
-    // Show items with their current states. Use available viewport height.
-    // Reserve 2 lines for progress + spacing and 1 line for optional summary.
-    reservedLines := 3
-    maxDisplay := m.viewport.Height - reservedLines
-    if maxDisplay < 5 {
-        maxDisplay = 5
-    }
+	// Show items with their current states. Use available viewport height.
+	// Reserve 2 lines for progress + spacing and 1 line for optional summary.
+	reservedLines := 3
+	maxDisplay := m.viewport.Height - reservedLines
+	if maxDisplay < 5 {
+		maxDisplay = 5
+	}
 
-    startIdx := 0
-    if len(m.preflight.items) > maxDisplay {
-        // Show items around the current sync position
-        startIdx = m.syncIndex - maxDisplay/2
-        if startIdx < 0 {
-            startIdx = 0
-        }
-        if startIdx+maxDisplay > len(m.preflight.items) {
-            startIdx = len(m.preflight.items) - maxDisplay
-        }
-    }
+	startIdx := 0
+	if len(m.preflight.items) > maxDisplay {
+		// Show items around the current sync position
+		startIdx = m.syncIndex - maxDisplay/2
+		if startIdx < 0 {
+			startIdx = 0
+		}
+		if startIdx+maxDisplay > len(m.preflight.items) {
+			startIdx = len(m.preflight.items) - maxDisplay
+		}
+	}
 
-    endIdx := startIdx + maxDisplay
-    if endIdx > len(m.preflight.items) {
-        endIdx = len(m.preflight.items)
-    }
+	endIdx := startIdx + maxDisplay
+	if endIdx > len(m.preflight.items) {
+		endIdx = len(m.preflight.items)
+	}
 
 	for i := startIdx; i < endIdx; i++ {
 		item := m.preflight.items[i]
@@ -144,8 +144,8 @@ func (m *Model) updateSyncViewport() {
 		content.WriteString("\n")
 	}
 
-    // Show summary if we're not displaying all items
-    if len(m.preflight.items) > (endIdx - startIdx) {
+	// Show summary if we're not displaying all items
+	if len(m.preflight.items) > (endIdx - startIdx) {
 		content.WriteString("\n")
 		summaryText := fmt.Sprintf("... zeige %d-%d von %d Items",
 			startIdx+1, endIdx, len(m.preflight.items))

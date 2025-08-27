@@ -689,7 +689,7 @@ func convertToSyncPreflightItems(uiItems []PreflightItem) []sync.PreflightItem {
 			Collision:  uiItem.Collision,
 			Skip:       uiItem.Skip,
 			Selected:   uiItem.Selected,
-			State:      string(uiItem.State),
+			State:      mapUIStateToSync(uiItem.State),
 			StartsWith: uiItem.StartsWith,
 			Run:        convertRunStateToString(uiItem.Run),
 		}
@@ -706,7 +706,7 @@ func convertFromSyncPreflightItems(syncItems []sync.PreflightItem) []PreflightIt
 			Collision:  syncItem.Collision,
 			Skip:       syncItem.Skip,
 			Selected:   syncItem.Selected,
-			State:      SyncState(syncItem.State),
+			State:      mapSyncStateToUI(syncItem.State),
 			StartsWith: syncItem.StartsWith,
 			Run:        convertStringToRunState(syncItem.Run),
 		}
@@ -742,5 +742,41 @@ func convertStringToRunState(runString string) RunState {
 		return RunCancelled
 	default:
 		return RunPending
+	}
+}
+
+// --- State mapping helpers between UI (C/U/S) and sync (create/update/skip) ---
+func mapUIStateToSync(state SyncState) string {
+	switch state {
+	case StateCreate:
+		return sync.StateCreate
+	case StateUpdate:
+		return sync.StateUpdate
+	case StateSkip:
+		return sync.StateSkip
+	}
+	// Fallback for textual or lowercase input
+	switch strings.ToLower(string(state)) {
+	case "c", "create":
+		return sync.StateCreate
+	case "u", "update":
+		return sync.StateUpdate
+	case "s", "skip":
+		return sync.StateSkip
+	default:
+		return sync.StateUpdate
+	}
+}
+
+func mapSyncStateToUI(state string) SyncState {
+	switch strings.ToLower(state) {
+	case sync.StateCreate, "c":
+		return StateCreate
+	case sync.StateUpdate, "u":
+		return StateUpdate
+	case sync.StateSkip, "s":
+		return StateSkip
+	default:
+		return SyncState(state)
 	}
 }
