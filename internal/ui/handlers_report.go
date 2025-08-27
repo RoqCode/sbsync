@@ -10,7 +10,7 @@ import (
 
 func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 	switch key {
-	case "enter":
+	case "enter", "b":
 		// Go back to scan screen to allow starting a new sync
 		m.state = stateScanning
 		m.statusMsg = "Returning to scan screen for new sync…"

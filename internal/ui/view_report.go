@@ -109,9 +109,9 @@ func (m Model) viewReport() string {
 
 	// Footer with actions
 	if m.report.Summary.Failure > 0 {
-		b.WriteString(helpStyle.Render("r retry failures  |  enter back to scan  |  q exit"))
+		b.WriteString(helpStyle.Render("r retry failures  |  enter/b back to scan  |  q exit"))
 	} else {
-		b.WriteString(helpStyle.Render("enter back to scan  |  q exit"))
+		b.WriteString(helpStyle.Render("enter/b back to scan  |  q exit"))
 	}
 
 	return b.String()
@@ -226,9 +226,9 @@ func (m Model) renderReportContent() string {
 func (m Model) renderReportFooter() string {
 	var helpText string
 	if m.report.Summary.Failure > 0 {
-		helpText = "r retry failures  |  enter back to scan  |  q exit"
+		helpText = "r retry failures  |  enter/b back to scan  |  q exit"
 	} else {
-		helpText = "enter back to scan  |  q exit"
+		helpText = "enter/b back to scan  |  q exit"
 	}
 	return renderFooter("", helpText)
 }
