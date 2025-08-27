@@ -20,7 +20,6 @@ const (
 type FolderAPI interface {
 	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
 	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
-	// Raw payload support for preserving folder settings
 	GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error)
 	CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
 	UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error

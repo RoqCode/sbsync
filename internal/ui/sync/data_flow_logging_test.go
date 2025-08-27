@@ -53,7 +53,7 @@ func (api *loggingAPI) logJSON(prefix string, v interface{}) {
 	api.t.Logf("%s: %s", prefix, string(b))
 }
 
-// ---- SyncAPI methods (typed) ----
+// ---- SyncAPI methods ----
 func (api *loggingAPI) GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error) {
 	if spaceID == api.sourceSpaceID {
 		if st, ok := api.sourceBySlug[slug]; ok {
@@ -75,22 +75,7 @@ func (api *loggingAPI) GetStoryWithContent(ctx context.Context, spaceID, storyID
 	return st, nil
 }
 
-func (api *loggingAPI) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	// Assign ID and store in target index
-	st.ID = api.nextID
-	api.nextID++
-	api.targetBySlug[st.FullSlug] = st
-	api.logPushTyped = append(api.logPushTyped, st)
-	api.logJSON("PUSH_TYPED", st)
-	return st, nil
-}
-
-func (api *loggingAPI) UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	api.targetBySlug[st.FullSlug] = st
-	api.logPushTyped = append(api.logPushTyped, st)
-	api.logJSON("PUSH_TYPED_UPDATE", st)
-	return st, nil
-}
+// typed methods no longer used
 
 func (api *loggingAPI) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error {
 	// Update in target map by finding story with ID
@@ -104,7 +89,7 @@ func (api *loggingAPI) UpdateStoryUUID(ctx context.Context, spaceID, storyID int
 	return nil
 }
 
-// ---- FolderAPI methods (raw) ----
+// ---- Raw methods ----
 func (api *loggingAPI) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) {
 	raw := api.sourceRawByID[storyID]
 	api.logFetchRaw = append(api.logFetchRaw, raw)
@@ -129,6 +114,17 @@ func (api *loggingAPI) CreateStoryRawWithPublish(ctx context.Context, spaceID in
 	api.logPushRaw = append(api.logPushRaw, story)
 	api.logJSON("PUSH_RAW", story)
 	return res, nil
+}
+
+func (api *loggingAPI) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error) {
+    // Simulate target update from raw
+    slug, _ := story["full_slug"].(string)
+    st := api.targetBySlug[slug]
+    if st.ID == 0 { st = sb.Story{ID: storyID, FullSlug: slug} }
+    api.targetBySlug[slug] = st
+    api.logPushRaw = append(api.logPushRaw, story)
+    api.logJSON("PUSH_RAW_UPDATE", story)
+    return st, nil
 }
 
 // ---- Test ----
@@ -163,7 +159,7 @@ func TestDataFlowLogging_TwoFoldersTwoStories(t *testing.T) {
 	api.sourceRawByID[10] = rawFolderA
 	api.sourceRawByID[11] = rawFolderB
 
-	// Source stories with full typed content
+    // Source stories with full typed content and raw
 	story1 := sb.Story{
 		ID:       20,
 		Slug:     "page1",
@@ -180,6 +176,16 @@ func TestDataFlowLogging_TwoFoldersTwoStories(t *testing.T) {
 	}
 	api.sourceContent[20] = story1
 	api.sourceContent[21] = story2
+    api.sourceRawByID[20] = map[string]interface{}{
+        "uuid": "uuid-story-page1", "name": "Page1", "slug": "page1", "full_slug": "a/page1",
+        "content": map[string]interface{}{"component": "article", "meta": map[string]interface{}{"x": 1}, "extra_field": map[string]interface{}{"y": "z"}},
+        "is_folder": false,
+    }
+    api.sourceRawByID[21] = map[string]interface{}{
+        "uuid": "uuid-story-page2", "name": "Page2", "slug": "page2", "full_slug": "b/page2",
+        "content": map[string]interface{}{"component": "article", "meta": map[string]interface{}{"k": "v"}},
+        "is_folder": false,
+    }
 
 	// 1) Ensure full folder paths for both stories
 	report := &mockFolderReport{}
