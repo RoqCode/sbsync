@@ -162,10 +162,36 @@ func (m *Model) optimizePreflight() {
 }
 
 func (m *Model) runNextItem() tea.Cmd {
-	if m.syncIndex >= len(m.preflight.items) {
+	// Find next pending item, preferring current syncIndex, then scanning forward, then wrap-around
+	if len(m.preflight.items) == 0 {
 		return nil
 	}
-	idx := m.syncIndex
+	idx := -1
+	// First pass: from current index to end
+	start := m.syncIndex
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(m.preflight.items); i++ {
+		if m.preflight.items[i].Run == RunPending {
+			idx = i
+			break
+		}
+	}
+	// Second pass: from 0 to current index
+	if idx == -1 {
+		for i := 0; i < start; i++ {
+			if m.preflight.items[i].Run == RunPending {
+				idx = i
+				break
+			}
+		}
+	}
+	if idx == -1 {
+		// No pending items — nothing to run
+		return nil
+	}
+	m.syncIndex = idx
 	m.preflight.items[idx].Run = RunRunning
 
 	// Create orchestrator for this operation

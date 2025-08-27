@@ -305,3 +305,76 @@ func TestResumeLogicFindsNextPendingAndStarts(t *testing.T) {
 		t.Fatalf("expected syncIndex=1 (first pending), got %d", resumed.syncIndex)
 	}
 }
+
+func TestRunNextItemScansForPending(t *testing.T) {
+	m := InitialModel()
+	// Seed items with different run states; pending at index 2 should be picked
+	m.preflight.items = []PreflightItem{
+		{Run: RunDone, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunCancelled, Story: sb.Story{ID: 2, FullSlug: "b"}},
+		{Run: RunPending, Story: sb.Story{ID: 3, FullSlug: "c"}},
+		{Run: RunPending, Story: sb.Story{ID: 4, FullSlug: "d"}},
+	}
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	// Start from index 0; runNextItem should set index 2 to running
+	m.syncIndex = 0
+	cmd := m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned")
+	}
+	if m.syncIndex != 2 {
+		t.Fatalf("expected syncIndex=2, got %d", m.syncIndex)
+	}
+	if m.preflight.items[2].Run != RunRunning {
+		t.Fatalf("expected item 2 to be RunRunning")
+	}
+}
+
+func TestRunNextItemReturnsNilWhenNoPending(t *testing.T) {
+	m := InitialModel()
+	m.preflight.items = []PreflightItem{
+		{Run: RunDone, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunCancelled, Story: sb.Story{ID: 2, FullSlug: "b"}},
+	}
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	cmd := m.runNextItem()
+	if cmd != nil {
+		t.Fatalf("expected nil cmd when no pending items")
+	}
+}
+
+func TestUpdateContinuesWhilePending(t *testing.T) {
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	// Two items: first running finishes, second is pending -> should continue
+	m.preflight.items = []PreflightItem{
+		{Run: RunRunning, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunPending, Story: sb.Story{ID: 2, FullSlug: "b"}},
+	}
+
+	msg := syncResultMsg{Index: 0, Duration: 5}
+	model, cmd := m.Update(msg)
+	if cmd == nil {
+		t.Fatalf("expected a continuation command when pending remains")
+	}
+	mm, ok := model.(Model)
+	if !ok {
+		t.Fatalf("expected Model return type")
+	}
+	if mm.preflight.items[0].Run != RunDone {
+		t.Fatalf("expected first item marked RunDone")
+	}
+	if mm.syncIndex != 1 {
+		t.Fatalf("expected syncIndex moved to next pending (1), got %d", mm.syncIndex)
+	}
+}

@@ -29,6 +29,10 @@ func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 			m.state = stateSync
 			m.syncing = true
 			m.syncIndex = next
+			// Ensure API client is available
+			if m.api == nil {
+				m.api = sb.New(m.cfg.Token)
+			}
 			m.syncContext, m.syncCancel = context.WithCancel(context.Background())
 			m.statusMsg = "Resuming sync…"
 			return m, tea.Batch(m.spinner.Tick, m.runNextItem())
@@ -38,10 +42,12 @@ func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 		if m.report.Summary.Failure > 0 {
 			failedItems := m.getFailedItemsForRetry()
 			if len(failedItems) > 0 {
-				m.preflight.items = failedItems
-				m.preflight.listIndex = 0
+				// Replace preflight with only failed items and rebuild visibility
+				m.preflight = PreflightState{items: failedItems, listIndex: 0}
+				m.refreshPreflightVisible()
 				m.state = statePreflight
 				m.statusMsg = fmt.Sprintf("Retry: %d failed items ready for sync", len(failedItems))
+				m.updateViewportContent()
 				return m, nil
 			}
 		}

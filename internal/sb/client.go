@@ -276,27 +276,17 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 		payload["publish"] = 1
 	}
 
-	// DEBUG: Log the payload before marshalling
-	log.Printf("DEBUG: Creating story - Before marshal:")
-	log.Printf("DEBUG: Story has content: %t", len(st.Content) > 0)
-	if len(st.Content) > 0 {
-		log.Printf("DEBUG: Content keys: %v", contentKeysFromRaw(st.Content))
-	}
-	log.Printf("DEBUG: Story is folder: %t", st.IsFolder)
-	log.Printf("DEBUG: Story published: %t", st.Published)
+	// DEBUG: Keep only compact info before marshalling
+	log.Printf("DEBUG: Creating story: full_slug=%s is_folder=%t published=%t content_present=%t",
+		st.FullSlug, st.IsFolder, st.Published, len(st.Content) > 0)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return Story{}, err
 	}
 
-	// DEBUG: Log the actual JSON being sent
-	log.Printf("DEBUG: JSON payload being sent (%d bytes):", len(body))
-	if len(body) < 2000 {
-		log.Printf("DEBUG: Full JSON: %s", string(body))
-	} else {
-		log.Printf("DEBUG: JSON too large, truncated: %s...", string(body[:2000]))
-	}
+	// DEBUG: Do not dump full JSON payload to keep logs readable
+	log.Printf("DEBUG: JSON payload being sent (%d bytes) [omitted]", len(body))
 
 	// DEBUG: Try minimal payload approach for debugging
 	log.Printf("DEBUG: Story UUID: %s", st.UUID)
@@ -322,10 +312,7 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 		if err != nil {
 			return Story{}, fmt.Errorf("failed to read response body: %w", err)
 		}
-		// DEBUG: log body for troubleshooting
-		if res.StatusCode == 422 {
-			log.Printf("DEBUG: 422 Error response body: %s", string(bodyBytes))
-		}
+		// DEBUG: do not log full response body to avoid noise
 		var apiErr struct {
 			Error string `json:"error"`
 		}

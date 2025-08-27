@@ -180,22 +180,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		done := 0
 		cancelled := 0
+		pending := 0
 		for _, it := range m.preflight.items {
-			if it.Run == RunDone {
+			switch it.Run {
+			case RunDone:
 				done++
-			} else if it.Run == RunCancelled {
+			case RunCancelled:
 				cancelled++
+			case RunPending:
+				pending++
 			}
 		}
-		m.syncIndex = done
+		// Keep syncIndex at next pending position if available
+		if pending > 0 {
+			for i, it := range m.preflight.items {
+				if it.Run == RunPending {
+					m.syncIndex = i
+					break
+				}
+			}
+		} else {
+			m.syncIndex = done
+		}
 
 		// Update viewport content to show progress in real-time
 		if m.state == stateSync {
 			m.updateViewportContent()
 		}
 
-		// Continue only if we haven't finished all items and haven't been cancelled
-		if done+cancelled < len(m.preflight.items) && cancelled == 0 {
+		// Continue if there are still pending items
+		if pending > 0 {
 			return m, m.runNextItem()
 		}
 
