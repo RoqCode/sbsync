@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,20 +11,43 @@ import (
 
 func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 	switch key {
-	case "enter":
+	case "enter", "b":
 		// Go back to scan screen to allow starting a new sync
 		m.state = stateScanning
 		m.statusMsg = "Returning to scan screen for new sync…"
 		return m, m.scanStoriesCmd()
 	case "r":
+		// Resume any pending work first; else retry failures if any
+		next := -1
+		for i, it := range m.preflight.items {
+			if it.Run == RunPending {
+				next = i
+				break
+			}
+		}
+		if next >= 0 {
+			m.state = stateSync
+			m.syncing = true
+			m.syncIndex = next
+			// Ensure API client is available
+			if m.api == nil {
+				m.api = sb.New(m.cfg.Token)
+			}
+			m.syncContext, m.syncCancel = context.WithCancel(context.Background())
+			m.statusMsg = "Resuming sync…"
+			return m, tea.Batch(m.spinner.Tick, m.runNextItem())
+		}
+		// No pending items; fall back to retry failures pathway below
 		// Retry failures - rebuild preflight with only failed items
 		if m.report.Summary.Failure > 0 {
 			failedItems := m.getFailedItemsForRetry()
 			if len(failedItems) > 0 {
-				m.preflight.items = failedItems
-				m.preflight.listIndex = 0
+				// Replace preflight with only failed items and rebuild visibility
+				m.preflight = PreflightState{items: failedItems, listIndex: 0}
+				m.refreshPreflightVisible()
 				m.state = statePreflight
 				m.statusMsg = fmt.Sprintf("Retry: %d failed items ready for sync", len(failedItems))
+				m.updateViewportContent()
 				return m, nil
 			}
 		}

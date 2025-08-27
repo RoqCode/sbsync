@@ -70,7 +70,21 @@ func (m Model) renderSyncFooter() string {
 		statusLine = m.spinner.View() + " Synchronisiere..."
 	}
 
-	return renderFooter(statusLine, "ctrl+c: Abbrechen")
+	help := "ctrl+c: Abbrechen"
+	// If paused (not syncing) and there are pending items, offer resume hint
+	if !m.syncing {
+		hasPending := false
+		for _, it := range m.preflight.items {
+			if it.Run == RunPending {
+				hasPending = true
+				break
+			}
+		}
+		if hasPending {
+			help = "r: Fortsetzen  |  ctrl+c: Abbrechen"
+		}
+	}
+	return renderFooter(statusLine, help)
 }
 
 func (m *Model) updateSyncViewport() {
@@ -99,12 +113,28 @@ func (m *Model) updateSyncViewport() {
 	content.WriteString(progressBar)
 	content.WriteString("\n\n")
 
-	// Show all items with their current states
-	maxDisplay := 20 // Show more items for better visibility
+	// Show items with their current states. Use available viewport height.
+	// Reserve 2 lines for progress + spacing and 1 line for optional summary.
+	reservedLines := 3
+	maxDisplay := m.viewport.Height - reservedLines
+	if maxDisplay < 5 {
+		maxDisplay = 5
+	}
+
 	startIdx := 0
 	if len(m.preflight.items) > maxDisplay {
-		// Show items around the current sync position
-		startIdx = m.syncIndex - maxDisplay/2
+		// Show items around the current sync position or next pending if paused
+		anchor := m.syncIndex
+		if !m.syncing {
+			// When paused, center on the first pending item for resuming visibility
+			for i, it := range m.preflight.items {
+				if it.Run == RunPending {
+					anchor = i
+					break
+				}
+			}
+		}
+		startIdx = anchor - maxDisplay/2
 		if startIdx < 0 {
 			startIdx = 0
 		}
@@ -128,18 +158,21 @@ func (m *Model) updateSyncViewport() {
 			actionText += " (läuft...)"
 		}
 
-		// Format: [status] Name | slug (action)
+		// Format: [status] Name | slug (action) [issue]
 		line := fmt.Sprintf("%s %s | %s (%s)",
 			color.Render(status),
 			item.Story.Name,
 			subtleStyle.Render(item.Story.FullSlug),
 			subtleStyle.Render(actionText))
+		if item.Issue != "" {
+			line += " " + warnStyle.Render("["+item.Issue+"]")
+		}
 		content.WriteString(line)
 		content.WriteString("\n")
 	}
 
 	// Show summary if we're not displaying all items
-	if len(m.preflight.items) > maxDisplay {
+	if len(m.preflight.items) > (endIdx - startIdx) {
 		content.WriteString("\n")
 		summaryText := fmt.Sprintf("... zeige %d-%d von %d Items",
 			startIdx+1, endIdx, len(m.preflight.items))

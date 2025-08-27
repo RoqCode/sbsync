@@ -2,7 +2,6 @@ package sync
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -92,10 +91,8 @@ func (fpb *FolderPathBuilder) PrepareSourceFolder(ctx context.Context, path stri
 		return nil, err
 	}
 
-	// Log original raw payload from source
-	if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
-		log.Printf("DEBUG: SOURCE_RAW folder %s: %s", path, string(b))
-	}
+	// Omit raw payload dump to keep logs readable
+	log.Printf("DEBUG: SOURCE_RAW folder %s (payload omitted)", path)
 
 	// Strip read-only fields
 	delete(raw, "id")
@@ -122,10 +119,8 @@ func (fpb *FolderPathBuilder) PrepareSourceFolder(ctx context.Context, path stri
 		delete(raw, "translated_slugs")
 	}
 
-	// Log prepared raw payload to be pushed (pre-create)
-	if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
-		log.Printf("DEBUG: PREPARED_RAW folder %s: %s", path, string(b))
-	}
+	// Omit prepared payload dump
+	log.Printf("DEBUG: PREPARED_RAW folder %s (payload omitted)", path)
 	return raw, nil
 }
 
@@ -136,9 +131,8 @@ func (fpb *FolderPathBuilder) CreateFolder(ctx context.Context, folder map[strin
 		slug = v
 	}
 	log.Printf("DEBUG: Creating folder: %s", slug)
-	if b, err := json.MarshalIndent(folder, "", "  "); err == nil {
-		log.Printf("DEBUG: PUSH_RAW folder %s: %s", slug, string(b))
-	}
+	// Omit push raw payload dump
+	log.Printf("DEBUG: PUSH_RAW folder %s (payload omitted)", slug)
 
 	created, err := fpb.api.CreateStoryRawWithPublish(ctx, fpb.tgtSpaceID, folder, false /* never publish folders */)
 	if err != nil {

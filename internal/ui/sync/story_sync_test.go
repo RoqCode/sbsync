@@ -364,6 +364,68 @@ func TestSyncStoryDetailed_OperationDetection(t *testing.T) {
 	}
 }
 
+func TestSyncStoryDetailed_OperationDetection_Update(t *testing.T) {
+	existing := sb.Story{ID: 101, FullSlug: "test", Slug: "test"}
+	api := &mockStorySyncAPI{
+		stories: map[string][]sb.Story{
+			"test": {existing},
+		},
+		storyContent: map[int]sb.Story{
+			1: {ID: 1, Slug: "test", FullSlug: "test", Content: json.RawMessage([]byte(`{"component":"page"}`))},
+		},
+	}
+
+	syncer := NewStorySyncer(api, 1, 2)
+	story := sb.Story{ID: 1, Slug: "test", FullSlug: "test"}
+
+	result, err := syncer.SyncStoryDetailed(story, true)
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
+	if result.Operation != OperationUpdate {
+		t.Errorf("Expected operation %s, got %s", OperationUpdate, result.Operation)
+	}
+}
+
+func TestSyncFolderDetailed_OperationDetection_Create(t *testing.T) {
+	api := &mockStorySyncAPI{
+		stories:      make(map[string][]sb.Story),
+		storyContent: map[int]sb.Story{1: {ID: 1, FullSlug: "folder", Slug: "folder", IsFolder: true, Content: json.RawMessage([]byte(`{"content_types":["page"]}`))}},
+	}
+
+	syncer := NewStorySyncer(api, 1, 2)
+	folder := sb.Story{ID: 1, Slug: "folder", FullSlug: "folder", IsFolder: true}
+
+	result, err := syncer.SyncFolderDetailed(folder, false)
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
+	if result.Operation != OperationCreate {
+		t.Errorf("Expected operation %s, got %s", OperationCreate, result.Operation)
+	}
+}
+
+func TestSyncFolderDetailed_OperationDetection_Update(t *testing.T) {
+	existing := sb.Story{ID: 200, FullSlug: "folder", Slug: "folder", IsFolder: true}
+	api := &mockStorySyncAPI{
+		stories: map[string][]sb.Story{
+			"folder": {existing},
+		},
+		storyContent: map[int]sb.Story{1: {ID: 1, FullSlug: "folder", Slug: "folder", IsFolder: true, Content: json.RawMessage([]byte(`{"content_types":["page"]}`))}},
+	}
+
+	syncer := NewStorySyncer(api, 1, 2)
+	folder := sb.Story{ID: 1, Slug: "folder", FullSlug: "folder", IsFolder: true}
+
+	result, err := syncer.SyncFolderDetailed(folder, false)
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
+	if result.Operation != OperationUpdate {
+		t.Errorf("Expected operation %s, got %s", OperationUpdate, result.Operation)
+	}
+}
+
 func TestResolveParentFolder_ExistingParent(t *testing.T) {
 	parentFolder := sb.Story{
 		ID:       456,

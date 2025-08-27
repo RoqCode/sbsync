@@ -63,8 +63,10 @@ func (m Model) viewReport() string {
 			b.WriteString(errorStyle.Render("⚠ FAILURES") + "\n")
 			for _, entry := range failures {
 				duration := fmt.Sprintf("%dms", entry.Duration)
-				b.WriteString(fmt.Sprintf("  %s %s (%s) %s - %s\n",
-					symbolStory, entry.Slug, entry.Operation, duration, entry.Error))
+				// Inline yellow warning style for error message per request
+				inline := warningStyle.Render("[" + entry.Error + "]")
+				b.WriteString(fmt.Sprintf("  %s %s (%s) %s %s\n",
+					symbolStory, entry.Slug, entry.Operation, duration, inline))
 			}
 			b.WriteString("\n")
 		}
@@ -74,8 +76,9 @@ func (m Model) viewReport() string {
 			b.WriteString(warningStyle.Render("⚠ WARNINGS") + "\n")
 			for _, entry := range warnings {
 				duration := fmt.Sprintf("%dms", entry.Duration)
-				b.WriteString(fmt.Sprintf("  %s %s (%s) %s - %s\n",
-					symbolStory, entry.Slug, entry.Operation, duration, entry.Warning))
+				inline := warningStyle.Render("[" + entry.Warning + "]")
+				b.WriteString(fmt.Sprintf("  %s %s (%s) %s %s\n",
+					symbolStory, entry.Slug, entry.Operation, duration, inline))
 			}
 			b.WriteString("\n")
 		}
@@ -108,11 +111,8 @@ func (m Model) viewReport() string {
 	b.WriteString("\n")
 
 	// Footer with actions
-	if m.report.Summary.Failure > 0 {
-		b.WriteString(helpStyle.Render("r retry failures  |  enter back to scan  |  q exit"))
-	} else {
-		b.WriteString(helpStyle.Render("enter back to scan  |  q exit"))
-	}
+	// 'r' resumes any pending items; if there are failures, it will retry failures instead when no pending
+	b.WriteString(helpStyle.Render("r resume/retry  |  enter/b back to scan  |  q exit"))
 
 	return b.String()
 }
@@ -226,9 +226,9 @@ func (m Model) renderReportContent() string {
 func (m Model) renderReportFooter() string {
 	var helpText string
 	if m.report.Summary.Failure > 0 {
-		helpText = "r retry failures  |  enter back to scan  |  q exit"
+		helpText = "r retry failures  |  enter/b back to scan  |  q exit"
 	} else {
-		helpText = "enter back to scan  |  q exit"
+		helpText = "enter/b back to scan  |  q exit"
 	}
 	return renderFooter("", helpText)
 }

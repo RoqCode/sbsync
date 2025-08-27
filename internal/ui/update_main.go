@@ -24,7 +24,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// If we're syncing, cancel the sync operations but don't quit
 			if m.syncing && m.syncCancel != nil {
 				m.syncCancel()
-				m.statusMsg = "Sync cancelled by user (Ctrl+C)"
+				m.statusMsg = "Sync cancelled by user (Ctrl+C) – press 'r' to resume"
 				return m, nil
 			}
 			// If not syncing, quit the application
@@ -140,34 +140,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.preflight.items[msg.Index].Run = RunCancelled
 				it := m.preflight.items[msg.Index]
 				m.report.AddError(it.Story.FullSlug, "cancelled", "Sync cancelled by user", 0, &it.Story)
+				// Set inline issue for cancelled item
+				m.preflight.items[msg.Index].Issue = "Sync cancelled by user"
 
-				// Mark all remaining items as cancelled
-				for i := msg.Index + 1; i < len(m.preflight.items); i++ {
-					if m.preflight.items[i].Run == RunPending || m.preflight.items[i].Run == RunRunning {
-						m.preflight.items[i].Run = RunCancelled
-						it := m.preflight.items[i]
-						m.report.AddError(it.Story.FullSlug, "cancelled", "Sync cancelled by user", 0, &it.Story)
-					}
-				}
-
+				// Do NOT cancel remaining items; leave them pending to allow resume
 				m.syncing = false
 				m.syncCancel = nil
 				m.syncContext = nil
-				m.statusMsg = "Sync cancelled - press 'r' to generate report"
+				m.statusMsg = "Sync cancelled – press 'r' to resume or 'q' to quit"
 				return m, nil
 			}
 
 			m.preflight.items[msg.Index].Run = RunDone
 			it := m.preflight.items[msg.Index]
 
+			// Clear any previous issue by default
+			m.preflight.items[msg.Index].Issue = ""
 			if msg.Err != nil {
 				// Add error to report with complete source story
 				m.report.AddError(it.Story.FullSlug, "sync", msg.Err.Error(), msg.Duration, &it.Story)
+				// Set inline issue message
+				m.preflight.items[msg.Index].Issue = msg.Err.Error()
 			} else if msg.Result != nil {
 				// Add successful sync to report
 				if msg.Result.Warning != "" {
 					// Success with warning
 					m.report.AddWarning(it.Story.FullSlug, msg.Result.Operation, msg.Result.Warning, msg.Duration, &it.Story, msg.Result.TargetStory)
+					// Set inline issue message
+					m.preflight.items[msg.Index].Issue = msg.Result.Warning
 				} else {
 					// Pure success
 					m.report.AddSuccess(it.Story.FullSlug, msg.Result.Operation, msg.Duration, msg.Result.TargetStory)
@@ -180,22 +180,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		done := 0
 		cancelled := 0
+		pending := 0
 		for _, it := range m.preflight.items {
-			if it.Run == RunDone {
+			switch it.Run {
+			case RunDone:
 				done++
-			} else if it.Run == RunCancelled {
+			case RunCancelled:
 				cancelled++
+			case RunPending:
+				pending++
 			}
 		}
-		m.syncIndex = done
+		// Keep syncIndex at next pending position if available
+		if pending > 0 {
+			for i, it := range m.preflight.items {
+				if it.Run == RunPending {
+					m.syncIndex = i
+					break
+				}
+			}
+		} else {
+			m.syncIndex = done
+		}
 
 		// Update viewport content to show progress in real-time
 		if m.state == stateSync {
 			m.updateViewportContent()
 		}
 
-		// Continue only if we haven't finished all items and haven't been cancelled
-		if done+cancelled < len(m.preflight.items) && cancelled == 0 {
+		// Continue if there are still pending items
+		if pending > 0 {
 			return m, m.runNextItem()
 		}
 

@@ -75,6 +75,8 @@ type PreflightItem struct {
 	State      SyncState
 	StartsWith bool
 	Run        RunState
+	// Issue holds an inline message (warning or error) to display in UI
+	Issue string
 }
 
 func (it *PreflightItem) RecalcState() {

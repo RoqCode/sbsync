@@ -44,16 +44,8 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		return sb.Story{}, err
 	}
 
-	// DEBUG: log fetched typed source story content keys and JSON
-	if len(fullStory.Content) > 0 {
-		var tmp map[string]interface{}
-		_ = json.Unmarshal(fullStory.Content, &tmp)
-		if b, err := json.MarshalIndent(tmp, "", "  "); err == nil {
-			log.Printf("DEBUG: SOURCE_TYPED story %s content:\n%s", story.FullSlug, string(b))
-		}
-	} else {
-		log.Printf("DEBUG: SOURCE_TYPED story %s has empty content", story.FullSlug)
-	}
+	// DEBUG: minimal info about typed content presence
+	log.Printf("DEBUG: SOURCE_TYPED content present for %s: %t", story.FullSlug, len(fullStory.Content) > 0)
 
 	// Ensure non-folder stories have default content
 	fullStory = EnsureDefaultContent(fullStory)
@@ -105,10 +97,8 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 				delete(raw, "translated_slugs")
 			}
 
-			// DEBUG: log outgoing raw update payload
-			if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
-				log.Printf("DEBUG: PUSH_RAW_UPDATE story %s:\n%s", story.FullSlug, string(b))
-			}
+			// DEBUG: omit raw payload dump to keep logs readable
+			log.Printf("DEBUG: PUSH_RAW_UPDATE story %s (payload omitted)", story.FullSlug)
 
 			updated, err := rawAPI.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, existingStory.ID, raw, shouldPublish)
 			if err != nil {
@@ -128,9 +118,8 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 
 		// Fallback to typed update
 		updateStory := PrepareStoryForUpdate(fullStory, existingStory)
-		if b, err := json.MarshalIndent(updateStory, "", "  "); err == nil {
-			log.Printf("DEBUG: PUSH_TYPED_UPDATE story %s:\n%s", story.FullSlug, string(b))
-		}
+		// DEBUG: omit typed payload dump to keep logs readable
+		log.Printf("DEBUG: PUSH_TYPED_UPDATE story %s (payload omitted)", story.FullSlug)
 		updated, err := ss.api.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, existingStory.ID, map[string]interface{}{"uuid": updateStory.UUID, "name": updateStory.Name, "slug": updateStory.Slug, "full_slug": updateStory.FullSlug, "content": toMap(updateStory.Content), "is_folder": updateStory.IsFolder, "parent_id": valueOrZero(updateStory.FolderID)}, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
@@ -187,10 +176,8 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 				delete(raw, "translated_slugs")
 			}
 
-			// DEBUG: log outgoing raw create payload
-			if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
-				log.Printf("DEBUG: PUSH_RAW_CREATE story %s:\n%s", story.FullSlug, string(b))
-			}
+			// DEBUG: omit raw create payload dump
+			log.Printf("DEBUG: PUSH_RAW_CREATE story %s (payload omitted)", story.FullSlug)
 
 			created, err := rawAPI.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, raw, shouldPublish)
 			if err != nil {
@@ -211,10 +198,8 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		// Fallback to typed create
 		createStory := PrepareStoryForCreation(fullStory)
 
-		// DEBUG: log outgoing typed create payload
-		if b, err := json.MarshalIndent(createStory, "", "  "); err == nil {
-			log.Printf("DEBUG: PUSH_TYPED_CREATE story %s:\n%s", story.FullSlug, string(b))
-		}
+		// DEBUG: omit typed create payload dump
+		log.Printf("DEBUG: PUSH_TYPED_CREATE story %s (payload omitted)", story.FullSlug)
 
 		created, err := ss.api.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, map[string]interface{}{"uuid": createStory.UUID, "name": createStory.Name, "slug": createStory.Slug, "full_slug": createStory.FullSlug, "content": toMap(createStory.Content), "is_folder": createStory.IsFolder, "parent_id": valueOrZero(createStory.FolderID)}, shouldPublish)
 		if err != nil {
@@ -371,16 +356,15 @@ func (ss *StorySyncer) SyncStoryDetailed(story sb.Story, shouldPublish bool) (*S
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Determine operation type based on whether story exists BEFORE syncing
+	operation := OperationCreate
+	if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug); len(existing) > 0 {
+		operation = OperationUpdate
+	}
+
 	targetStory, err := ss.SyncStory(ctx, story, shouldPublish)
 	if err != nil {
 		return nil, err
-	}
-
-	// Determine operation type based on whether story existed
-	operation := OperationCreate
-	existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug)
-	if len(existing) > 0 {
-		operation = OperationUpdate
 	}
 
 	return &SyncItemResult{
@@ -395,16 +379,15 @@ func (ss *StorySyncer) SyncFolderDetailed(folder sb.Story, shouldPublish bool) (
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Determine operation type based on whether folder exists BEFORE syncing
+	operation := OperationCreate
+	if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, folder.FullSlug); len(existing) > 0 {
+		operation = OperationUpdate
+	}
+
 	targetFolder, err := ss.SyncFolder(ctx, folder, shouldPublish)
 	if err != nil {
 		return nil, err
-	}
-
-	// Determine operation type based on whether folder existed
-	operation := OperationCreate
-	existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, folder.FullSlug)
-	if len(existing) > 0 {
-		operation = OperationUpdate
 	}
 
 	return &SyncItemResult{

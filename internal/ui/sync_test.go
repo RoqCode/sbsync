@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"storyblok-sync/internal/sb"
@@ -16,6 +17,29 @@ func TestSyncRetryLogic(t *testing.T) {
 	// This test has been replaced by tests in the sync module
 	// The syncWithRetry functionality is now in sync.SyncOrchestrator
 	t.Skip("Retry logic has been moved to extracted sync module")
+}
+
+func TestConvertPreflightItems_StateMappingRoundtrip(t *testing.T) {
+	// Build minimal items with only state variations
+	items := []PreflightItem{
+		{State: StateCreate},
+		{State: StateUpdate},
+		{State: StateSkip},
+	}
+
+	syncItems := convertToSyncPreflightItems(items)
+	got := []string{syncItems[0].State, syncItems[1].State, syncItems[2].State}
+	want := []string{"create", "update", "skip"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected mapping to sync states: got %v want %v", got, want)
+	}
+
+	roundTrip := convertFromSyncPreflightItems(syncItems)
+	gotUI := []SyncState{roundTrip[0].State, roundTrip[1].State, roundTrip[2].State}
+	wantUI := []SyncState{StateCreate, StateUpdate, StateSkip}
+	if !reflect.DeepEqual(gotUI, wantUI) {
+		t.Fatalf("unexpected roundtrip UI states: got %v want %v", gotUI, wantUI)
+	}
 }
 
 func TestTranslatedSlugsProcessing(t *testing.T) {
@@ -249,5 +273,108 @@ func TestShouldPublishChecksPlanLevel(t *testing.T) {
 	m.targetSpace.PlanLevel = 1
 	if !m.shouldPublish() {
 		t.Errorf("expected shouldPublish true for plan level 1")
+	}
+}
+
+func TestResumeLogicFindsNextPendingAndStarts(t *testing.T) {
+	m := InitialModel()
+	// Seed preflight with 3 items, mark first done, second pending, third pending
+	m.preflight.items = []PreflightItem{{Run: RunDone}, {Run: RunPending}, {Run: RunPending}}
+	m.state = stateSync
+	m.syncing = false
+	// Provide minimal spaces and API to satisfy orchestrator construction
+	src := sb.Space{ID: 1, Name: "src"}
+	tgt := sb.Space{ID: 2, Name: "tgt"}
+	m.sourceSpace = &src
+	m.targetSpace = &tgt
+	m.api = sb.New("")
+
+	// Simulate pressing 'r'
+	model, cmd := m.handleSyncKey("r")
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned on resume")
+	}
+	resumed, ok := model.(Model)
+	if !ok {
+		t.Fatalf("expected Model type after resume")
+	}
+	if !resumed.syncing {
+		t.Fatalf("expected syncing=true after resume")
+	}
+	if resumed.syncIndex != 1 {
+		t.Fatalf("expected syncIndex=1 (first pending), got %d", resumed.syncIndex)
+	}
+}
+
+func TestRunNextItemScansForPending(t *testing.T) {
+	m := InitialModel()
+	// Seed items with different run states; pending at index 2 should be picked
+	m.preflight.items = []PreflightItem{
+		{Run: RunDone, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunCancelled, Story: sb.Story{ID: 2, FullSlug: "b"}},
+		{Run: RunPending, Story: sb.Story{ID: 3, FullSlug: "c"}},
+		{Run: RunPending, Story: sb.Story{ID: 4, FullSlug: "d"}},
+	}
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	// Start from index 0; runNextItem should set index 2 to running
+	m.syncIndex = 0
+	cmd := m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned")
+	}
+	if m.syncIndex != 2 {
+		t.Fatalf("expected syncIndex=2, got %d", m.syncIndex)
+	}
+	if m.preflight.items[2].Run != RunRunning {
+		t.Fatalf("expected item 2 to be RunRunning")
+	}
+}
+
+func TestRunNextItemReturnsNilWhenNoPending(t *testing.T) {
+	m := InitialModel()
+	m.preflight.items = []PreflightItem{
+		{Run: RunDone, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunCancelled, Story: sb.Story{ID: 2, FullSlug: "b"}},
+	}
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	cmd := m.runNextItem()
+	if cmd != nil {
+		t.Fatalf("expected nil cmd when no pending items")
+	}
+}
+
+func TestUpdateContinuesWhilePending(t *testing.T) {
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	// Two items: first running finishes, second is pending -> should continue
+	m.preflight.items = []PreflightItem{
+		{Run: RunRunning, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunPending, Story: sb.Story{ID: 2, FullSlug: "b"}},
+	}
+
+	msg := syncResultMsg{Index: 0, Duration: 5}
+	model, cmd := m.Update(msg)
+	if cmd == nil {
+		t.Fatalf("expected a continuation command when pending remains")
+	}
+	mm, ok := model.(Model)
+	if !ok {
+		t.Fatalf("expected Model return type")
+	}
+	if mm.preflight.items[0].Run != RunDone {
+		t.Fatalf("expected first item marked RunDone")
+	}
+	if mm.syncIndex != 1 {
+		t.Fatalf("expected syncIndex moved to next pending (1), got %d", mm.syncIndex)
 	}
 }
