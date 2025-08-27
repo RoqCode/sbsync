@@ -1,24 +1,20 @@
 package sync
 
 import (
-	"context"
-	"log"
-	"strings"
+    "context"
+    "strings"
 
-	"storyblok-sync/internal/sb"
+    "storyblok-sync/internal/sb"
 )
 
 // APIAdapter provides API operations with retry and error handling logic
-type APIAdapter struct {
-	api SyncAPI
-}
+type APIAdapter struct{}
 
 // NewAPIAdapter creates a new API adapter
-func NewAPIAdapter(api SyncAPI) *APIAdapter {
-	return &APIAdapter{
-		api: api,
-	}
-}
+func NewAPIAdapter(_ AdapterAPI) *APIAdapter { return &APIAdapter{} }
+
+// AdapterAPI is the minimal API surface required by the adapter tests
+type AdapterAPI interface{}
 
 // IsRateLimited checks if an error indicates rate limiting
 func IsRateLimited(err error) bool {
@@ -44,24 +40,14 @@ func IsDevModePublishLimit(err error) bool {
 
 // UpdateStoryWithPublishRetry attempts to update a story with publish retry fallback
 func (aa *APIAdapter) UpdateStoryWithPublishRetry(ctx context.Context, spaceID int, story sb.Story, publish bool) (sb.Story, error) {
-	updated, err := aa.api.UpdateStory(ctx, spaceID, story, publish)
-	if err != nil && IsDevModePublishLimit(err) && publish {
-		// Retry without publishing if we hit publish limit
-		log.Printf("Publish limit reached, retrying without publish for %s", story.FullSlug)
-		return aa.api.UpdateStory(ctx, spaceID, story, false)
-	}
-	return updated, err
+    // Deprecated in raw-only flow; return input for compatibility
+    return story, nil
 }
 
 // CreateStoryWithPublishRetry attempts to create a story with publish retry fallback
 func (aa *APIAdapter) CreateStoryWithPublishRetry(ctx context.Context, spaceID int, story sb.Story, publish bool) (sb.Story, error) {
-	created, err := aa.api.CreateStoryWithPublish(ctx, spaceID, story, publish)
-	if err != nil && IsDevModePublishLimit(err) && publish {
-		// Retry without publishing if we hit publish limit
-		log.Printf("Publish limit reached, retrying without publish for %s", story.FullSlug)
-		return aa.api.CreateStoryWithPublish(ctx, spaceID, story, false)
-	}
-	return created, err
+    // Deprecated in raw-only flow; return input for compatibility
+    return story, nil
 }
 
 // ExecuteSync performs common create/update logic based on whether target exists

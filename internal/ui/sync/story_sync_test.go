@@ -41,26 +41,21 @@ func (m *mockStorySyncAPI) GetStoryWithContent(ctx context.Context, spaceID, sto
 	return sb.Story{}, errors.New("not found")
 }
 
-func (m *mockStorySyncAPI) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	if m.shouldError {
-		return sb.Story{}, errors.New(m.errorMessage)
-	}
-	st.ID = len(m.createCalls) + 100 // Give it a unique ID
-	m.createCalls = append(m.createCalls, st)
-	return st, nil
+// Raw-capable mocks to satisfy SyncAPI
+func (m *mockStorySyncAPI) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) { return map[string]interface{}{}, nil }
+func (m *mockStorySyncAPI) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error) {
+    // Mark folder when is_folder true
+    st := sb.Story{ID: len(m.createCalls) + 100}
+    if v, ok := story["is_folder"].(bool); ok && v {
+        st.IsFolder = true
+    }
+    m.createCalls = append(m.createCalls, st)
+    return st, nil
 }
-
-func (m *mockStorySyncAPI) UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	if m.shouldError {
-		return sb.Story{}, errors.New(m.errorMessage)
-	}
-	m.updateCalls = append(m.updateCalls, st)
-	if m.returnExistingOnUpdate {
-		if stories, ok := m.stories[st.Slug]; ok && len(stories) > 0 {
-			return stories[0], nil
-		}
-	}
-	return st, nil
+func (m *mockStorySyncAPI) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error) {
+    st := sb.Story{ID: storyID}
+    m.updateCalls = append(m.updateCalls, st)
+    return st, nil
 }
 
 func (m *mockStorySyncAPI) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error {

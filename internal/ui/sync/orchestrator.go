@@ -23,9 +23,10 @@ type SyncOrchestrator struct {
 type SyncAPI interface {
 	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
 	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
-	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
-	UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
 	UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error
+	GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error)
+	CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
+	UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error)
 }
 
 // ReportInterface defines the interface for reporting sync progress
@@ -180,11 +181,32 @@ func (so *SyncOrchestrator) SyncStartsWithDetailed(prefix string) (*SyncItemResu
 // SyncFolderDetailed synchronizes a folder using StorySyncer
 func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult, error) {
 	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
-	return syncer.SyncFolderDetailed(story, so.ShouldPublish())
+	// Publish folders: never; for completeness compute publish flag but it will be ignored for folders
+	publish := so.ShouldPublish() && story.Published
+	return syncer.SyncFolderDetailed(story, publish)
 }
 
 // SyncStoryDetailed synchronizes a story using StorySyncer
 func (so *SyncOrchestrator) SyncStoryDetailed(story sb.Story) (*SyncItemResult, error) {
+	// Ensure parent folder chain exists before syncing the story (no-op for root-only)
+	adapter := newFolderReportAdapter(so.report)
+	// SyncAPI now includes raw methods; pass directly as FolderAPI
+	_, _ = EnsureFolderPathStatic(so.api, adapter, nil, so.sourceSpace.ID, so.targetSpace.ID, story.FullSlug, false)
+
+	// Compute publish flag from source item and target dev mode
+	publish := so.ShouldPublish() && story.Published
+
 	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
-	return syncer.SyncStoryDetailed(story, so.ShouldPublish())
+	return syncer.SyncStoryDetailed(story, publish)
+}
+
+// --- Local adapter to satisfy FolderPathBuilder's Report interface ---
+type folderReportAdapter struct{ r ReportInterface }
+
+func newFolderReportAdapter(r ReportInterface) Report { return folderReportAdapter{r: r} }
+
+func (ra folderReportAdapter) AddSuccess(slug, operation string, duration int64, story *sb.Story) {
+	if ra.r != nil {
+		ra.r.AddSuccess(slug, operation, duration, story)
+	}
 }

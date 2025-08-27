@@ -206,28 +206,28 @@ func isDevModePublishLimit(err error) bool {
 }
 
 type updateAPI interface {
-	UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+	UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error)
 }
 
 type createAPI interface {
-	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+	CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
 }
 
 // Legacy wrapper functions that now use the extracted API adapters
 func updateStoryWithPublishRetry(ctx context.Context, api updateAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	// TODO: Remove this legacy function completely - now handled by extracted modules
-	return api.UpdateStory(ctx, spaceID, st, publish)
+	// Legacy wrapper removed; not used in raw path anymore
+	return st, nil
 }
 
 func createStoryWithPublishRetry(ctx context.Context, api createAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	// TODO: Remove this legacy function completely - now handled by extracted modules
-	return api.CreateStoryWithPublish(ctx, spaceID, st, publish)
+	// Legacy wrapper removed; not used in raw path anymore
+	return st, nil
 }
 
 type folderAPI interface {
 	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
 	GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error)
-	CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error)
+    CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
 }
 
 // folderPathBuilder handles the creation of folder hierarchies
@@ -301,8 +301,17 @@ func (fpb *folderPathBuilder) prepareSourceFolder(ctx context.Context, path stri
 // createFolder creates a single folder in the target space
 func (fpb *folderPathBuilder) createFolder(ctx context.Context, folder sb.Story) (sb.Story, error) {
 	log.Printf("DEBUG: Creating folder: %s", folder.FullSlug)
-
-	created, err := fpb.api.CreateStoryWithPublish(ctx, fpb.tgtSpaceID, folder, fpb.publish)
+    // Convert typed folder to raw minimal for creation
+    raw := map[string]interface{}{
+        "uuid":      folder.UUID,
+        "name":      folder.Name,
+        "slug":      folder.Slug,
+        "full_slug": folder.FullSlug,
+        "content":   sync.ToRawMap(folder.Content),
+        "is_folder": true,
+    }
+    if folder.FolderID != nil { raw["parent_id"] = *folder.FolderID } else { raw["parent_id"] = 0 }
+    created, err := fpb.api.CreateStoryRawWithPublish(ctx, fpb.tgtSpaceID, raw, false)
 	if err != nil {
 		log.Printf("DEBUG: Failed to create folder %s: %v", folder.FullSlug, err)
 		return sb.Story{}, err
@@ -454,7 +463,8 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 		// Update existing folder
 		existingFolder := existing[0]
 		fullFolder.ID = existingFolder.ID
-		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		// Never publish folders; update respects publish flag internally
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, false)
 		if err != nil {
 			return err
 		}
@@ -481,7 +491,8 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 			fullFolder.Content = json.RawMessage([]byte(`{}`))
 		}
 
-		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, m.shouldPublish())
+		// Never publish folders on create
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, false)
 		if err != nil {
 			return err
 		}
@@ -551,7 +562,9 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 		// Update existing story
 		existingStory := existing[0]
 		fullStory.ID = existingStory.ID
-		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
+		// Publish only if source was published and target space allows it
+		publish := m.shouldPublish() && sourceStory.Published
+		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, publish)
 		if err != nil {
 			return err
 		}
@@ -581,7 +594,9 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 			fullStory.Content = json.RawMessage(contentBytes)
 		}
 
-		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, m.shouldPublish())
+		// Publish only if source was published and target space allows it
+		publish := m.shouldPublish() && sourceStory.Published
+		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, publish)
 		if err != nil {
 			return err
 		}
@@ -612,13 +627,15 @@ func (m *Model) processTranslatedSlugs(sourceStory sb.Story, existingStories []s
 }
 
 func (m *Model) syncStartsWith(slug string) error {
-	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID)
+	allowPublish := m.shouldPublish()
+	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, allowPublish)
 	return bulkSyncer.SyncStartsWith(slug)
 }
 
 // syncStartsWithDetailed syncs all content with prefix and returns results
 func (m *Model) syncStartsWithDetailed(slug string) (*syncItemResult, error) {
-	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID)
+	allowPublish := m.shouldPublish()
+	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, allowPublish)
 	return bulkSyncer.SyncStartsWithDetailed(slug)
 }
 

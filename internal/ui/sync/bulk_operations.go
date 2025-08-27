@@ -15,15 +15,17 @@ type BulkSyncer struct {
 	sourceStories []sb.Story
 	sourceSpaceID int
 	targetSpaceID int
+	allowPublish  bool
 }
 
 // NewBulkSyncer creates a new bulk synchronizer
-func NewBulkSyncer(api SyncAPI, sourceStories []sb.Story, sourceSpaceID, targetSpaceID int) *BulkSyncer {
+func NewBulkSyncer(api SyncAPI, sourceStories []sb.Story, sourceSpaceID, targetSpaceID int, allowPublish bool) *BulkSyncer {
 	return &BulkSyncer{
 		api:           api,
 		sourceStories: sourceStories,
 		sourceSpaceID: sourceSpaceID,
 		targetSpaceID: targetSpaceID,
+		allowPublish:  allowPublish,
 	}
 }
 
@@ -43,10 +45,12 @@ func (bs *BulkSyncer) SyncStartsWith(slug string) error {
 	// Sync each item in the correct order
 	for _, st := range toSync {
 		var err error
+		// Compute publish flag per item: only if allowed and source is published
+		publish := bs.allowPublish && st.Published
 		if st.IsFolder {
-			_, err = syncer.SyncFolderDetailed(st, true) // Assume publish = true for bulk ops
+			_, err = syncer.SyncFolderDetailed(st, publish)
 		} else {
-			_, err = syncer.SyncStoryDetailed(st, true)
+			_, err = syncer.SyncStoryDetailed(st, publish)
 		}
 
 		if err != nil {
@@ -80,10 +84,11 @@ func (bs *BulkSyncer) SyncStartsWithDetailed(slug string) (*SyncItemResult, erro
 		var result *SyncItemResult
 		var err error
 
+		publish := bs.allowPublish && st.Published
 		if st.IsFolder {
-			result, err = syncer.SyncFolderDetailed(st, true)
+			result, err = syncer.SyncFolderDetailed(st, publish)
 		} else {
-			result, err = syncer.SyncStoryDetailed(st, true)
+			result, err = syncer.SyncStoryDetailed(st, publish)
 		}
 
 		if err != nil {

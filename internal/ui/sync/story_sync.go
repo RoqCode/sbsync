@@ -17,6 +17,13 @@ type StorySyncer struct {
 	targetSpaceID int
 }
 
+// storyRawAPI captures optional raw story methods available on the API client
+type storyRawAPI interface {
+	GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error)
+	CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
+	UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error)
+}
+
 // NewStorySyncer creates a new story synchronizer
 func NewStorySyncer(api SyncAPI, sourceSpaceID, targetSpaceID int) *StorySyncer {
 	return &StorySyncer{
@@ -37,6 +44,17 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		return sb.Story{}, err
 	}
 
+	// DEBUG: log fetched typed source story content keys and JSON
+	if len(fullStory.Content) > 0 {
+		var tmp map[string]interface{}
+		_ = json.Unmarshal(fullStory.Content, &tmp)
+		if b, err := json.MarshalIndent(tmp, "", "  "); err == nil {
+			log.Printf("DEBUG: SOURCE_TYPED story %s content:\n%s", story.FullSlug, string(b))
+		}
+	} else {
+		log.Printf("DEBUG: SOURCE_TYPED story %s has empty content", story.FullSlug)
+	}
+
 	// Ensure non-folder stories have default content
 	fullStory = EnsureDefaultContent(fullStory)
 
@@ -55,9 +73,65 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 	if len(existing) > 0 {
 		// Update existing story
 		existingStory := existing[0]
-		updateStory := PrepareStoryForUpdate(fullStory, existingStory)
 
-		updated, err := ss.api.UpdateStory(ctx, ss.targetSpaceID, updateStory, shouldPublish)
+		// Prefer raw update if available to preserve unknown fields
+		if rawAPI, ok := any(ss.api).(storyRawAPI); ok {
+			// Fetch raw source payload
+			raw, err := rawAPI.GetStoryRaw(ctx, ss.sourceSpaceID, story.ID)
+			if err != nil {
+				return sb.Story{}, err
+			}
+
+			// Strip read-only fields and ensure correct parent_id
+			delete(raw, "id")
+			delete(raw, "created_at")
+			delete(raw, "updated_at")
+			if fullStory.FolderID != nil {
+				raw["parent_id"] = *fullStory.FolderID
+			} else {
+				raw["parent_id"] = 0
+			}
+
+			// Translate translated_slugs -> translated_slugs_attributes without IDs
+			if ts, ok := raw["translated_slugs"].([]interface{}); ok && len(ts) > 0 {
+				attrs := make([]map[string]interface{}, 0, len(ts))
+				for _, item := range ts {
+					if m, ok := item.(map[string]interface{}); ok {
+						delete(m, "id")
+						attrs = append(attrs, m)
+					}
+				}
+				raw["translated_slugs_attributes"] = attrs
+				delete(raw, "translated_slugs")
+			}
+
+			// DEBUG: log outgoing raw update payload
+			if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
+				log.Printf("DEBUG: PUSH_RAW_UPDATE story %s:\n%s", story.FullSlug, string(b))
+			}
+
+			updated, err := rawAPI.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, existingStory.ID, raw, shouldPublish)
+			if err != nil {
+				return sb.Story{}, err
+			}
+
+			// Update UUID if different
+			if updated.UUID != fullStory.UUID && fullStory.UUID != "" {
+				if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, updated.ID, fullStory.UUID); err != nil {
+					log.Printf("Warning: failed to update UUID for story %s: %v", fullStory.FullSlug, err)
+				}
+			}
+
+			log.Printf("Updated story: %s", fullStory.FullSlug)
+			return updated, nil
+		}
+
+		// Fallback to typed update
+		updateStory := PrepareStoryForUpdate(fullStory, existingStory)
+		if b, err := json.MarshalIndent(updateStory, "", "  "); err == nil {
+			log.Printf("DEBUG: PUSH_TYPED_UPDATE story %s:\n%s", story.FullSlug, string(b))
+		}
+		updated, err := ss.api.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, existingStory.ID, map[string]interface{}{"uuid": updateStory.UUID, "name": updateStory.Name, "slug": updateStory.Slug, "full_slug": updateStory.FullSlug, "content": toMap(updateStory.Content), "is_folder": updateStory.IsFolder, "parent_id": valueOrZero(updateStory.FolderID)}, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
 		}
@@ -69,20 +143,112 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			}
 		}
 
+		// Update UUID if different after update
+		if updated.UUID != fullStory.UUID && fullStory.UUID != "" {
+			if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, updated.ID, fullStory.UUID); err != nil {
+				log.Printf("Warning: failed to update UUID for story %s: %v", fullStory.FullSlug, err)
+			}
+		}
+
 		log.Printf("Updated story: %s", fullStory.FullSlug)
 		return updated, nil
 	} else {
 		// Create new story
+		// Prefer raw create if available to preserve unknown fields
+		if rawAPI, ok := any(ss.api).(storyRawAPI); ok {
+			// Fetch raw source payload
+			raw, err := rawAPI.GetStoryRaw(ctx, ss.sourceSpaceID, story.ID)
+			if err != nil {
+				return sb.Story{}, err
+			}
+
+			// Strip read-only fields
+			delete(raw, "id")
+			delete(raw, "created_at")
+			delete(raw, "updated_at")
+
+			// Set parent_id from resolved target parent
+			if fullStory.FolderID != nil {
+				raw["parent_id"] = *fullStory.FolderID
+			} else {
+				raw["parent_id"] = 0
+			}
+
+			// Translate translated_slugs -> translated_slugs_attributes without IDs
+			if ts, ok := raw["translated_slugs"].([]interface{}); ok && len(ts) > 0 {
+				attrs := make([]map[string]interface{}, 0, len(ts))
+				for _, item := range ts {
+					if m, ok := item.(map[string]interface{}); ok {
+						delete(m, "id")
+						attrs = append(attrs, m)
+					}
+				}
+				raw["translated_slugs_attributes"] = attrs
+				delete(raw, "translated_slugs")
+			}
+
+			// DEBUG: log outgoing raw create payload
+			if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
+				log.Printf("DEBUG: PUSH_RAW_CREATE story %s:\n%s", story.FullSlug, string(b))
+			}
+
+			created, err := rawAPI.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, raw, shouldPublish)
+			if err != nil {
+				return sb.Story{}, err
+			}
+
+			// Update UUID if different after create
+			if created.UUID != fullStory.UUID && fullStory.UUID != "" {
+				if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, created.ID, fullStory.UUID); err != nil {
+					log.Printf("Warning: failed to update UUID for new story %s: %v", fullStory.FullSlug, err)
+				}
+			}
+
+			log.Printf("Created story: %s", fullStory.FullSlug)
+			return created, nil
+		}
+
+		// Fallback to typed create
 		createStory := PrepareStoryForCreation(fullStory)
 
-		created, err := ss.api.CreateStoryWithPublish(ctx, ss.targetSpaceID, createStory, shouldPublish)
+		// DEBUG: log outgoing typed create payload
+		if b, err := json.MarshalIndent(createStory, "", "  "); err == nil {
+			log.Printf("DEBUG: PUSH_TYPED_CREATE story %s:\n%s", story.FullSlug, string(b))
+		}
+
+		created, err := ss.api.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, map[string]interface{}{"uuid": createStory.UUID, "name": createStory.Name, "slug": createStory.Slug, "full_slug": createStory.FullSlug, "content": toMap(createStory.Content), "is_folder": createStory.IsFolder, "parent_id": valueOrZero(createStory.FolderID)}, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
+		}
+
+		// Update UUID if different after create
+		if created.UUID != fullStory.UUID && fullStory.UUID != "" {
+			if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, created.ID, fullStory.UUID); err != nil {
+				log.Printf("Warning: failed to update UUID for new story %s: %v", fullStory.FullSlug, err)
+			}
 		}
 
 		log.Printf("Created story: %s", fullStory.FullSlug)
 		return created, nil
 	}
+}
+
+// toMap converts a JSON blob to map[string]interface{} for raw payloads
+func toMap(raw json.RawMessage) map[string]interface{} {
+	if len(raw) == 0 {
+		return map[string]interface{}{}
+	}
+	var m map[string]interface{}
+	_ = json.Unmarshal(raw, &m)
+	return m
+}
+
+// valueOrZero returns the dereferenced int or 0 if nil
+func valueOrZero(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // SyncFolder synchronizes a single folder
@@ -120,7 +286,7 @@ func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPu
 		existingFolder := existing[0]
 		updateFolder := PrepareStoryForUpdate(fullFolder, existingFolder)
 
-		updated, err := ss.api.UpdateStory(ctx, ss.targetSpaceID, updateFolder, shouldPublish)
+		updated, err := ss.api.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, existingFolder.ID, map[string]interface{}{"uuid": updateFolder.UUID, "name": updateFolder.Name, "slug": updateFolder.Slug, "full_slug": updateFolder.FullSlug, "content": toMap(updateFolder.Content), "is_folder": true, "parent_id": valueOrZero(updateFolder.FolderID)}, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
 		}
@@ -136,18 +302,65 @@ func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPu
 		return updated, nil
 	} else {
 		// Create new folder
-		createFolder := PrepareStoryForCreation(fullFolder)
+		// Prefer raw create if available to preserve unknown folder fields
+		if rawAPI, ok := any(ss.api).(storyRawAPI); ok {
+			// Fetch raw source payload
+			raw, err := rawAPI.GetStoryRaw(ctx, ss.sourceSpaceID, folder.ID)
+			if err != nil {
+				return sb.Story{}, err
+			}
 
-		// Ensure folders have proper content structure
+			// Strip read-only fields
+			delete(raw, "id")
+			delete(raw, "created_at")
+			delete(raw, "updated_at")
+
+			// Ensure is_folder true
+			raw["is_folder"] = true
+
+			// Set parent_id from resolved target parent (already computed in fullFolder)
+			if fullFolder.FolderID != nil {
+				raw["parent_id"] = *fullFolder.FolderID
+			} else {
+				raw["parent_id"] = 0
+			}
+
+			// Translate translated_slugs -> translated_slugs_attributes without IDs
+			if ts, ok := raw["translated_slugs"].([]interface{}); ok && len(ts) > 0 {
+				attrs := make([]map[string]interface{}, 0, len(ts))
+				for _, item := range ts {
+					if m, ok := item.(map[string]interface{}); ok {
+						delete(m, "id")
+						attrs = append(attrs, m)
+					}
+				}
+				raw["translated_slugs_attributes"] = attrs
+				delete(raw, "translated_slugs")
+			}
+
+			// DEBUG: log outgoing raw create payload for folder
+			if b, err := json.MarshalIndent(raw, "", "  "); err == nil {
+				log.Printf("DEBUG: PUSH_RAW_CREATE folder %s:\n%s", fullFolder.FullSlug, string(b))
+			}
+
+			created, err := rawAPI.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, raw, false)
+			if err != nil {
+				return sb.Story{}, err
+			}
+
+			log.Printf("Created folder: %s", fullFolder.FullSlug)
+			return created, nil
+		}
+
+		// Fallback to typed folder create
+		createFolder := PrepareStoryForCreation(fullFolder)
 		if createFolder.IsFolder && len(createFolder.Content) == 0 {
 			createFolder.Content = json.RawMessage([]byte(`{}`))
 		}
-
-		created, err := ss.api.CreateStoryWithPublish(ctx, ss.targetSpaceID, createFolder, shouldPublish)
+		created, err := ss.api.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, map[string]interface{}{"uuid": createFolder.UUID, "name": createFolder.Name, "slug": createFolder.Slug, "full_slug": createFolder.FullSlug, "content": toMap(createFolder.Content), "is_folder": true, "parent_id": valueOrZero(createFolder.FolderID)}, shouldPublish)
 		if err != nil {
 			return sb.Story{}, err
 		}
-
 		log.Printf("Created folder: %s", fullFolder.FullSlug)
 		return created, nil
 	}

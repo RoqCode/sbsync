@@ -22,8 +22,18 @@ func (m *mockFolderAPI) GetStoriesBySlug(ctx context.Context, spaceID int, slug 
 	if m.shouldError {
 		return nil, errors.New(m.errorMessage)
 	}
-	if stories, ok := m.stories[slug]; ok {
-		return stories, nil
+	// Space-aware behavior: spaceID 2 -> target, use m.stories; others -> source, use storyContent
+	if spaceID == 2 {
+		if stories, ok := m.stories[slug]; ok {
+			return stories, nil
+		}
+		return []sb.Story{}, nil
+	}
+	// Source space: find by storyContent
+	for _, st := range m.storyContent {
+		if st.FullSlug == slug {
+			return []sb.Story{st}, nil
+		}
 	}
 	return []sb.Story{}, nil
 }
@@ -45,6 +55,50 @@ func (m *mockFolderAPI) CreateStoryWithPublish(ctx context.Context, spaceID int,
 	st.ID = len(m.createCalls) + 100 // Give it a unique ID
 	m.createCalls = append(m.createCalls, st)
 	return st, nil
+}
+
+// Raw-preserving methods (no-ops for tests using typed flow)
+func (m *mockFolderAPI) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) {
+	// Build a minimal raw payload for the requested story if present in storyContent
+	if st, ok := m.storyContent[storyID]; ok {
+		raw := map[string]interface{}{
+			"name":      st.Name,
+			"slug":      st.Slug,
+			"full_slug": st.FullSlug,
+			"is_folder": st.IsFolder,
+			"parent_id": 0,
+			"content":   map[string]interface{}{},
+			"uuid":      st.UUID,
+		}
+		// If content exists, approximate a raw map
+		if len(st.Content) > 0 {
+			var mcontent map[string]interface{}
+			_ = json.Unmarshal(st.Content, &mcontent)
+			raw["content"] = mcontent
+		}
+		return raw, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (m *mockFolderAPI) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error) {
+	if m.shouldError {
+		return sb.Story{}, errors.New(m.errorMessage)
+	}
+	// Simulate creation result
+	id := len(m.createCalls) + 100
+	fullSlug, _ := story["full_slug"].(string)
+	res := sb.Story{ID: id, FullSlug: fullSlug, IsFolder: true}
+	if pid, ok := story["parent_id"].(int); ok {
+		res.FolderID = &pid
+	}
+	// Track create call (typed) for assertions
+	m.createCalls = append(m.createCalls, res)
+	return res, nil
+}
+
+func (m *mockFolderAPI) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error {
+	return nil
 }
 
 // mockFolderReport implements Report for testing
@@ -78,9 +132,7 @@ func TestNewFolderPathBuilder(t *testing.T) {
 	if !builder.publish {
 		t.Error("Expected publish to be true")
 	}
-	if len(builder.sourceStories) != 2 {
-		t.Errorf("Expected 2 source stories, got %d", len(builder.sourceStories))
-	}
+	// sourceStories map is no longer stored internally; just ensure builder not nil
 	if builder.contentMgr == nil {
 		t.Error("Expected content manager to be initialized")
 	}
@@ -181,14 +233,14 @@ func TestPrepareSourceFolder(t *testing.T) {
 		t.Fatalf("Expected success, got error: %v", err)
 	}
 
-	if result.ID != 0 {
-		t.Error("Expected ID to be cleared for creation")
+	if result == nil {
+		t.Fatal("expected raw folder map")
 	}
-	if result.FolderID == nil || *result.FolderID != parentID {
-		t.Errorf("Expected parent ID %d, got %v", parentID, result.FolderID)
+	if _, ok := result["id"]; ok {
+		t.Error("expected id to be stripped")
 	}
-	if len(result.Content) == 0 {
-		t.Error("Expected content to be preserved")
+	if v, ok := result["parent_id"].(int); !ok || v != parentID {
+		t.Errorf("expected parent_id %d, got %v", parentID, result["parent_id"])
 	}
 }
 
@@ -212,10 +264,10 @@ func TestPrepareSourceFolder_NotFound(t *testing.T) {
 }
 
 func TestCreateFolder(t *testing.T) {
-	folder := sb.Story{
-		FullSlug: "test/folder",
-		IsFolder: true,
-		Content:  json.RawMessage([]byte(`{"content_types":["page"]}`)),
+	folder := map[string]interface{}{
+		"full_slug": "test/folder",
+		"is_folder": true,
+		"content":   map[string]interface{}{"content_types": []string{"page"}},
 	}
 
 	api := &mockFolderAPI{
@@ -241,9 +293,9 @@ func TestCreateFolder(t *testing.T) {
 }
 
 func TestCreateFolder_Error(t *testing.T) {
-	folder := sb.Story{
-		FullSlug: "test/folder",
-		IsFolder: true,
+	folder := map[string]interface{}{
+		"full_slug": "test/folder",
+		"is_folder": true,
 	}
 
 	api := &mockFolderAPI{
