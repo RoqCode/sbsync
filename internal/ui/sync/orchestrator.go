@@ -39,7 +39,6 @@ type ReportInterface interface {
 // SyncItem represents an item to be synchronized
 type SyncItem interface {
 	GetStory() sb.Story
-	IsStartsWith() bool
 	IsFolder() bool
 }
 
@@ -73,12 +72,6 @@ func (so *SyncOrchestrator) RunSyncItem(ctx context.Context, idx int, item SyncI
 
 		// Choose sync operation based on item type
 		switch {
-		case item.IsStartsWith():
-			err = so.SyncWithRetry(func() error {
-				var syncErr error
-				result, syncErr = so.SyncStartsWithDetailed(story.FullSlug)
-				return syncErr
-			})
 		case item.IsFolder():
 			err = so.SyncWithRetry(func() error {
 				var syncErr error
@@ -167,16 +160,7 @@ func (so *SyncOrchestrator) ShouldPublish() bool {
 	return true
 }
 
-// SyncStartsWithDetailed synchronizes all stories starting with a prefix
-func (so *SyncOrchestrator) SyncStartsWithDetailed(prefix string) (*SyncItemResult, error) {
-	// TODO: Implement bulk starts-with synchronization
-	// This will need to find all stories with the prefix and sync them
-	return &SyncItemResult{
-		Operation:   OperationSkip,
-		TargetStory: nil,
-		Warning:     "starts-with sync not yet implemented",
-	}, nil
-}
+// Starts-with execution mode removed. Prefix is UI filter only.
 
 // SyncFolderDetailed synchronizes a folder using StorySyncer
 func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult, error) {

@@ -68,13 +68,12 @@ const (
 )
 
 type PreflightItem struct {
-	Story      sb.Story
-	Collision  bool
-	Skip       bool
-	Selected   bool
-	State      SyncState
-	StartsWith bool
-	Run        RunState
+	Story     sb.Story
+	Collision bool
+	Skip      bool
+	Selected  bool
+	State     SyncState
+	Run       RunState
 	// Issue holds an inline message (warning or error) to display in UI
 	Issue string
 }
