@@ -14,17 +14,12 @@ import (
 
 // mockOrchestratorSyncItem implements SyncItem for testing
 type mockOrchestratorSyncItem struct {
-	story      sb.Story
-	startsWith bool
-	isFolder   bool
+	story    sb.Story
+	isFolder bool
 }
 
 func (m *mockOrchestratorSyncItem) GetStory() sb.Story {
 	return m.story
-}
-
-func (m *mockOrchestratorSyncItem) IsStartsWith() bool {
-	return m.startsWith
 }
 
 func (m *mockOrchestratorSyncItem) IsFolder() bool {
@@ -92,11 +87,7 @@ func TestOrchestratorRunSyncItem_Story(t *testing.T) {
 
 	orchestrator := NewSyncOrchestrator(api, report, sourceSpace, targetSpace)
 
-	item := &mockOrchestratorSyncItem{
-		story:      story,
-		startsWith: false,
-		isFolder:   false,
-	}
+	item := &mockOrchestratorSyncItem{story: story, isFolder: false}
 
 	ctx := context.Background()
 	cmd := orchestrator.RunSyncItem(ctx, 0, item)
@@ -146,11 +137,7 @@ func TestOrchestratorRunSyncItem_Folder(t *testing.T) {
 
 	orchestrator := NewSyncOrchestrator(api, report, sourceSpace, targetSpace)
 
-	item := &mockOrchestratorSyncItem{
-		story:      folder,
-		startsWith: false,
-		isFolder:   true,
-	}
+	item := &mockOrchestratorSyncItem{story: folder, isFolder: true}
 
 	ctx := context.Background()
 	cmd := orchestrator.RunSyncItem(ctx, 1, item)
@@ -176,53 +163,7 @@ func TestOrchestratorRunSyncItem_Folder(t *testing.T) {
 	}
 }
 
-func TestOrchestratorRunSyncItem_StartsWith(t *testing.T) {
-	story := sb.Story{
-		ID:       1,
-		FullSlug: "app",
-		IsFolder: false,
-	}
-
-	api := &mockStorySyncAPI{}
-	report := &mockOrchestratorReport{}
-	sourceSpace := &sb.Space{ID: 1}
-	targetSpace := &sb.Space{ID: 2}
-
-	orchestrator := NewSyncOrchestrator(api, report, sourceSpace, targetSpace)
-
-	item := &mockOrchestratorSyncItem{
-		story:      story,
-		startsWith: true,
-		isFolder:   false,
-	}
-
-	ctx := context.Background()
-	cmd := orchestrator.RunSyncItem(ctx, 2, item)
-
-	msg := cmd()
-
-	result, ok := msg.(SyncResultMsg)
-	if !ok {
-		t.Fatalf("Expected SyncResultMsg, got %T", msg)
-	}
-
-	if result.Index != 2 {
-		t.Errorf("Expected index 2, got %d", result.Index)
-	}
-	if result.Err != nil {
-		t.Errorf("Expected no error, got %v", result.Err)
-	}
-	if result.Result == nil {
-		t.Fatal("Expected result to be set")
-	}
-	// Starts-with operations currently return skip with warning
-	if result.Result.Operation != OperationSkip {
-		t.Errorf("Expected operation %s, got %s", OperationSkip, result.Result.Operation)
-	}
-	if result.Result.Warning == "" {
-		t.Error("Expected warning for starts-with operation")
-	}
-}
+// Removed: no starts-with execution mode; prefix is a filter only.
 
 func TestOrchestratorRunSyncItem_Cancelled(t *testing.T) {
 	story := sb.Story{ID: 1, FullSlug: "test"}
@@ -234,11 +175,7 @@ func TestOrchestratorRunSyncItem_Cancelled(t *testing.T) {
 
 	orchestrator := NewSyncOrchestrator(api, report, sourceSpace, targetSpace)
 
-	item := &mockOrchestratorSyncItem{
-		story:      story,
-		startsWith: false,
-		isFolder:   false,
-	}
+	item := &mockOrchestratorSyncItem{story: story, isFolder: false}
 
 	// Create a cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -278,11 +215,7 @@ func TestOrchestratorRunSyncItem_Error(t *testing.T) {
 
 	orchestrator := NewSyncOrchestrator(api, report, sourceSpace, targetSpace)
 
-	item := &mockOrchestratorSyncItem{
-		story:      story,
-		startsWith: false,
-		isFolder:   false,
-	}
+	item := &mockOrchestratorSyncItem{story: story, isFolder: false}
 
 	ctx := context.Background()
 	cmd := orchestrator.RunSyncItem(ctx, 4, item)
@@ -334,11 +267,7 @@ func TestOrchestratorRunSyncItem_WithWarning(t *testing.T) {
 
 	orchestrator := NewSyncOrchestrator(api, report, sourceSpace, targetSpace)
 
-	item := &mockOrchestratorSyncItem{
-		story:      story,
-		startsWith: false,
-		isFolder:   false,
-	}
+	item := &mockOrchestratorSyncItem{story: story, isFolder: false}
 
 	ctx := context.Background()
 	cmd := orchestrator.RunSyncItem(ctx, 5, item)
@@ -476,29 +405,7 @@ func TestOrchestratorShouldPublish(t *testing.T) {
 	}
 }
 
-func TestOrchestratorSyncStartsWithDetailed(t *testing.T) {
-	api := &mockStorySyncAPI{}
-	report := &mockOrchestratorReport{}
-	sourceSpace := &sb.Space{ID: 1}
-	targetSpace := &sb.Space{ID: 2}
-
-	orchestrator := NewSyncOrchestrator(api, report, sourceSpace, targetSpace)
-
-	result, err := orchestrator.SyncStartsWithDetailed("app")
-
-	if err != nil {
-		t.Errorf("Expected success, got error: %v", err)
-	}
-	if result == nil {
-		t.Fatal("Expected result to be returned")
-	}
-	if result.Operation != OperationSkip {
-		t.Errorf("Expected operation %s, got %s", OperationSkip, result.Operation)
-	}
-	if result.Warning == "" {
-		t.Error("Expected warning for unimplemented starts-with sync")
-	}
-}
+// Removed: no starts-with execution mode.
 
 func TestOrchestratorSyncFolderDetailed(t *testing.T) {
 	folder := sb.Story{
@@ -595,11 +502,7 @@ func TestOrchestratorRunSyncItem_Concurrent(t *testing.T) {
 	// Start multiple operations concurrently
 	for i := 0; i < 3; i++ {
 		go func(index int) {
-			item := &mockOrchestratorSyncItem{
-				story:      stories[index],
-				startsWith: false,
-				isFolder:   false,
-			}
+			item := &mockOrchestratorSyncItem{story: stories[index], isFolder: false}
 			cmd := orchestrator.RunSyncItem(ctx, index, item)
 			results[index] = cmd()
 			done <- index

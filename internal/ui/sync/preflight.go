@@ -10,13 +10,12 @@ import (
 
 // PreflightItem represents an item in the preflight plan (using UI types for compatibility)
 type PreflightItem struct {
-	Story      sb.Story
-	Collision  bool
-	Skip       bool
-	Selected   bool
-	State      string // StateCreate, StateUpdate, etc.
-	StartsWith bool
-	Run        string // RunPending, RunRunning, etc.
+	Story     sb.Story
+	Collision bool
+	Skip      bool
+	Selected  bool
+	State     string // StateCreate, StateUpdate, etc.
+	Run       string // RunPending, RunRunning, etc.
 }
 
 // State constants for preflight items

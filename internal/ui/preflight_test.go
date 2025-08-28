@@ -182,7 +182,7 @@ func TestOptimizePreflightDedupesFolders(t *testing.T) {
 	}
 }
 
-func TestOptimizePreflightStartsWith(t *testing.T) {
+func TestOptimizePreflight_FullFolderSelection(t *testing.T) {
 	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
 	child1 := sb.Story{ID: 2, Name: "one", Slug: "one", FullSlug: "app/one", FolderID: &parent.ID}
 	child2 := sb.Story{ID: 3, Name: "two", Slug: "two", FullSlug: "app/two", FolderID: &parent.ID}

@@ -149,7 +149,7 @@ func (m *Model) findMissingFolderPaths(items []PreflightItem) map[string]sb.Stor
 	return folderMap
 }
 
-// optimizePreflight deduplicates entries, pre-plans missing folders, sorts by sync order (folders first), and merges full folder selections into starts_with tasks.
+// optimizePreflight deduplicates entries, pre-plans missing folders, and sorts by sync order (folders first).
 func (m *Model) optimizePreflight() {
 	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
 
@@ -212,10 +212,6 @@ type preflightItemAdapter struct {
 
 func (pia *preflightItemAdapter) GetStory() sb.Story {
 	return pia.item.Story
-}
-
-func (pia *preflightItemAdapter) IsStartsWith() bool {
-	return pia.item.StartsWith
 }
 
 func (pia *preflightItemAdapter) IsFolder() bool {
@@ -656,31 +652,9 @@ func (m *Model) processTranslatedSlugs(sourceStory sb.Story, existingStories []s
 	return sync.ProcessTranslatedSlugs(sourceStory, existingStories)
 }
 
-func (m *Model) syncStartsWith(slug string) error {
-	allowPublish := m.shouldPublish()
-	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, allowPublish)
-	return bulkSyncer.SyncStartsWith(slug)
-}
+// Starts-with bulk sync removed; prefix is a filter only.
 
-// syncStartsWithDetailed syncs all content with prefix and returns results
-func (m *Model) syncStartsWithDetailed(slug string) (*syncItemResult, error) {
-	allowPublish := m.shouldPublish()
-	bulkSyncer := sync.NewBulkSyncer(m.api, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, allowPublish)
-	return bulkSyncer.SyncStartsWithDetailed(slug)
-}
-
-// Legacy helper functions that now use the extracted bulk operations module
-func (m *Model) findTarget(fullSlug string) int {
-	return sync.FindTarget(m.storiesTarget, fullSlug)
-}
-
-func (m *Model) findSource(fullSlug string) (sb.Story, bool) {
-	return sync.FindSource(m.storiesSource, fullSlug)
-}
-
-func (m *Model) nextTargetID() int {
-	return sync.NextTargetID(m.storiesTarget)
-}
+// Legacy helper functions removed as bulk operations module was deleted.
 
 // Legacy wrapper for parent slug extraction
 func parentSlug(full string) string {
@@ -711,13 +685,12 @@ func convertToSyncPreflightItems(uiItems []PreflightItem) []sync.PreflightItem {
 	syncItems := make([]sync.PreflightItem, len(uiItems))
 	for i, uiItem := range uiItems {
 		syncItems[i] = sync.PreflightItem{
-			Story:      uiItem.Story,
-			Collision:  uiItem.Collision,
-			Skip:       uiItem.Skip,
-			Selected:   uiItem.Selected,
-			State:      mapUIStateToSync(uiItem.State),
-			StartsWith: uiItem.StartsWith,
-			Run:        convertRunStateToString(uiItem.Run),
+			Story:     uiItem.Story,
+			Collision: uiItem.Collision,
+			Skip:      uiItem.Skip,
+			Selected:  uiItem.Selected,
+			State:     mapUIStateToSync(uiItem.State),
+			Run:       convertRunStateToString(uiItem.Run),
 		}
 	}
 	return syncItems
@@ -728,13 +701,12 @@ func convertFromSyncPreflightItems(syncItems []sync.PreflightItem) []PreflightIt
 	uiItems := make([]PreflightItem, len(syncItems))
 	for i, syncItem := range syncItems {
 		uiItems[i] = PreflightItem{
-			Story:      syncItem.Story,
-			Collision:  syncItem.Collision,
-			Skip:       syncItem.Skip,
-			Selected:   syncItem.Selected,
-			State:      mapSyncStateToUI(syncItem.State),
-			StartsWith: syncItem.StartsWith,
-			Run:        convertStringToRunState(syncItem.Run),
+			Story:     syncItem.Story,
+			Collision: syncItem.Collision,
+			Skip:      syncItem.Skip,
+			Selected:  syncItem.Selected,
+			State:     mapSyncStateToUI(syncItem.State),
+			Run:       convertStringToRunState(syncItem.Run),
 		}
 	}
 	return uiItems

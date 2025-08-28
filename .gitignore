@@ -3,4 +3,5 @@ debug.log
 sync-report-*.json
 sbsync
 coverage.*
+.tmp/
 
