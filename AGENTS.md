@@ -1,48 +1,41 @@
-# AGENTS
+# Repository Guidelines
 
-## Overview
+## Project Structure & Module Organization
+- `cmd/sbsync/`: Application entry point (main package).
+- `internal/ui/`: Bubble Tea TUI models, views, and update loop.
+- `internal/sb/`: Storyblok API client.
+- `internal/config/`: Token/config loading and saving.
+- `testdata/`: Fixtures for deterministic tests.
+- Future modules (e.g., `internal/core/`, `infra/`) should follow the same layout and separation of concerns.
 
-Welcome to **storyblok-sync**, a Go-based terminal UI (TUI) for synchronising Stories and Folders between two Storyblok spaces. The codebase follows a clean separation of concerns and uses Bubble Tea for the UI.
+## Build, Test, and Development
+- `go build ./cmd/sbsync`: Build the `sbsync` binary.
+- `go run ./cmd/sbsync`: Run the TUI locally.
+- `go fmt ./...`: Format code (tabs; Go 1.25).
+- `go vet ./...`: Static checks for common mistakes.
+- `go test ./...`: Run the full test suite. Add `-cover` for coverage.
 
-### Repository layout
+## Coding Style & Naming Conventions
+- **Language:** Go 1.25; identifiers and comments in English. User‑facing strings may be German.
+- **Formatting:** Use `go fmt` (tabs). Group imports: stdlib, third‑party, internal.
+- **Errors:** Return explicitly; wrap with `fmt.Errorf("… %w", err)` when adding context.
+- **Naming:** Clear, descriptive names; avoid abbreviations. Keep package APIs small and focused.
 
-```
-storyblok-sync/
-├─ cmd/sbsync/            # application entry point
-├─ internal/
-│  ├─ ui/                 # Bubble Tea models, views and update logic
-│  ├─ sb/                 # Storyblok API client
-│  └─ config/             # token/config loading and saving
-├─ go.mod / go.sum
-└─ testdata/              # fixtures for tests
-```
+## Testing Guidelines
+- **Framework:** Standard `testing` package; table‑driven tests preferred.
+- **Placement:** `*_test.go` next to code; fixtures under `testdata/`.
+- **Behavior:** Small, deterministic tests without network or timing flakiness.
+- **Run:** `go test ./...` (optionally `-race -cover`).
 
-Future packages (e.g. `internal/core/`, `infra/`, etc.) should follow the structure outlined in the project roadmap.
+## Commit & Pull Request Guidelines
+- **Commits:** Conventional commits, imperative mood (e.g., `feat: add scan command`). Short summary line.
+- **Before pushing:** `go fmt ./... && go vet ./... && go test ./...` must pass or be explained.
+- **PRs:** Brief description of user‑facing changes, linked issues, and any deviations from these guidelines. No secrets or tokens in commits or logs.
 
-## Coding conventions
+## Security & Configuration
+- Never commit Storyblok tokens or credentials. Use `internal/config` for local persistence; prefer env vars or OS‑level stores for secrets.
+- Avoid logging sensitive values; redact where necessary.
 
-- **Go version:** 1.25
-- **Formatting:** run `go fmt` (uses tabs for indentation)
-- **Imports:** standard library groups first, third‑party packages second, internal packages last.
-- **Naming & comments:** use English for identifiers and comments; user-facing strings remain in German where appropriate.
-- **Errors:** return errors explicitly; wrap with `fmt.Errorf("… %w", err)` when adding context.
-- **Testing:** add tests for new behaviour, keep them small and deterministic. Place fixtures under `testdata/` when needed.
-- **Commit messages:** imperative mood, short summary on first line. Use conventional commit prefixes without scope, eg: (“feat: add scan command”).
+## Architecture Notes
+- Bubble Tea MVU for UI (`internal/ui`) with business logic and Storyblok access decoupled (`internal/sb`). Keep future domain logic under `internal/core/` to maintain clear boundaries.
 
-## Testing & checks
-
-Before committing:
-
-1. `go fmt ./...`
-2. `go vet ./...`
-3. `go test ./...`
-
-All commands must succeed or the failure should be explained in the PR.
-
-## PR guidelines
-
-- Describe user-facing changes briefly.
-- Note any deviations from these guidelines.
-- Do not include secrets or tokens in commits or logs.
-
-Thank you for contributing!
