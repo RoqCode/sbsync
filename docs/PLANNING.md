@@ -111,6 +111,10 @@ Details
 - De‑dup: coalesce queued operations per slug (last‑writer wins within the run).
 - Idempotency: continue using `force_update`; safe to replay updates.
 
+Follow‑ups
+- Add a temporary feature flag to disable the per‑story `EnsureFolderPathStatic` safety net.
+- After validating in tests and a few real runs that folders‑first execution is reliable (no missing parent errors), remove the safety net and the flag.
+
 Published & Changes write sequence
 - For items marked “has unpublished changes” and with both payloads available:
   1) Write the published payload with `publish=1` (raw update or create), to set the published baseline.
