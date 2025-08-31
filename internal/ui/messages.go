@@ -96,13 +96,8 @@ func (m Model) hydrateContentCmd() tea.Cmd {
 	token := m.sourceCDAToken
 	kind := m.sourceCDATokenKind
 
-	// Build list of items to hydrate (stories only)
-	items := make([]sync.PreflightItem, 0, len(m.preflight.items))
-	for _, it := range m.preflight.items {
-		if !it.Story.IsFolder {
-			items = append(items, sync.PreflightItem{Story: it.Story})
-		}
-	}
+	// Build list of items (include folders for batching detection)
+	items := append([]sync.PreflightItem(nil), m.preflight.items...)
 
 	return func() tea.Msg {
 		// No token: skip hydration successfully
@@ -114,7 +109,8 @@ func (m Model) hydrateContentCmd() tea.Cmd {
 
 		cda := sb.NewCDA(token)
 		cache := sync.NewHydrationCache(1000)
-		stats := sync.Hydrate(ctx, cda, srcID, items, kind, 12, cache)
+		// Use batched hydration with top-most fully selected folders
+		stats := sync.HydrateBatched(ctx, cda, srcID, items, m.storiesSource, kind, 4, 12, 1000, cache)
 		return hydrateMsg{total: stats.Total, hydrated: stats.Drafts + stats.Published, drafts: stats.Drafts, published: stats.Published, err: nil, cache: cache}
 	}
 }

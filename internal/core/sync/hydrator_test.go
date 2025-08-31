@@ -29,6 +29,11 @@ func (f fakeCDA) GetStoryRawBySlug(ctx context.Context, spaceID int, slug string
 	return nil, errors.New("not found")
 }
 
+func (f fakeCDA) WalkStoriesByPrefix(ctx context.Context, startsWith, version string, perPage int, fn func(map[string]any) error) error {
+	// not used in these tests
+	return nil
+}
+
 func mkContent(body string) map[string]any {
 	var c any
 	_ = json.Unmarshal([]byte(body), &c)

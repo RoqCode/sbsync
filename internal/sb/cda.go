@@ -38,6 +38,13 @@ type cdaStoryResp struct {
 	Story map[string]any `json:"story"`
 }
 
+type cdaStoriesResp struct {
+	Stories []map[string]any `json:"stories"`
+	Total   int              `json:"total"`
+	PerPage int              `json:"per_page"`
+	Page    int              `json:"page"`
+}
+
 // GetStoryRawBySlug fetches a story by slug from CDA (version optional: "published" or "draft").
 func (c *CDAClient) GetStoryRawBySlug(ctx context.Context, spaceID int, slug string, version string) (map[string]any, error) {
 	if c.token == "" {
@@ -70,4 +77,58 @@ func (c *CDAClient) GetStoryRawBySlug(ctx context.Context, spaceID int, slug str
 		return nil, err
 	}
 	return payload.Story, nil
+}
+
+// WalkStoriesByPrefix iterates all stories under the given starts_with prefix,
+// invoking fn for each story across all pages (per_page up to 100).
+func (c *CDAClient) WalkStoriesByPrefix(ctx context.Context, startsWith, version string, perPage int, fn func(map[string]any) error) error {
+	if c.token == "" {
+		return errors.New("cda token empty")
+	}
+	if perPage <= 0 || perPage > 100 {
+		perPage = 100
+	}
+	page := 1
+	for {
+		u, _ := url.Parse(cdaBase + "/stories")
+		q := u.Query()
+		q.Set("token", c.token)
+		if version == "" {
+			version = "published"
+		}
+		q.Set("version", version)
+		q.Set("starts_with", startsWith)
+		q.Set("per_page", fmt.Sprint(perPage))
+		q.Set("page", fmt.Sprint(page))
+		u.RawQuery = q.Encode()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+		res, err := c.http.Do(req)
+		if err != nil {
+			return err
+		}
+		if res.Body != nil {
+			defer res.Body.Close()
+		}
+		if res.StatusCode != http.StatusOK {
+			return fmt.Errorf("cda.stories.list status %s", res.Status)
+		}
+		var payload cdaStoriesResp
+		if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+			return err
+		}
+		for _, st := range payload.Stories {
+			if err := fn(st); err != nil {
+				return err
+			}
+		}
+		if len(payload.Stories) < perPage {
+			break
+		}
+		page++
+	}
+	return nil
 }

@@ -3,12 +3,17 @@ package sync
 import (
 	"context"
 	"encoding/json"
+	"sort"
+	"strings"
 	"sync"
+
+	"storyblok-sync/internal/sb"
 )
 
 // CDAAPI is the minimal interface from the CDA client needed for hydration.
 type CDAAPI interface {
 	GetStoryRawBySlug(ctx context.Context, spaceID int, slug string, version string) (map[string]any, error)
+	WalkStoriesByPrefix(ctx context.Context, startsWith, version string, perPage int, fn func(map[string]any) error) error
 }
 
 // ContentVariants holds optional draft and published content blobs.
@@ -172,6 +177,208 @@ func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightI
 
 	wg.Wait()
 	return stats
+}
+
+// HydrateBatched hydrates using batched prefix reads for fully-selected folders
+// and falls back to per-slug reads for remaining stories.
+func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightItem, allSource []sb.Story, tokenKind string, batchWorkers, slugWorkers, cacheMax int, cache *HydrationCache) HydrationStats {
+	if cache == nil {
+		cache = NewHydrationCache(cacheMax)
+	}
+	// Build selected story slugs (non-folders) and candidate folders
+	selectedStories := make(map[string]bool)
+	folderCandidates := make([]sb.Story, 0)
+	for _, it := range items {
+		if it.Skip || !it.Selected {
+			continue
+		}
+		if it.Story.IsFolder {
+			folderCandidates = append(folderCandidates, it.Story)
+		} else {
+			selectedStories[it.Story.FullSlug] = true
+		}
+	}
+
+	// Detect fully-selected folders
+	fullRoots := topMostFullySelectedFolders(folderCandidates, selectedStories, allSource)
+
+	// Determine which selected stories are not covered by any root
+	covered := make(map[string]bool)
+	for _, root := range fullRoots {
+		pref := root.FullSlug + "/"
+		for slug := range selectedStories {
+			if strings.HasPrefix(slug, pref) {
+				covered[slug] = true
+			}
+		}
+	}
+	perSlug := make([]PreflightItem, 0, len(items))
+	for _, it := range items {
+		if it.Skip || !it.Selected || it.Story.IsFolder {
+			continue
+		}
+		if !covered[it.Story.FullSlug] {
+			perSlug = append(perSlug, it)
+		}
+	}
+
+	stats := HydrationStats{}
+	// Batch stage: iterate roots concurrently
+	if len(fullRoots) > 0 {
+		var wg sync.WaitGroup
+		rootCh := make(chan sb.Story)
+		for w := 0; w < max(1, batchWorkers); w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for r := range rootCh {
+					// Preview: fetch draft + published
+					if tokenKind == "preview" {
+						_ = cda.WalkStoriesByPrefix(ctx, r.FullSlug, "draft", 100, func(m map[string]any) error {
+							if id, raw, ok := storyIDAndContent(m); ok {
+								cache.PutDraft(id, raw)
+								add(&stats.Drafts, 1)
+							}
+							return nil
+						})
+						_ = cda.WalkStoriesByPrefix(ctx, r.FullSlug, "published", 100, func(m map[string]any) error {
+							if id, raw, ok := storyIDAndContent(m); ok {
+								cache.PutPublished(id, raw)
+								add(&stats.Published, 1)
+							}
+							return nil
+						})
+					} else {
+						_ = cda.WalkStoriesByPrefix(ctx, r.FullSlug, "published", 100, func(m map[string]any) error {
+							if id, raw, ok := storyIDAndContent(m); ok {
+								cache.PutPublished(id, raw)
+								add(&stats.Published, 1)
+							}
+							return nil
+						})
+					}
+				}
+			}()
+		}
+		go func() {
+			defer close(rootCh)
+			for _, r := range fullRoots {
+				select {
+				case <-ctx.Done():
+					return
+				case rootCh <- r:
+				}
+			}
+		}()
+		wg.Wait()
+	}
+
+	// Per-slug fallback stage
+	if len(perSlug) > 0 {
+		// reuse existing Hydrate logic with a filtered item list
+		part := Hydrate(ctx, cda, srcSpaceID, perSlug, tokenKind, slugWorkers, cache)
+		stats.Drafts += part.Drafts
+		stats.Published += part.Published
+		stats.Total += part.Total
+		stats.Misses += part.Misses
+	} else {
+		// count total as number of selected stories covered by roots
+		stats.Total = len(selectedStories)
+	}
+
+	// Compute misses for all selected stories
+	for slug := range selectedStories {
+		// Need to map slug to ID; use allSource to find ID then check cache
+		for _, s := range allSource {
+			if s.FullSlug == slug {
+				if v, ok := cache.Get(s.ID); ok {
+					if len(v.Draft) == 0 && len(v.Published) == 0 {
+						stats.Misses++
+					}
+				} else {
+					stats.Misses++
+				}
+				break
+			}
+		}
+	}
+
+	return stats
+}
+
+func storyIDAndContent(m map[string]any) (int, json.RawMessage, bool) {
+	if m == nil {
+		return 0, nil, false
+	}
+	// CDA flattens story fields; ensure not a folder (if present)
+	if v, ok := m["is_folder"]; ok {
+		if b, ok2 := v.(bool); ok2 && b {
+			return 0, nil, false
+		}
+	}
+	id := 0
+	if iv, ok := m["id"]; ok {
+		switch x := iv.(type) {
+		case float64:
+			id = int(x)
+		case int:
+			id = x
+		}
+	}
+	if id == 0 {
+		return 0, nil, false
+	}
+	raw, ok := extractContentRaw(m)
+	if !ok {
+		return 0, nil, false
+	}
+	return id, raw, true
+}
+
+func topMostFullySelectedFolders(candidates []sb.Story, selected map[string]bool, all []sb.Story) []sb.Story {
+	// Build list of non-folder stories under candidates and verify full selection
+	full := make([]sb.Story, 0, len(candidates))
+	for _, f := range candidates {
+		pref := f.FullSlug + "/"
+		allSelected := true
+		for _, s := range all {
+			if s.IsFolder {
+				continue
+			}
+			if strings.HasPrefix(s.FullSlug, pref) {
+				if !selected[s.FullSlug] {
+					allSelected = false
+					break
+				}
+			}
+		}
+		if allSelected {
+			full = append(full, f)
+		}
+	}
+	// Sort by depth ascending and deduplicate to top-most
+	sort.Slice(full, func(i, j int) bool {
+		di := strings.Count(full[i].FullSlug, "/")
+		dj := strings.Count(full[j].FullSlug, "/")
+		if di != dj {
+			return di < dj
+		}
+		return full[i].FullSlug < full[j].FullSlug
+	})
+	kept := make([]sb.Story, 0, len(full))
+	for _, f := range full {
+		isDesc := false
+		for _, k := range kept {
+			if strings.HasPrefix(f.FullSlug, k.FullSlug+"/") {
+				isDesc = true
+				break
+			}
+		}
+		if !isDesc {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 func extractContentRaw(st map[string]any) (json.RawMessage, bool) {
