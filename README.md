@@ -5,6 +5,7 @@ Storyblok Sync is a terminal user interface (TUI) that synchronises Stories and 
 See also:
 - Architecture overview: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
 - Planning and roadmap details: [docs/PLANNING.md](./docs/PLANNING.md)
+- Environment flags reference: [docs/env.md](./docs/env.md)
 
 ## Features
 

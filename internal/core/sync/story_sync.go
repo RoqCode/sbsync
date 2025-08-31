@@ -17,6 +17,7 @@ type StorySyncer struct {
 	sourceSpaceID  int
 	targetSpaceID  int
 	existingBySlug map[string]sb.Story
+	limiter        *SpaceLimiter
 }
 
 // storyRawAPI captures optional raw story methods available on the API client
@@ -34,6 +35,7 @@ func NewStorySyncer(api SyncAPI, sourceSpaceID, targetSpaceID int, existing map[
 		sourceSpaceID:  sourceSpaceID,
 		targetSpaceID:  targetSpaceID,
 		existingBySlug: existing,
+		limiter:        NewSpaceLimiter(7, 7, 7),
 	}
 }
 
@@ -51,10 +53,14 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 	}
 	// Fallback: if not in index, query target API to detect existing story
 	if existingTarget == nil {
+		_ = ss.limiter.WaitRead(ctx, ss.targetSpaceID)
 		if existing, err := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug); err == nil && len(existing) > 0 {
 			// use the first match; slugs are unique per space
 			st := existing[0]
 			existingTarget = &st
+			ss.limiter.NudgeRead(ss.targetSpaceID, +0.02, 1, 7)
+		} else if IsRateLimited(err) {
+			ss.limiter.NudgeRead(ss.targetSpaceID, -0.2, 1, 7)
 		}
 	}
 
@@ -77,10 +83,12 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		// Prefer raw update if available to preserve unknown fields
 		if rawAPI, ok := any(ss.api).(storyRawAPI); ok {
 			// Fetch raw source payload
+			_ = ss.limiter.WaitRead(ctx, ss.sourceSpaceID)
 			raw, err := rawAPI.GetStoryRaw(ctx, ss.sourceSpaceID, story.ID)
 			if err != nil {
 				return sb.Story{}, err
 			}
+			ss.limiter.NudgeRead(ss.sourceSpaceID, +0.02, 1, 7)
 
 			// Strip read-only fields and ensure correct parent_id
 			delete(raw, "id")
@@ -108,15 +116,24 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			// DEBUG: omit raw payload dump to keep logs readable
 			log.Printf("DEBUG: PUSH_RAW_UPDATE story %s (payload omitted)", story.FullSlug)
 
+			_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 			updated, err := ss.updateWithFolderFallback(ctx, rawAPI, existingStory.ID, raw, shouldPublish, ParentSlug(story.FullSlug))
 			if err != nil {
+				if IsRateLimited(err) {
+					ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+				}
 				return sb.Story{}, err
 			}
+			ss.limiter.NudgeWrite(ss.targetSpaceID, +0.02, 1, 7)
 
 			// Update UUID if different
 			if updated.UUID != fullStory.UUID && fullStory.UUID != "" {
+				_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 				if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, updated.ID, fullStory.UUID); err != nil {
 					log.Printf("Warning: failed to update UUID for story %s: %v", fullStory.FullSlug, err)
+					if IsRateLimited(err) {
+						ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+					}
 				}
 			}
 
@@ -128,15 +145,24 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		updateStory := PrepareStoryForUpdate(fullStory, existingStory)
 		// DEBUG: omit typed payload dump to keep logs readable
 		log.Printf("DEBUG: PUSH_TYPED_UPDATE story %s (payload omitted)", story.FullSlug)
+		_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 		updated, err := ss.api.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, existingStory.ID, map[string]interface{}{"uuid": updateStory.UUID, "name": updateStory.Name, "slug": updateStory.Slug, "full_slug": updateStory.FullSlug, "content": toMap(updateStory.Content), "is_folder": updateStory.IsFolder, "parent_id": valueOrZero(updateStory.FolderID)}, shouldPublish)
 		if err != nil {
+			if IsRateLimited(err) {
+				ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+			}
 			return sb.Story{}, err
 		}
+		ss.limiter.NudgeWrite(ss.targetSpaceID, +0.02, 1, 7)
 
 		// Update UUID if different
 		if updated.UUID != fullStory.UUID && fullStory.UUID != "" {
+			_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 			if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, updated.ID, fullStory.UUID); err != nil {
 				log.Printf("Warning: failed to update UUID for story %s: %v", fullStory.FullSlug, err)
+				if IsRateLimited(err) {
+					ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+				}
 			}
 		}
 
@@ -154,10 +180,12 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		// Prefer raw create if available to preserve unknown fields
 		if rawAPI, ok := any(ss.api).(storyRawAPI); ok {
 			// Fetch raw source payload
+			_ = ss.limiter.WaitRead(ctx, ss.sourceSpaceID)
 			raw, err := rawAPI.GetStoryRaw(ctx, ss.sourceSpaceID, story.ID)
 			if err != nil {
 				return sb.Story{}, err
 			}
+			ss.limiter.NudgeRead(ss.sourceSpaceID, +0.02, 1, 7)
 
 			// Strip read-only fields
 			delete(raw, "id")
@@ -187,15 +215,24 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			// DEBUG: omit raw create payload dump
 			log.Printf("DEBUG: PUSH_RAW_CREATE story %s (payload omitted)", story.FullSlug)
 
+			_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 			created, err := ss.createWithFolderFallback(ctx, rawAPI, raw, shouldPublish, ParentSlug(story.FullSlug))
 			if err != nil {
+				if IsRateLimited(err) {
+					ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+				}
 				return sb.Story{}, err
 			}
+			ss.limiter.NudgeWrite(ss.targetSpaceID, +0.02, 1, 7)
 
 			// Update UUID if different after create
 			if created.UUID != fullStory.UUID && fullStory.UUID != "" {
+				_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 				if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, created.ID, fullStory.UUID); err != nil {
 					log.Printf("Warning: failed to update UUID for new story %s: %v", fullStory.FullSlug, err)
+					if IsRateLimited(err) {
+						ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+					}
 				}
 			}
 
@@ -209,15 +246,24 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		// DEBUG: omit typed create payload dump
 		log.Printf("DEBUG: PUSH_TYPED_CREATE story %s (payload omitted)", story.FullSlug)
 
+		_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 		created, err := ss.api.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, map[string]interface{}{"uuid": createStory.UUID, "name": createStory.Name, "slug": createStory.Slug, "full_slug": createStory.FullSlug, "content": toMap(createStory.Content), "is_folder": createStory.IsFolder, "parent_id": valueOrZero(createStory.FolderID)}, shouldPublish)
 		if err != nil {
+			if IsRateLimited(err) {
+				ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+			}
 			return sb.Story{}, err
 		}
+		ss.limiter.NudgeWrite(ss.targetSpaceID, +0.02, 1, 7)
 
 		// Update UUID if different after create
 		if created.UUID != fullStory.UUID && fullStory.UUID != "" {
+			_ = ss.limiter.WaitWrite(ctx, ss.targetSpaceID)
 			if err := ss.api.UpdateStoryUUID(ctx, ss.targetSpaceID, created.ID, fullStory.UUID); err != nil {
 				log.Printf("Warning: failed to update UUID for new story %s: %v", fullStory.FullSlug, err)
+				if IsRateLimited(err) {
+					ss.limiter.NudgeWrite(ss.targetSpaceID, -0.2, 1, 7)
+				}
 			}
 		}
 
