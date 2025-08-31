@@ -211,3 +211,51 @@ func TestMarkMovesCursorDown(t *testing.T) {
 		t.Fatalf("expected cursor moved to 1, got %d", m.selection.listIndex)
 	}
 }
+
+func TestSyncCompletionWaitsUntilNoRunning(t *testing.T) {
+	// Model in sync state with two running items and no pending
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+	m.syncing = true
+	m.preflight.items = []PreflightItem{
+		{Run: RunRunning, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunRunning, Story: sb.Story{ID: 2, FullSlug: "b"}},
+	}
+
+	// One worker finishes
+	msg := syncResultMsg{Index: 0, Duration: 5}
+	model, cmd := m.Update(msg)
+	mm, ok := model.(Model)
+	if !ok {
+		t.Fatalf("expected Model return type")
+	}
+	if mm.state != stateSync {
+		t.Fatalf("expected to remain in stateSync while another item still running")
+	}
+	if !mm.syncing {
+		t.Fatalf("expected syncing to remain true while running items exist")
+	}
+	if cmd != nil {
+		t.Fatalf("expected no new scheduling when no pending but running>0")
+	}
+
+	// Finish the last running item; should transition to report
+	msg = syncResultMsg{Index: 1, Duration: 5}
+	model, cmd = mm.Update(msg)
+	mm2, ok := model.(Model)
+	if !ok {
+		t.Fatalf("expected Model return type (second update)")
+	}
+	if mm2.state != stateReport {
+		t.Fatalf("expected transition to stateReport after all running complete")
+	}
+	if mm2.syncing {
+		t.Fatalf("expected syncing=false at completion")
+	}
+	if cmd != nil {
+		t.Fatalf("expected no cmd after completion")
+	}
+}

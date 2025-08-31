@@ -178,9 +178,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Recompute aggregate counts
 		done := 0
 		cancelled := 0
 		pending := 0
+		running := 0
+		hasPendingFolders := false
 		for _, it := range m.preflight.items {
 			switch it.Run {
 			case RunDone:
@@ -189,6 +192,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cancelled++
 			case RunPending:
 				pending++
+				if it.Story.IsFolder {
+					hasPendingFolders = true
+				}
+			case RunRunning:
+				running++
 			}
 		}
 		// Keep syncIndex at next pending position if available
@@ -208,11 +216,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateViewportContent()
 		}
 
-		// Continue if there are still pending items
+		// Maintain a worker pool. During folder phase, allow only 1; afterwards, allow up to 6.
+		allowed := 6
+		if hasPendingFolders {
+			allowed = 1
+		}
 		if pending > 0 {
-			return m, m.runNextItem()
+			toStart := allowed - running
+			if toStart > pending {
+				toStart = pending
+			}
+			if toStart > 0 {
+				cmds := make([]tea.Cmd, 0, toStart)
+				for i := 0; i < toStart; i++ {
+					cmds = append(cmds, m.runNextItem())
+				}
+				return m, tea.Batch(cmds...)
+			}
+		}
+		// If no pending but still running workers, wait for them to finish
+		if running > 0 {
+			return m, nil
 		}
 
+		// All work done
 		m.syncing = false
 		m.state = stateReport
 		if cancelled > 0 {

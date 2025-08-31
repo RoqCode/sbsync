@@ -327,6 +327,43 @@ func TestRunNextItemReturnsNilWhenNoPending(t *testing.T) {
 	}
 }
 
+func TestRunNextItemRespectsFolderPhase(t *testing.T) {
+	m := InitialModel()
+	// One folder and one story, both pending; set syncIndex near the story
+	folder := sb.Story{ID: 1, FullSlug: "app", Slug: "app", IsFolder: true}
+	story := sb.Story{ID: 2, FullSlug: "app/page", Slug: "page"}
+	m.preflight.items = []PreflightItem{
+		{Run: RunPending, Story: folder},
+		{Run: RunPending, Story: story},
+	}
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	// Put syncIndex at 1 so naive scan would pick the story first
+	m.syncIndex = 1
+	cmd := m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned")
+	}
+	if m.preflight.items[0].Run != RunRunning {
+		t.Fatalf("expected folder scheduled first, got %v", m.preflight.items[0].Run)
+	}
+	if m.preflight.items[1].Run == RunRunning {
+		t.Fatalf("did not expect story scheduled while folders pending")
+	}
+
+	// Mark folder done; next call should schedule the story
+	m.preflight.items[0].Run = RunDone
+	cmd = m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to schedule story after folders done")
+	}
+	if m.preflight.items[1].Run != RunRunning {
+		t.Fatalf("expected story scheduled after folder phase, got %v", m.preflight.items[1].Run)
+	}
+}
+
 func TestUpdateContinuesWhilePending(t *testing.T) {
 	m := InitialModel()
 	m.state = stateSync

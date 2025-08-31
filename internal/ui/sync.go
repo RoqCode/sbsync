@@ -156,48 +156,72 @@ func (m *Model) runNextItem() tea.Cmd {
 	if len(m.preflight.items) == 0 {
 		return nil
 	}
+    // Phase barrier: if any folder is not yet done (pending or running),
+    // do not start stories. Folders must complete fully before stories run.
+    hasActiveFolders := false
+    for i := range m.preflight.items {
+        if m.preflight.items[i].Story.IsFolder && m.preflight.items[i].Run != RunDone {
+            hasActiveFolders = true
+            break
+        }
+    }
 	idx := -1
 	// First pass: from current index to end
 	start := m.syncIndex
 	if start < 0 {
 		start = 0
 	}
-	for i := start; i < len(m.preflight.items); i++ {
-		if m.preflight.items[i].Run == RunPending {
-			idx = i
-			break
-		}
-	}
+    for i := start; i < len(m.preflight.items); i++ {
+        if m.preflight.items[i].Run == RunPending {
+            if hasActiveFolders && !m.preflight.items[i].Story.IsFolder {
+                continue // defer stories until all folders are handled
+            }
+            idx = i
+            break
+        }
+    }
 	// Second pass: from 0 to current index
 	if idx == -1 {
 		for i := 0; i < start; i++ {
 			if m.preflight.items[i].Run == RunPending {
+				if hasActiveFolders && !m.preflight.items[i].Story.IsFolder {
+					continue // still in folder phase
+				}
 				idx = i
 				break
 			}
 		}
 	}
-	if idx == -1 {
-		// No pending items — nothing to run
-		return nil
-	}
+    if idx == -1 {
+        // Either no pending items or only stories pending while folders still running.
+        // In both cases, do not schedule anything new.
+        return nil
+    }
 	m.syncIndex = idx
 	m.preflight.items[idx].Run = RunRunning
 
-	// Create orchestrator for this operation
-	reportAdapter := &reportAdapter{report: &m.report}
-	// Build a slug->target index from scan results (cheap to rebuild)
-	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
-	for _, s := range m.storiesTarget {
-		tgtIndex[s.FullSlug] = s
-	}
-	orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace, tgtIndex)
-
-	// Create a sync item adapter
+	// Lazily create orchestrator inside the returned command to avoid panics
+	// when spaces/API are not initialized in tests.
+	// Build a lightweight adapter to capture current index and item.
 	item := &preflightItemAdapter{item: m.preflight.items[idx]}
 
-	// Use orchestrator to run the sync operation
-	return orchestrator.RunSyncItem(m.syncContext, idx, item)
+	return func() tea.Msg {
+		// If essential dependencies are missing, fail fast with a result message.
+		if m.api == nil || m.sourceSpace == nil || m.targetSpace == nil {
+			return syncResultMsg{Index: idx, Err: fmt.Errorf("sync prerequisites not initialized")}
+		}
+
+		// Rebuild report adapter and target index at execution time.
+		reportAdapter := &reportAdapter{report: &m.report}
+		tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+		for _, s := range m.storiesTarget {
+			tgtIndex[s.FullSlug] = s
+		}
+		orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace, tgtIndex)
+		// Delegate to orchestrator command
+		cmd := orchestrator.RunSyncItem(m.syncContext, idx, item)
+		return cmd()
+	}
 }
 
 // preflightItemAdapter adapts PreflightItem to sync.SyncItem interface

@@ -202,3 +202,32 @@ func TestOptimizePreflight_FullFolderSelection(t *testing.T) {
 		t.Fatalf("expected 3 items after optimization, got %d", len(m.preflight.items))
 	}
 }
+
+func TestEnterStartsSequentialWhenFoldersPresent(t *testing.T) {
+	// Preflight contains a folder and a story; pressing enter should start only one worker (sequential)
+	m := InitialModel()
+	folder := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	story := sb.Story{ID: 2, Name: "p", Slug: "p", FullSlug: "app/p"}
+	m.preflight.items = []PreflightItem{
+		{Story: folder, Selected: true, Run: RunPending},
+		{Story: story, Selected: true, Run: RunPending},
+	}
+
+	// simulate token so API client gets created
+	m.cfg.Token = "test-token"
+	// Press enter to begin sync
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.state != stateSync {
+		t.Fatalf("expected stateSync after enter")
+	}
+	// Exactly one item should be marked running due to sequential folder phase
+	running := 0
+	for _, it := range m.preflight.items {
+		if it.Run == RunRunning {
+			running++
+		}
+	}
+	if running != 1 {
+		t.Fatalf("expected exactly 1 item running at start when folders present, got %d", running)
+	}
+}

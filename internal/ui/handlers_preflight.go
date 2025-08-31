@@ -185,10 +185,21 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.report = *NewReport(sourceSpaceName, targetSpaceName)
 
 		m.statusMsg = fmt.Sprintf("Synchronisiere %d Items…", len(m.preflight.items))
-		// Start a small worker pool by scheduling multiple items at once
-		// Keep it simple: schedule 6 parallel runNextItem commands
+		// Start worker pool. During folder phase, run sequentially to avoid parent/child races.
+		// After all folders are done, allow some parallelism for stories.
 		cmds := []tea.Cmd{m.spinner.Tick}
-		for i := 0; i < 6; i++ {
+		hasFolders := false
+		for _, it := range m.preflight.items {
+			if it.Story.IsFolder {
+				hasFolders = true
+				break
+			}
+		}
+		parallel := 6
+		if hasFolders {
+			parallel = 1
+		}
+		for i := 0; i < parallel; i++ {
 			cmds = append(cmds, m.runNextItem())
 		}
 		return m, tea.Batch(cmds...)
