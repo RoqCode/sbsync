@@ -48,71 +48,71 @@ type TransportOptions struct {
 
 // DefaultTransportOptionsFromEnv returns defaults suitable for Storyblok MA/CDA.
 func DefaultTransportOptionsFromEnv() TransportOptions {
-    // Defaults per PLANNING.md Phase 1
-    maLimit := Limit{RPS: 5, Burst: 6}
-    cdaLimit := Limit{RPS: 10, Burst: 10}
+	// Defaults per PLANNING.md Phase 1
+	maLimit := Limit{RPS: 5, Burst: 6}
+	cdaLimit := Limit{RPS: 10, Burst: 10}
 
-    // Environment overrides for MA
-    if v := strings.TrimSpace(os.Getenv("SB_MA_RPS")); v != "" {
-        if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
-            maLimit.RPS = f
-        }
-    }
-    if v := strings.TrimSpace(os.Getenv("SB_MA_BURST")); v != "" {
-        if n, err := strconv.Atoi(v); err == nil && n > 0 {
-            maLimit.Burst = n
-        }
-    }
+	// Environment overrides for MA
+	if v := strings.TrimSpace(os.Getenv("SB_MA_RPS")); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			maLimit.RPS = f
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("SB_MA_BURST")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maLimit.Burst = n
+		}
+	}
 
-    // Retry/backoff tuning via env
-    retryMax := 4
-    if v := strings.TrimSpace(os.Getenv("SB_MA_RETRY_MAX")); v != "" {
-        if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-            retryMax = n
-        }
-    }
-    backoffBase := 250 * time.Millisecond
-    if v := strings.TrimSpace(os.Getenv("SB_MA_RETRY_BASE_MS")); v != "" {
-        if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
-            backoffBase = time.Duration(ms) * time.Millisecond
-        }
-    }
-    backoffCap := 5 * time.Second
-    if v := strings.TrimSpace(os.Getenv("SB_MA_RETRY_CAP_MS")); v != "" {
-        if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
-            backoffCap = time.Duration(ms) * time.Millisecond
-        }
-    }
+	// Retry/backoff tuning via env
+	retryMax := 4
+	if v := strings.TrimSpace(os.Getenv("SB_MA_RETRY_MAX")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			retryMax = n
+		}
+	}
+	backoffBase := 250 * time.Millisecond
+	if v := strings.TrimSpace(os.Getenv("SB_MA_RETRY_BASE_MS")); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			backoffBase = time.Duration(ms) * time.Millisecond
+		}
+	}
+	backoffCap := 5 * time.Second
+	if v := strings.TrimSpace(os.Getenv("SB_MA_RETRY_CAP_MS")); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
+			backoffCap = time.Duration(ms) * time.Millisecond
+		}
+	}
 
-    return TransportOptions{
-        RetryMax:    retryMax,
-        BackoffBase: backoffBase,
-        BackoffCap:  backoffCap,
-        Clock:       realClock{},
-        JitterFn: func(base time.Duration, attempt int) time.Duration {
-            // Full jitter on top of base backoff
-            r := rand.New(rand.NewSource(time.Now().UnixNano()))
-            if base <= 0 {
-                return 0
-            }
-            return time.Duration(r.Int63n(base.Nanoseconds()))
-        },
-        Metrics: NewMetrics(),
-        HostLimits: map[string]Limit{
-            "mapi.storyblok.com": maLimit,
-            "api.storyblok.com":  cdaLimit,
-        },
-    }
+	return TransportOptions{
+		RetryMax:    retryMax,
+		BackoffBase: backoffBase,
+		BackoffCap:  backoffCap,
+		Clock:       realClock{},
+		JitterFn: func(base time.Duration, attempt int) time.Duration {
+			// Full jitter on top of base backoff
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
+			if base <= 0 {
+				return 0
+			}
+			return time.Duration(r.Int63n(base.Nanoseconds()))
+		},
+		Metrics: NewMetrics(),
+		HostLimits: map[string]Limit{
+			"mapi.storyblok.com": maLimit,
+			"api.storyblok.com":  cdaLimit,
+		},
+	}
 }
 
 // tokenBucket is a simple per-host rate limiter with fractional tokens.
 type tokenBucket struct {
-    mu     sync.Mutex
-    rps    float64
-    burst  float64
-    tokens float64
-    last   time.Time
-    clock  Clock
+	mu     sync.Mutex
+	rps    float64
+	burst  float64
+	tokens float64
+	last   time.Time
+	clock  Clock
 }
 
 func newTokenBucket(lim Limit, clock Clock) *tokenBucket {
@@ -169,16 +169,16 @@ func (tb *tokenBucket) Wait(ctx context.Context) error {
 
 // adjustRPS nudges the limiter RPS within [min,max].
 func (tb *tokenBucket) adjustRPS(delta, min, max float64) {
-    tb.mu.Lock()
-    defer tb.mu.Unlock()
-    newRPS := tb.rps + delta
-    if newRPS < min {
-        newRPS = min
-    }
-    if newRPS > max {
-        newRPS = max
-    }
-    tb.rps = newRPS
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	newRPS := tb.rps + delta
+	if newRPS < min {
+		newRPS = min
+	}
+	if newRPS > max {
+		newRPS = max
+	}
+	tb.rps = newRPS
 }
 
 // RetryingLimiterTransport wraps a base RoundTripper with host-based rate limiting and retries.
@@ -260,9 +260,9 @@ func (t *RetryingLimiterTransport) RoundTrip(req *http.Request) (*http.Response,
 	_, _ = ensureGetBody(req)
 
 	lim := t.getLimiter(req.URL.Host)
-    if t.Opts.Metrics != nil {
-        t.Opts.Metrics.IncRequest(req.URL.Host, req.Method)
-    }
+	if t.Opts.Metrics != nil {
+		t.Opts.Metrics.IncRequest(req.URL.Host, req.Method)
+	}
 
 	attempts := max(1, t.Opts.RetryMax+1) // e.g., RetryMax=4 => up to 5 tries total
 	var lastErr error
@@ -281,76 +281,76 @@ func (t *RetryingLimiterTransport) RoundTrip(req *http.Request) (*http.Response,
 			req.Body = body
 		}
 
-        resp, err := t.base().RoundTrip(req)
-        if err != nil {
-            // Retry on transient network errors
-            if isTransientNetErr(err) && attempt < attempts-1 {
-                lastErr = err
-                if rc := getRetryCounters(req.Context()); rc != nil {
-                    rc.Total++
-                    rc.Net++
-                }
-                t.sleepBackoff(attempt)
-                // adaptive: back off slightly on network errors
-                lim.adjustRPS(-0.1, 1, t.maxRPSForHost(req.URL.Host))
-                continue
-            }
-            return nil, err
-        }
+		resp, err := t.base().RoundTrip(req)
+		if err != nil {
+			// Retry on transient network errors
+			if isTransientNetErr(err) && attempt < attempts-1 {
+				lastErr = err
+				if rc := getRetryCounters(req.Context()); rc != nil {
+					rc.Total++
+					rc.Net++
+				}
+				t.sleepBackoff(attempt)
+				// adaptive: back off slightly on network errors
+				lim.adjustRPS(-0.1, 1, t.maxRPSForHost(req.URL.Host))
+				continue
+			}
+			return nil, err
+		}
 
-        // Track status
-        if t.Opts.Metrics != nil {
-            t.Opts.Metrics.IncStatus(resp.StatusCode)
-        }
+		// Track status
+		if t.Opts.Metrics != nil {
+			t.Opts.Metrics.IncStatus(resp.StatusCode)
+		}
 
-        // adaptive: on clean 2xx, gently nudge RPS up to the configured ceiling
-        if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-            lim.adjustRPS(+0.02, 1, t.maxRPSForHost(req.URL.Host))
-        }
+		// adaptive: on clean 2xx, gently nudge RPS up to the configured ceiling
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			lim.adjustRPS(+0.02, 1, t.maxRPSForHost(req.URL.Host))
+		}
 
 		// Retry on HTTP 429/5xx (subset)
-        if shouldRetryStatus(resp.StatusCode) && attempt < attempts-1 {
-            // Respect Retry-After when present
-            if ra := parseRetryAfter(resp.Header.Get("Retry-After"), t.clock().Now()); ra > 0 {
-                if t.Opts.Metrics != nil {
-                    t.Opts.Metrics.IncRetry()
-                    t.Opts.Metrics.AddBackoff(ra)
-                }
-                if rc := getRetryCounters(req.Context()); rc != nil {
-                    rc.Total++
-                    if resp.StatusCode == 429 {
-                        rc.Status429++
-                    } else if resp.StatusCode >= 500 {
-                        rc.Status5xx++
-                    }
-                }
-                // adaptive: back off RPS slightly on 429/5xx
-                lim.adjustRPS(-0.3, 1, t.maxRPSForHost(req.URL.Host))
-                resp.Body.Close()
-                t.clock().Sleep(minDur(ra, t.Opts.BackoffCap))
-                continue
-            }
-            // Otherwise exponential backoff with jitter
-            resp.Body.Close()
-            t.sleepBackoff(attempt)
-            if t.Opts.Metrics != nil {
-                t.Opts.Metrics.IncRetry()
-            }
-            if rc := getRetryCounters(req.Context()); rc != nil {
-                rc.Total++
-                if resp.StatusCode == 429 {
-                    rc.Status429++
-                } else if resp.StatusCode >= 500 {
-                    rc.Status5xx++
-                }
-            }
-            // adaptive: back off RPS slightly on 429/5xx
-            lim.adjustRPS(-0.2, 1, t.maxRPSForHost(req.URL.Host))
-            continue
-        }
+		if shouldRetryStatus(resp.StatusCode) && attempt < attempts-1 {
+			// Respect Retry-After when present
+			if ra := parseRetryAfter(resp.Header.Get("Retry-After"), t.clock().Now()); ra > 0 {
+				if t.Opts.Metrics != nil {
+					t.Opts.Metrics.IncRetry()
+					t.Opts.Metrics.AddBackoff(ra)
+				}
+				if rc := getRetryCounters(req.Context()); rc != nil {
+					rc.Total++
+					if resp.StatusCode == 429 {
+						rc.Status429++
+					} else if resp.StatusCode >= 500 {
+						rc.Status5xx++
+					}
+				}
+				// adaptive: back off RPS slightly on 429/5xx
+				lim.adjustRPS(-0.3, 1, t.maxRPSForHost(req.URL.Host))
+				resp.Body.Close()
+				t.clock().Sleep(minDur(ra, t.Opts.BackoffCap))
+				continue
+			}
+			// Otherwise exponential backoff with jitter
+			resp.Body.Close()
+			t.sleepBackoff(attempt)
+			if t.Opts.Metrics != nil {
+				t.Opts.Metrics.IncRetry()
+			}
+			if rc := getRetryCounters(req.Context()); rc != nil {
+				rc.Total++
+				if resp.StatusCode == 429 {
+					rc.Status429++
+				} else if resp.StatusCode >= 500 {
+					rc.Status5xx++
+				}
+			}
+			// adaptive: back off RPS slightly on 429/5xx
+			lim.adjustRPS(-0.2, 1, t.maxRPSForHost(req.URL.Host))
+			continue
+		}
 
-        return resp, nil
-    }
+		return resp, nil
+	}
 	if lastErr == nil {
 		lastErr = errors.New("max retries exceeded")
 	}
@@ -377,17 +377,17 @@ func (t *RetryingLimiterTransport) sleepBackoff(attempt int) {
 }
 
 func (t *RetryingLimiterTransport) maxRPSForHost(host string) float64 {
-    if host == "" {
-        host = "_default_"
-    }
-    if t.Opts.HostLimits != nil {
-        if lim, ok := t.Opts.HostLimits[host]; ok {
-            if lim.RPS > 0 {
-                return lim.RPS
-            }
-        }
-    }
-    return 10
+	if host == "" {
+		host = "_default_"
+	}
+	if t.Opts.HostLimits != nil {
+		if lim, ok := t.Opts.HostLimits[host]; ok {
+			if lim.RPS > 0 {
+				return lim.RPS
+			}
+		}
+	}
+	return 10
 }
 
 func isTransientNetErr(err error) bool {

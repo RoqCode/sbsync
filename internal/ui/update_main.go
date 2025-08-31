@@ -58,36 +58,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleReportKey(key)
 		}
 
-    case tea.WindowSizeMsg:
-        m.width, m.height = msg.Width, msg.Height
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
 
-        // Update viewport dimensions
-        // Header height: default 3 (title + divider + 1-line state header)
-        headerHeight := 3
-        if m.state == stateSync {
-            // Empirically account for:
-            // - progress line with style margin
-            // - current item line
-            // - stats line
-            // - multi-row RPS graph
-            // This totals 6 + graphHeight lines for the state header portion.
-            headerHeight = 6
-            if m.showRpsGraph && m.rpsGraphHeight > 0 {
-                headerHeight += m.rpsGraphHeight
-            }
-        }
-        footerHeight := 3 // help text lines
-        viewportHeight := msg.Height - headerHeight - footerHeight
-        if viewportHeight < 5 {
-            viewportHeight = 5
-        }
-        m.viewport.Width = msg.Width
-        m.viewport.Height = viewportHeight
+		// Update viewport dimensions
+		// Header height: default 3 (title + divider + 1-line state header)
+		headerHeight := 3
+		if m.state == stateSync {
+			// Empirically account for:
+			// - progress line with style margin
+			// - current item line
+			// - stats line
+			// - multi-row RPS graph
+			// This totals 6 + graphHeight lines for the state header portion.
+			headerHeight = 6
+			if m.showRpsGraph && m.rpsGraphHeight > 0 {
+				headerHeight += m.rpsGraphHeight
+			}
+		}
+		footerHeight := 3 // help text lines
+		viewportHeight := msg.Height - headerHeight - footerHeight
+		if viewportHeight < 5 {
+			viewportHeight = 5
+		}
+		m.viewport.Width = msg.Width
+		m.viewport.Height = viewportHeight
 
-        // BubbleTea viewport handles all scrolling now
+		// BubbleTea viewport handles all scrolling now
 
-        // Update viewport content after resize
-        m.updateViewportContent()
+		// Update viewport content after resize
+		m.updateViewportContent()
 
 	case validateMsg:
 		if msg.err != nil {
@@ -152,97 +152,97 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-    case statsTickMsg:
-        if m.state != stateSync {
-            return m, nil
-        }
-        now := time.Now()
-        if m.api != nil {
-            snap := m.api.MetricsSnapshot()
-            if m.lastSnapTime.IsZero() {
-                // initialize
-                m.lastSnapTime = now
-                m.lastSnap = snap
-                // store first point
-                m.reqTimes = append(m.reqTimes, now)
-                m.reqTotals = append(m.reqTotals, snap.TotalRequests)
-            } else {
-                dt := now.Sub(m.lastSnapTime).Seconds()
-                var rpsInst float64
-                if dt > 0 {
-                    delta := float64(snap.TotalRequests - m.lastSnap.TotalRequests)
-                    rpsInst = delta / dt
-                }
-                // append sample + cumulative totals
-                m.reqTimes = append(m.reqTimes, now)
-                m.reqSamples = append(m.reqSamples, rpsInst)
-                m.reqTotals = append(m.reqTotals, snap.TotalRequests)
-                m.readTotals = append(m.readTotals, snap.ReadRequests)
-                m.writeTotals = append(m.writeTotals, snap.WriteRequests)
-                m.status429Totals = append(m.status429Totals, snap.Status429)
-                m.status5xxTotals = append(m.status5xxTotals, snap.Status5xx)
-                // prune window
-                cutoff := now.Add(-m.reqWindow)
-                j := 0
-                for j < len(m.reqTimes) && m.reqTimes[j].Before(cutoff) {
-                    j++
-                }
-                if j > 0 {
-                    m.reqTimes = append([]time.Time(nil), m.reqTimes[j:]...)
-                    m.reqSamples = append([]float64(nil), m.reqSamples[j:]...)
-                    m.reqTotals = append([]int64(nil), m.reqTotals[j:]...)
-                    m.readTotals = append([]int64(nil), m.readTotals[j:]...)
-                    m.writeTotals = append([]int64(nil), m.writeTotals[j:]...)
-                    m.status429Totals = append([]int64(nil), m.status429Totals[j:]...)
-                    m.status5xxTotals = append([]int64(nil), m.status5xxTotals[j:]...)
-                }
-                // capture previous values for trend arrows before updating
-                m.prevRPS = m.rpsCurrent
-                m.prevReadRPS = m.rpsReadCurrent
-                m.prevWriteRPS = m.rpsWriteCurrent
-                m.prevSuccS = m.spsSuccess
-                m.prevWarnPct = m.warningRate
-                m.prevErrPct = m.errorRate
-                // window-based RPS using first and last totals
-                if len(m.reqTimes) >= 2 {
-                    elapsed := now.Sub(m.reqTimes[0]).Seconds()
-                    if elapsed > 0 {
-                        totalDelta := float64(m.reqTotals[len(m.reqTotals)-1] - m.reqTotals[0])
-                        m.rpsCurrent = totalDelta / elapsed
-                        readDelta := float64(m.readTotals[len(m.readTotals)-1] - m.readTotals[0])
-                        writeDelta := float64(m.writeTotals[len(m.writeTotals)-1] - m.writeTotals[0])
-                        m.rpsReadCurrent = readDelta / elapsed
-                        m.rpsWriteCurrent = writeDelta / elapsed
-                        // HTTP warning/error rates as percentages over the same window
-                        if totalDelta > 0 {
-                            warnDelta := float64(m.status429Totals[len(m.status429Totals)-1] - m.status429Totals[0])
-                            errDelta := float64(m.status5xxTotals[len(m.status5xxTotals)-1] - m.status5xxTotals[0])
-                            m.warningRate = (warnDelta / totalDelta) * 100.0
-                            m.errorRate = (errDelta / totalDelta) * 100.0
-                        } else {
-                            m.warningRate = 0
-                            m.errorRate = 0
-                        }
-                    } else {
-                        m.rpsCurrent = rpsInst
-                        m.rpsReadCurrent = 0
-                        m.rpsWriteCurrent = 0
-                        m.warningRate = 0
-                        m.errorRate = 0
-                    }
-                } else {
-                    m.rpsCurrent = rpsInst
-                    m.rpsReadCurrent = 0
-                    m.rpsWriteCurrent = 0
-                    m.warningRate = 0
-                    m.errorRate = 0
-                }
-                // update last snapshot
-                m.lastSnapTime = now
-                m.lastSnap = snap
-            }
-        }
-        return m, m.statsTick()
+	case statsTickMsg:
+		if m.state != stateSync {
+			return m, nil
+		}
+		now := time.Now()
+		if m.api != nil {
+			snap := m.api.MetricsSnapshot()
+			if m.lastSnapTime.IsZero() {
+				// initialize
+				m.lastSnapTime = now
+				m.lastSnap = snap
+				// store first point
+				m.reqTimes = append(m.reqTimes, now)
+				m.reqTotals = append(m.reqTotals, snap.TotalRequests)
+			} else {
+				dt := now.Sub(m.lastSnapTime).Seconds()
+				var rpsInst float64
+				if dt > 0 {
+					delta := float64(snap.TotalRequests - m.lastSnap.TotalRequests)
+					rpsInst = delta / dt
+				}
+				// append sample + cumulative totals
+				m.reqTimes = append(m.reqTimes, now)
+				m.reqSamples = append(m.reqSamples, rpsInst)
+				m.reqTotals = append(m.reqTotals, snap.TotalRequests)
+				m.readTotals = append(m.readTotals, snap.ReadRequests)
+				m.writeTotals = append(m.writeTotals, snap.WriteRequests)
+				m.status429Totals = append(m.status429Totals, snap.Status429)
+				m.status5xxTotals = append(m.status5xxTotals, snap.Status5xx)
+				// prune window
+				cutoff := now.Add(-m.reqWindow)
+				j := 0
+				for j < len(m.reqTimes) && m.reqTimes[j].Before(cutoff) {
+					j++
+				}
+				if j > 0 {
+					m.reqTimes = append([]time.Time(nil), m.reqTimes[j:]...)
+					m.reqSamples = append([]float64(nil), m.reqSamples[j:]...)
+					m.reqTotals = append([]int64(nil), m.reqTotals[j:]...)
+					m.readTotals = append([]int64(nil), m.readTotals[j:]...)
+					m.writeTotals = append([]int64(nil), m.writeTotals[j:]...)
+					m.status429Totals = append([]int64(nil), m.status429Totals[j:]...)
+					m.status5xxTotals = append([]int64(nil), m.status5xxTotals[j:]...)
+				}
+				// capture previous values for trend arrows before updating
+				m.prevRPS = m.rpsCurrent
+				m.prevReadRPS = m.rpsReadCurrent
+				m.prevWriteRPS = m.rpsWriteCurrent
+				m.prevSuccS = m.spsSuccess
+				m.prevWarnPct = m.warningRate
+				m.prevErrPct = m.errorRate
+				// window-based RPS using first and last totals
+				if len(m.reqTimes) >= 2 {
+					elapsed := now.Sub(m.reqTimes[0]).Seconds()
+					if elapsed > 0 {
+						totalDelta := float64(m.reqTotals[len(m.reqTotals)-1] - m.reqTotals[0])
+						m.rpsCurrent = totalDelta / elapsed
+						readDelta := float64(m.readTotals[len(m.readTotals)-1] - m.readTotals[0])
+						writeDelta := float64(m.writeTotals[len(m.writeTotals)-1] - m.writeTotals[0])
+						m.rpsReadCurrent = readDelta / elapsed
+						m.rpsWriteCurrent = writeDelta / elapsed
+						// HTTP warning/error rates as percentages over the same window
+						if totalDelta > 0 {
+							warnDelta := float64(m.status429Totals[len(m.status429Totals)-1] - m.status429Totals[0])
+							errDelta := float64(m.status5xxTotals[len(m.status5xxTotals)-1] - m.status5xxTotals[0])
+							m.warningRate = (warnDelta / totalDelta) * 100.0
+							m.errorRate = (errDelta / totalDelta) * 100.0
+						} else {
+							m.warningRate = 0
+							m.errorRate = 0
+						}
+					} else {
+						m.rpsCurrent = rpsInst
+						m.rpsReadCurrent = 0
+						m.rpsWriteCurrent = 0
+						m.warningRate = 0
+						m.errorRate = 0
+					}
+				} else {
+					m.rpsCurrent = rpsInst
+					m.rpsReadCurrent = 0
+					m.rpsWriteCurrent = 0
+					m.warningRate = 0
+					m.errorRate = 0
+				}
+				// update last snapshot
+				m.lastSnapTime = now
+				m.lastSnap = snap
+			}
+		}
+		return m, m.statsTick()
 
 	case syncResultMsg:
 		// Prefer counters reported by result; fallback to client metrics delta
@@ -314,30 +314,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-        // Track successes for success/sec metric (count both pure success and success-with-warning)
-        if msg.Err == nil && msg.Result != nil {
-            m.successTotal++
-            now := time.Now()
-            m.successTimes = append(m.successTimes, now)
-            m.successTotals = append(m.successTotals, m.successTotal)
-            // prune window
-            cutoff := now.Add(-m.reqWindow)
-            j := 0
-            for j < len(m.successTimes) && m.successTimes[j].Before(cutoff) {
-                j++
-            }
-            if j > 0 {
-                m.successTimes = append([]time.Time(nil), m.successTimes[j:]...)
-                m.successTotals = append([]int64(nil), m.successTotals[j:]...)
-            }
-            if len(m.successTimes) >= 2 {
-                elapsed := now.Sub(m.successTimes[0]).Seconds()
-                if elapsed > 0 {
-                    delta := float64(m.successTotals[len(m.successTotals)-1] - m.successTotals[0])
-                    m.spsSuccess = delta / elapsed
-                }
-            }
-        }
+		// Track successes for success/sec metric (count both pure success and success-with-warning)
+		if msg.Err == nil && msg.Result != nil {
+			m.successTotal++
+			now := time.Now()
+			m.successTimes = append(m.successTimes, now)
+			m.successTotals = append(m.successTotals, m.successTotal)
+			// prune window
+			cutoff := now.Add(-m.reqWindow)
+			j := 0
+			for j < len(m.successTimes) && m.successTimes[j].Before(cutoff) {
+				j++
+			}
+			if j > 0 {
+				m.successTimes = append([]time.Time(nil), m.successTimes[j:]...)
+				m.successTotals = append([]int64(nil), m.successTotals[j:]...)
+			}
+			if len(m.successTimes) >= 2 {
+				elapsed := now.Sub(m.successTimes[0]).Seconds()
+				if elapsed > 0 {
+					delta := float64(m.successTotals[len(m.successTotals)-1] - m.successTotals[0])
+					m.spsSuccess = delta / elapsed
+				}
+			}
+		}
 
 		// Recompute aggregate counts
 		done := 0

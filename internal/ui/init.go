@@ -1,16 +1,16 @@
 package ui
 
 import (
-    "os"
-    "strings"
-    "storyblok-sync/internal/config"
-    "storyblok-sync/internal/sb"
-    "time"
+	"os"
+	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/sb"
+	"strings"
+	"time"
 
-    "github.com/charmbracelet/bubbles/spinner"
-    "github.com/charmbracelet/bubbles/textinput"
-    "github.com/charmbracelet/bubbles/viewport"
-    tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func InitialModel() Model {
@@ -78,20 +78,20 @@ func InitialModel() Model {
 	// stats: requests per second window and visual widths
 	m.reqWindow = 30 * time.Second
 	m.reqTimes = nil
-    m.reqSamples = nil
-    m.reqTotals = nil
-    m.readTotals = nil
-    m.writeTotals = nil
-    m.successTotals = nil
-    m.successTimes = nil
-    m.successTotal = 0
-    m.status429Totals = nil
-    m.status5xxTotals = nil
+	m.reqSamples = nil
+	m.reqTotals = nil
+	m.readTotals = nil
+	m.writeTotals = nil
+	m.successTotals = nil
+	m.successTimes = nil
+	m.successTotal = 0
+	m.status429Totals = nil
+	m.status5xxTotals = nil
 	m.workerBarWidth = 8
-    m.rpsGraphWidth = 24
-    m.rpsGraphHeight = 3
-    // Feature flag: enable multi-row RPS bar graph when set
-    m.showRpsGraph = enableFlag(os.Getenv("SB_TUI_GRAPH"))
+	m.rpsGraphWidth = 24
+	m.rpsGraphHeight = 3
+	// Feature flag: enable multi-row RPS bar graph when set
+	m.showRpsGraph = enableFlag(os.Getenv("SB_TUI_GRAPH"))
 
 	// metrics tracking for per-item retry deltas
 	m.syncStartMetrics = make(map[int]sb.MetricsSnapshot)
@@ -103,10 +103,10 @@ func (m Model) Init() tea.Cmd { return nil }
 
 // enableFlag returns true for common truthy values: 1, true, yes (case-insensitive)
 func enableFlag(v string) bool {
-    switch strings.ToLower(strings.TrimSpace(v)) {
-    case "1", "true", "yes", "on", "enable", "enabled":
-        return true
-    default:
-        return false
-    }
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on", "enable", "enabled":
+		return true
+	default:
+		return false
+	}
 }

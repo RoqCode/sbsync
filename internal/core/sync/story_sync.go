@@ -426,10 +426,16 @@ func (ss *StorySyncer) SyncStoryDetailed(story sb.Story, shouldPublish bool) (*S
 	rc := &sb.RetryCounters{}
 	ctx = sb.WithRetryCounters(ctx, rc)
 
-	// Determine operation type based on whether story exists BEFORE syncing
+	// Determine operation type from in-memory index only (avoid extra GET);
+	// fall back to SyncStory internal checks for correctness.
 	operation := OperationCreate
-	if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug); len(existing) > 0 {
+	if _, ok := ss.existingBySlug[story.FullSlug]; ok {
 		operation = OperationUpdate
+	} else {
+		// Fallback to a single GET only when index lacks entry
+		if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug); len(existing) > 0 {
+			operation = OperationUpdate
+		}
 	}
 
 	targetStory, err := ss.SyncStory(ctx, story, shouldPublish)
@@ -455,10 +461,15 @@ func (ss *StorySyncer) SyncFolderDetailed(folder sb.Story, shouldPublish bool) (
 	rc := &sb.RetryCounters{}
 	ctx = sb.WithRetryCounters(ctx, rc)
 
-	// Determine operation type based on whether folder exists BEFORE syncing
+	// Determine operation type from in-memory index only (avoid extra GET)
 	operation := OperationCreate
-	if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, folder.FullSlug); len(existing) > 0 {
+	if _, ok := ss.existingBySlug[folder.FullSlug]; ok {
 		operation = OperationUpdate
+	} else {
+		// Fallback only when index lacks entry
+		if existing, _ := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, folder.FullSlug); len(existing) > 0 {
+			operation = OperationUpdate
+		}
 	}
 
 	targetFolder, err := ss.SyncFolder(ctx, folder, shouldPublish)
