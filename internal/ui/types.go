@@ -144,4 +144,7 @@ type Model struct {
 	sourceCDAToken     string // selected token (preview preferred)
 	sourceCDATokenKind string // "preview" or "public"
 	hasSourceCDAToken  bool
+
+	// Hydration cache (Phase 3)
+	hydrationCache *sync.HydrationCache
 }

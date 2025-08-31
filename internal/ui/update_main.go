@@ -130,6 +130,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, nil
 
+	case hydrateMsg:
+		// Attach hydration cache (if any) and proceed to run items
+		if msg.err != nil {
+			m.statusMsg = "Hydration failed (continuing with MA reads)"
+		} else {
+			m.hydrationCache = msg.cache
+			m.statusMsg = fmt.Sprintf("Hydration done: %d/%d (drafts: %d, published: %d)", msg.hydrated, msg.total, msg.drafts, msg.published)
+		}
+		return m, m.runNextItem()
+
 	case spinner.TickMsg:
 		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync {
 			var cmd tea.Cmd
