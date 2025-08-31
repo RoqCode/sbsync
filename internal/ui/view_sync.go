@@ -231,8 +231,20 @@ func (m Model) renderStatsPanel() string {
 
     // First line
     var out strings.Builder
-    // Left text white, bars colored
-    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("Req/s: %.1f  |  Workers: ", rps)))
+    // Left text white, bars colored, with trend arrows
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("Req/s: %.1f ", rps)))
+    out.WriteString(renderTrendArrow(rps, m.prevRPS, false))
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Read: %.1f ", m.rpsReadCurrent)))
+    out.WriteString(renderTrendArrow(m.rpsReadCurrent, m.prevReadRPS, false))
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Write: %.1f ", m.rpsWriteCurrent)))
+    out.WriteString(renderTrendArrow(m.rpsWriteCurrent, m.prevWriteRPS, false))
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Succ/s: %.1f ", m.spsSuccess)))
+    out.WriteString(renderTrendArrow(m.spsSuccess, m.prevSuccS, false))
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Warn: %.1f%% ", m.warningRate)))
+    out.WriteString(renderTrendArrow(m.warningRate, m.prevWarnPct, true))
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Err: %.1f%% ", m.errorRate)))
+    out.WriteString(renderTrendArrow(m.errorRate, m.prevErrPct, true))
+    out.WriteString(whiteTextStyle.Render("  |  Workers: "))
     out.WriteString(bar)
     out.WriteString(whiteTextStyle.Render(fmt.Sprintf(" %d/%d\n", running, maxW)))
     // Multi-row bar graph for RPS
@@ -294,6 +306,34 @@ func (m Model) renderRpsBarGraph() string {
     // Optional baseline marker using min value (simple)
     _ = math.Abs(0) // silence unused import if math becomes unused later
     return b.String()
+}
+
+// renderTrendArrow renders ▲/▼ arrows with color and a neutral → within tolerance.
+// invert=true means lower is better (e.g., errors), so colors are reversed.
+func renderTrendArrow(curr, prev float64, invert bool) string {
+    // Choose tolerance based on magnitude: more relaxed on percentages.
+    tol := 0.05
+    if curr <= 3 && prev <= 3 {
+        tol = 0.02
+    }
+    // Percentages: smaller tolerance to avoid jitter
+    if curr <= 100 && prev <= 100 && (curr >= 0 && prev >= 0) {
+        tol = 0.1
+    }
+    diff := curr - prev
+    if diff > tol {
+        if invert {
+            return errorStyle.Render("▲") // up is bad
+        }
+        return okStyle.Render("▲")
+    }
+    if diff < -tol {
+        if invert {
+            return okStyle.Render("▼") // down is good
+        }
+        return errorStyle.Render("▼")
+    }
+    return subtleStyle.Render("→")
 }
 
 func (m Model) getItemStatusDisplay(runState string) (string, lipgloss.Style) {

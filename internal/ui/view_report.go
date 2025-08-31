@@ -121,7 +121,7 @@ func (m Model) renderReportHeader() string {
 }
 
 func (m Model) renderReportContent() string {
-	var b strings.Builder
+    var b strings.Builder
 
 	// Statistics section with colored boxes
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
@@ -146,8 +146,14 @@ func (m Model) renderReportContent() string {
 	stats.WriteString(fmt.Sprintf("\n%d Created  |  %d Updated  |  %d Skipped",
 		m.report.Summary.Created, m.report.Summary.Updated, m.report.Summary.Skipped))
 
-	b.WriteString(statsBox.Render(stats.String()))
-	b.WriteString("\n\n")
+    b.WriteString(statsBox.Render(stats.String()))
+    // Average stats panel for the whole sync run
+    avg := m.renderReportAverages()
+    if avg != "" {
+        b.WriteString("\n")
+        b.WriteString(avg)
+    }
+    b.WriteString("\n\n")
 
 	if len(m.report.Entries) == 0 {
 		b.WriteString(subtleStyle.Render("No entries in report.") + "\n")
@@ -204,7 +210,7 @@ func (m Model) renderReportContent() string {
 		}
 	}
 
-	return b.String()
+    return b.String()
 }
 
 func (m Model) renderReportFooter() string {
@@ -215,4 +221,45 @@ func (m Model) renderReportFooter() string {
 		helpText = "j/k scroll  |  pgup/pgdown blättern  |  enter/b back to scan  |  q exit"
 	}
 	return renderFooter("", helpText)
+}
+
+// renderReportAverages shows average Req/s, Read/s, Write/s, Succ/s, Warn%, Err% for the whole sync run
+func (m Model) renderReportAverages() string {
+    // Need non-zero duration
+    durMs := m.report.Duration
+    if durMs <= 0 {
+        return ""
+    }
+    durSec := float64(durMs) / 1000.0
+
+    // Successes per second: count successes and warnings (non-failures)
+    succCount := float64(m.report.Summary.Success + m.report.Summary.Warning)
+    succPerS := 0.0
+    if durSec > 0 {
+        succPerS = succCount / durSec
+    }
+
+    // Transport metrics (requests, read/write, status buckets)
+    var reqPerS, readPerS, writePerS, warnPct, errPct float64
+    if m.api != nil {
+        snap := m.api.MetricsSnapshot()
+        total := float64(snap.TotalRequests)
+        if durSec > 0 {
+            reqPerS = total / durSec
+            readPerS = float64(snap.ReadRequests) / durSec
+            writePerS = float64(snap.WriteRequests) / durSec
+        }
+        if total > 0 {
+            warnPct = float64(snap.Status429) / total * 100.0
+            errPct = float64(snap.Status5xx) / total * 100.0
+        }
+    }
+
+    line := whiteTextStyle.Render(
+        fmt.Sprintf(
+            "Durchschnitt – Req/s: %.1f  Read/s: %.1f  Write/s: %.1f  Succ/s: %.1f  Warn: %.1f%%  Err: %.1f%%",
+            reqPerS, readPerS, writePerS, succPerS, warnPct, errPct,
+        ),
+    )
+    return line
 }

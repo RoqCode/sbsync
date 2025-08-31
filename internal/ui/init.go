@@ -80,6 +80,13 @@ func InitialModel() Model {
 	m.reqTimes = nil
     m.reqSamples = nil
     m.reqTotals = nil
+    m.readTotals = nil
+    m.writeTotals = nil
+    m.successTotals = nil
+    m.successTimes = nil
+    m.successTotal = 0
+    m.status429Totals = nil
+    m.status5xxTotals = nil
 	m.workerBarWidth = 8
     m.rpsGraphWidth = 24
     m.rpsGraphHeight = 3
