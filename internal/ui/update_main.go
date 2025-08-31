@@ -72,7 +72,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
             // - multi-row RPS graph
             // This totals 6 + graphHeight lines for the state header portion.
             headerHeight = 6
-            if m.rpsGraphHeight > 0 {
+            if m.showRpsGraph && m.rpsGraphHeight > 0 {
                 headerHeight += m.rpsGraphHeight
             }
         }

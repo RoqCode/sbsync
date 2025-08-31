@@ -1,14 +1,16 @@
 package ui
 
 import (
-	"storyblok-sync/internal/config"
-	"storyblok-sync/internal/sb"
-	"time"
+    "os"
+    "strings"
+    "storyblok-sync/internal/config"
+    "storyblok-sync/internal/sb"
+    "time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+    "github.com/charmbracelet/bubbles/spinner"
+    "github.com/charmbracelet/bubbles/textinput"
+    "github.com/charmbracelet/bubbles/viewport"
+    tea "github.com/charmbracelet/bubbletea"
 )
 
 func InitialModel() Model {
@@ -78,8 +80,10 @@ func InitialModel() Model {
 	m.reqTimes = nil
 	m.reqSamples = nil
 	m.workerBarWidth = 8
-	m.rpsGraphWidth = 24
-	m.rpsGraphHeight = 3
+    m.rpsGraphWidth = 24
+    m.rpsGraphHeight = 3
+    // Feature flag: enable multi-row RPS bar graph when set
+    m.showRpsGraph = enableFlag(os.Getenv("SB_TUI_GRAPH"))
 
 	// metrics tracking for per-item retry deltas
 	m.syncStartMetrics = make(map[int]sb.MetricsSnapshot)
@@ -88,3 +92,13 @@ func InitialModel() Model {
 }
 
 func (m Model) Init() tea.Cmd { return nil }
+
+// enableFlag returns true for common truthy values: 1, true, yes (case-insensitive)
+func enableFlag(v string) bool {
+    switch strings.ToLower(strings.TrimSpace(v)) {
+    case "1", "true", "yes", "on", "enable", "enabled":
+        return true
+    default:
+        return false
+    }
+}

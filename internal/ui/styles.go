@@ -45,6 +45,11 @@ var (
 	stateSkipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	stateDoneStyle   = lipgloss.NewStyle().Background(lipgloss.Color("10")).Foreground(lipgloss.Color("0")).Bold(true)
 
+	// Accent styles for performance panel
+	rpsBarStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA")) // teal
+	workersBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8942E1")) // purple
+	whiteTextStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+
 	// markers for different story types (colored squares)
 	symbolStory  = fgSymbol("#8942E1", "S")
 	symbolFolder = fgSymbol("#3AC4BA", "F")

@@ -217,26 +217,32 @@ func (m Model) renderStatsPanel() string {
     if filled < 0 {
         filled = 0
     }
-    bar := "["
+    var barB strings.Builder
+    barB.WriteString("[")
     for i := 0; i < barWidth; i++ {
         if i < filled {
-            bar += "█"
+            barB.WriteString(workersBarStyle.Render("█"))
         } else {
-            bar += "·"
+            barB.WriteString(subtleStyle.Render("·"))
         }
     }
-    bar += "]"
+    barB.WriteString("]")
+    bar := barB.String()
 
     // First line
     var out strings.Builder
-    out.WriteString(fmt.Sprintf("Req/s: %.1f  |  Workers: %s %d/%d\n", rps, bar, running, maxW))
+    // Left text white, bars colored
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf("Req/s: %.1f  |  Workers: ", rps)))
+    out.WriteString(bar)
+    out.WriteString(whiteTextStyle.Render(fmt.Sprintf(" %d/%d\n", running, maxW)))
     // Multi-row bar graph for RPS
-    graph := m.renderRpsBarGraph()
-    if graph != "" {
-        out.WriteString(graph)
+    if m.showRpsGraph {
+        graph := m.renderRpsBarGraph()
+        if graph != "" {
+            out.WriteString(graph)
+        }
     }
-    // Keep it subtle and within width
-    return subtleStyle.Render(out.String())
+    return out.String()
 }
 
 func (m Model) renderRpsBarGraph() string {
@@ -266,19 +272,21 @@ func (m Model) renderRpsBarGraph() string {
     if maxv <= 0 {
         maxv = 1
     }
-    // Build rows from top (height) to bottom (1)
+    // Build rows from top (height) to bottom (1), styling each line separately
     var b strings.Builder
     for row := height; row >= 1; row-- {
         threshold := float64(row-1) / float64(height)
+        var line strings.Builder
         for _, v := range samples {
             frac := v / maxv
             if frac >= threshold {
                 // Use full block for filled cell; add minimal spacing for readability
-                b.WriteRune('█')
+                line.WriteRune('█')
             } else {
-                b.WriteRune(' ')
+                line.WriteRune(' ')
             }
         }
+        b.WriteString(rpsBarStyle.Render(line.String()))
         if row > 1 {
             b.WriteRune('\n')
         }

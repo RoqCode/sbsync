@@ -157,6 +157,7 @@ type Model struct {
 	// Worker utilization
 	maxWorkers     int
 	workerBarWidth int
-	rpsGraphWidth  int
-	rpsGraphHeight int
+    rpsGraphWidth  int
+    rpsGraphHeight int
+    showRpsGraph   bool
 }
