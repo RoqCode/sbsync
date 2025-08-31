@@ -171,6 +171,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					// Pure success
 					m.report.AddSuccess(it.Story.FullSlug, msg.Result.Operation, msg.Duration, msg.Result.TargetStory)
+					// Keep target index fresh: if a folder was created/updated, update m.storiesTarget
+					if msg.Result.TargetStory != nil && msg.Result.TargetStory.IsFolder {
+						updated := false
+						for i := range m.storiesTarget {
+							if m.storiesTarget[i].FullSlug == msg.Result.TargetStory.FullSlug {
+								m.storiesTarget[i] = *msg.Result.TargetStory
+								updated = true
+								break
+							}
+						}
+						if !updated {
+							m.storiesTarget = append(m.storiesTarget, *msg.Result.TargetStory)
+						}
+					}
 				}
 			} else {
 				// Fallback for unexpected case

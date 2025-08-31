@@ -156,30 +156,30 @@ func (m *Model) runNextItem() tea.Cmd {
 	if len(m.preflight.items) == 0 {
 		return nil
 	}
-    // Phase barrier: if any folder is not yet done (pending or running),
-    // do not start stories. Folders must complete fully before stories run.
-    hasActiveFolders := false
-    for i := range m.preflight.items {
-        if m.preflight.items[i].Story.IsFolder && m.preflight.items[i].Run != RunDone {
-            hasActiveFolders = true
-            break
-        }
-    }
+	// Phase barrier: if any folder is not yet done (pending or running),
+	// do not start stories. Folders must complete fully before stories run.
+	hasActiveFolders := false
+	for i := range m.preflight.items {
+		if m.preflight.items[i].Story.IsFolder && m.preflight.items[i].Run != RunDone {
+			hasActiveFolders = true
+			break
+		}
+	}
 	idx := -1
 	// First pass: from current index to end
 	start := m.syncIndex
 	if start < 0 {
 		start = 0
 	}
-    for i := start; i < len(m.preflight.items); i++ {
-        if m.preflight.items[i].Run == RunPending {
-            if hasActiveFolders && !m.preflight.items[i].Story.IsFolder {
-                continue // defer stories until all folders are handled
-            }
-            idx = i
-            break
-        }
-    }
+	for i := start; i < len(m.preflight.items); i++ {
+		if m.preflight.items[i].Run == RunPending {
+			if hasActiveFolders && !m.preflight.items[i].Story.IsFolder {
+				continue // defer stories until all folders are handled
+			}
+			idx = i
+			break
+		}
+	}
 	// Second pass: from 0 to current index
 	if idx == -1 {
 		for i := 0; i < start; i++ {
@@ -192,11 +192,11 @@ func (m *Model) runNextItem() tea.Cmd {
 			}
 		}
 	}
-    if idx == -1 {
-        // Either no pending items or only stories pending while folders still running.
-        // In both cases, do not schedule anything new.
-        return nil
-    }
+	if idx == -1 {
+		// Either no pending items or only stories pending while folders still running.
+		// In both cases, do not schedule anything new.
+		return nil
+	}
 	m.syncIndex = idx
 	m.preflight.items[idx].Run = RunRunning
 

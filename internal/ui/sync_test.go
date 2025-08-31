@@ -393,3 +393,52 @@ func TestUpdateContinuesWhilePending(t *testing.T) {
 		t.Fatalf("expected syncIndex moved to next pending (1), got %d", mm.syncIndex)
 	}
 }
+
+func TestUIPhasedSyncAndIndexUpdate_PreventsRootPlacement(t *testing.T) {
+	// Setup model with a folder and a child story, both pending
+	folder := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	story := sb.Story{ID: 2, Name: "p", Slug: "p", FullSlug: "app/p"}
+
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+	m.preflight.items = []PreflightItem{
+		{Story: folder, Selected: true, Run: RunPending},
+		{Story: story, Selected: true, Run: RunPending},
+	}
+
+	// Initially, with folder pending, only one worker should start and it must be the folder
+	cmd := m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to start folder phase")
+	}
+	if m.preflight.items[0].Run != RunRunning || m.preflight.items[1].Run == RunRunning {
+		t.Fatalf("expected folder running first and story not scheduled yet")
+	}
+
+	// Simulate folder completion with a resulting folder returned; UI should refresh target index
+	folderResult := syncItemResult{Operation: "create", TargetStory: &sb.Story{ID: 55, FullSlug: "app", IsFolder: true}}
+	modelAny, cont := m.Update(syncResultMsg{Index: 0, Result: &folderResult})
+	mm := modelAny.(Model)
+	// Update should immediately schedule the next pending story
+	if cont == nil {
+		t.Fatalf("expected Update to return continuation command after folder completion")
+	}
+
+	// Now, a new run should schedule the story (folder phase complete)
+	// The story should already be marked running by the continuation
+	if mm.preflight.items[1].Run != RunRunning {
+		t.Fatalf("expected story to be scheduled after folder done")
+	}
+
+	// Build a syncer with the UI's target index to validate parent resolution will find the folder (no API call)
+	tgtIndex := make(map[string]sb.Story)
+	for _, s := range mm.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	if _, ok := tgtIndex["app"]; !ok {
+		t.Fatalf("expected target index to include created folder 'app'")
+	}
+}

@@ -58,7 +58,9 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		}
 	}
 
-	// Resolve parent folder ID using in-memory target index
+	// Resolve parent folder ID using in-memory target index only to avoid extra API calls.
+	// The UI updates its in-memory target index (m.storiesTarget) as folders are created,
+	// so by the time stories are synced, their parents should be present here.
 	fullStory = ss.resolveParentFolderFromIndex(fullStory)
 
 	// Handle translated slugs
@@ -464,10 +466,8 @@ func (ss *StorySyncer) SyncFolderDetailed(folder sb.Story, shouldPublish bool) (
 
 // resolveParentFolder resolves and sets the correct parent folder ID for a story
 func (ss *StorySyncer) resolveParentFolder(ctx context.Context, story sb.Story) sb.Story {
-	if story.FolderID == nil {
-		return story
-	}
-
+	// Compute parent slug from full slug and resolve against target space.
+	// Ignore any existing FolderID from source; always map by slug.
 	parentSlugStr := ParentSlug(story.FullSlug)
 	if parentSlugStr == "" {
 		story.FolderID = nil

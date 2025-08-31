@@ -178,6 +178,38 @@ func TestSyncStory_Update_UsesRawPayload(t *testing.T) {
 	}
 }
 
+func TestSyncStory_Create_SetsParentFromIndex(t *testing.T) {
+	api := newMockStoryRawSyncAPI()
+	// Source story typed + raw under folder
+	sourceID := 7
+	api.sourceTypedByID[sourceID] = sb.Story{ID: sourceID, Slug: "page", FullSlug: "folder/page", Content: json.RawMessage(`{"component":"page"}`)}
+	api.sourceRawByID[sourceID] = map[string]interface{}{
+		"uuid":      "uuid-child",
+		"name":      "Page",
+		"slug":      "page",
+		"full_slug": "folder/page",
+		"content":   map[string]interface{}{"component": "page"},
+		"is_folder": false,
+	}
+
+	// Existing target index contains parent folder with ID 55
+	existing := map[string]sb.Story{"folder": {ID: 55, FullSlug: "folder", IsFolder: true}}
+
+	syncer := NewStorySyncer(api, 10, 20, existing)
+	st := sb.Story{ID: sourceID, Slug: "page", FullSlug: "folder/page"}
+	if _, err := syncer.SyncStory(context.Background(), st, true); err != nil {
+		t.Fatalf("sync create failed: %v", err)
+	}
+
+	if len(api.rawCreates) != 1 {
+		t.Fatalf("expected one raw create, got %d", len(api.rawCreates))
+	}
+	pid, ok := api.rawCreates[0]["parent_id"].(int)
+	if !ok || pid != 55 {
+		t.Fatalf("expected parent_id 55 from in-memory index, got %v", api.rawCreates[0]["parent_id"])
+	}
+}
+
 func TestSyncFolder_Create_UsesRawPayload(t *testing.T) {
 	api := newMockStoryRawSyncAPI()
 	// Source folder typed + raw
