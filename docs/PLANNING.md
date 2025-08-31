@@ -22,17 +22,16 @@ Each phase specifies scope, acceptance criteria, and tests.
 
 Scope
 
-- Create CDA client
-- Add shared retrying transport used by both MA and CDA clients.
-- Add per‑host rate limiters (MA and CDA) and simple counters.
+- Add a shared retrying HTTP transport used by the Management API client.
+- Add per‑host rate limiter and simple counters.
 
 Details
 
 - Retries: trigger on 429/502/503/504 and transient I/O.
 - Retry‑After: parse seconds and HTTP‑date formats; cap total attempt time.
 - Backoff: exponential with jitter (base 250ms, cap 5s, attempts 3–5); respect context cancel.
-- Limiters: MA default 5 rps, burst 6; CDA default 10 rps.
-- Instrumentation: counters for requests by client, status buckets, retries, backoff sleeps.
+- Limiter: default 5 rps, burst 6 for MA.
+- Instrumentation: counters for requests, status buckets, retries, backoff sleeps.
 
 Acceptance
 
@@ -43,61 +42,26 @@ Tests
 
 - Deterministic transport tests for header parsing, jitter bounds, limiter pacing, cancellation.
 
-### Phase 2: CDA Token Resolution During Scanning (per selected space)
+### Phase 2: On‑Demand Reads, No Pre‑Hydration
 
 Scope
 
-- Resolve CDA tokens up front and store per run; fall back cleanly.
-
-Details (single source of truth)
-
-- Discover the CDA public/preview token for the selected source space via Management API (if permissions allow).
-- If discovery fails or is not permitted, mark as “no CDA token” and use MA reads for hydration as needed.
-
-Security
-
-- Never log tokens; redact in any error messages; keep in memory only; clear on exit.
-
-Acceptance
-
-- Token resolution follows precedence; failures fall back to MA reads without breaking sync.
-
-Tests
-
-- discovery > fallback flows; discovery denied; logs redacted.
-
-### Phase 3: Pre‑Hydration Stage via CDA (before writes)
-
-Scope
-
-- Perform a dedicated “hydration” stage for all selected stories before starting per‑item writes. Continue to list by MA (authoritative); use CDA for content.
+- Fetch content on demand via MA for each item during sync; remove pre‑hydration logic.
 
 Details
 
-- Build a hydration queue from the finalized preflight plan (stories only; skip folders).
-- Batch hydration: group slugs/UUIDs (e.g., 50–100 per request) to maximize CDA efficiency and bound memory.
-- Draft/unpublished: use preview token + `version=draft`.
-- Published & Changes handling:
-  - For stories that are published but have unpublished changes (“Published & Changes”), fetch BOTH published and draft versions during hydration.
-  - Detection strategies (pick one, based on API capabilities):
-    - Prefer API metadata that flags this state (if available in list/get responses).
-    - Or, when preview token is available: fetch both versions and compare canonicalized `content`; if they differ, mark as “has unpublished changes”.
-- Hydration cache records may carry up to two content blobs per story when needed: `publishedContent` and `draftContent` (to minimize memory, store only present variants).
-- Hydration cache: store `content` blobs keyed by story ID/slug; wire ContentManager to read from this cache first.
-- Fallback: for items missing in the cache (hydration miss/failure), let ContentManager fall back to MA `GetStoryWithContent` during the sync step for that item only.
-- Memory guards: cap concurrent batches; store only `content` (not full payloads); progressively clear cache once items are processed.
-- UI: show a brief “Hydrating content …” progress step (hydrated/total) before writes begin.
+- ContentManager calls `GetStoryWithContent` only when needed; maintains a small in‑memory cache.
+- Keep write flow unchanged (raw create/update, UUID alignment); use on‑demand reads for correctness.
 
 Acceptance
 
-- Pre‑hydration runs before writes; hydration cache hits for most items; MA fallback used only for unhydrated items.
-- Significant reduction in MA reads; correctness preserved for draft/published.
+- Sync reads exactly what it needs; no separate hydration step; correctness equivalent to MAPI payloads.
 
 Tests
 
-- Batch reduces call count; ContentManager uses hydration cache; fallback to MA correct; memory caps honored.
+- Ensure `EnsureContent` uses MA and cache; verify sync flow remains correct.
 
-### Phase 4: Write Worker Pool, De‑dup/Idempotency (folders pre‑created)
+### Phase 3: Write Worker Pool, De‑dup/Idempotency (folders pre‑created)
 
 Scope
 
@@ -134,7 +98,7 @@ Tests
 - Concurrency: parallel items target same path → exactly one create chain; coalescing verified.
 - Published & Changes: verifies dual‑write order; published‑only and draft‑only paths verified; raw invariants preserved.
 
-### Phase 5: TUI Performance Panel (Throughput & Workers)
+### Phase 4: TUI Performance Panel (Throughput & Workers)
 
 Scope
 
@@ -154,32 +118,7 @@ Tests
 
 - Sampling logic bounded; panel updates without blocking; works under idle and loaded runs.
 
-### Phase 6: Target Hydration + Diff / No‑op Detection (Optional)
-
-Scope
-
-- Avoid updates when target payload would be identical to source by comparing pre‑hydrated source content against target content hydrated in bulk.
-
-Details
-
-- After Phase 3 pre‑hydrates source content, perform a matching “target hydration” stage:
-  - Enumerate target stories in scope (by slug set from the preflight plan).
-  - Hydrate target content in CDA batches (or MA if CDA not available), using the same batching/memory guards.
-- Canonicalize both source and target content: sort keys; strip read‑only/transient fields; for arrays, match by `_uid`.
-- Compare canonical forms; if equal, mark the item as no‑op and drop it from the final write plan.
-- Safety: still keep raw‑payload invariants for remaining updates; do not change existing write ordering (e.g., Published & Changes sequence).
-
-Acceptance
-
-- No‑op updates are skipped; collision and publish logic unaffected.
-- Hydration cache usage verified for both source and target; memory caps respected.
-
-Tests
-
-- Canonicalization correctness (maps/arrays); skip logic avoids false positives.
-- Target hydration reduces per‑item reads; memory bounded; end‑to‑end write plan excludes no‑ops.
-
-### Phase 7: Dynamic Concurrency & Circuit Breakers
+### Phase 5: Dynamic Concurrency & Circuit Breakers
 
 Scope
 
@@ -198,11 +137,31 @@ Tests
 
 - Ramp‑up/down behavior; breaker trips and recovers; throughput preserved.
 
+### Phase 6: Sync Robustness & UX
+
+Scope
+
+- Improve pause/resume behavior, error surfacing, and reporting ergonomics. Optional persistence of run state.
+
+Details
+
+- Pause/cancel smoothing; ensure idempotent resume from the next pending item.
+- Clearer per‑item errors in the Report view; grouped summaries.
+- Optional: persist run state (preflight selection + per‑item status) to allow resume after program restart.
+
+Acceptance
+
+- Users can pause/cancel/resume smoothly; errors are easy to find and act on.
+- (If enabled) A program restart can resume the run with the same preflight selection.
+
+Tests
+
+- Resume picks up the correct next item; idempotency preserved.
+- Report formatting remains stable; summaries reflect actual outcomes.
+
 ## Configuration
 
 - `SB_MA_RPS`, `SB_MA_BURST`, `SB_MA_RETRY_MAX`, `SB_MA_RETRY_BASE_MS`.
-- `SB_CDA_RPS`, `SB_CDA_RETRY_MAX`, `SB_CDA_PER_PAGE`, `SB_CDA_VERSION`.
-- CDA tokens are discovered per selected space (Phase 2). Avoid pre‑configuring tokens in env/config to prevent mismatch with selected spaces.
 - Security: never log tokens; redact sensitive values.
 
 ## Observability
@@ -213,16 +172,15 @@ Tests
 
 ## Edge Cases & Consistency
 
-- Mid‑run source changes: consider snapshotting space `cv`/timestamp and passing to CDA.
-- Locales: ensure hydration covers required locales; merge correctly in payloads.
-- Relations/assets: avoid CDA options that resolve references if writer expects raw JSON.
+- Mid‑run source changes: consider snapshotting MA `cv`/timestamp where relevant.
+- Locales: ensure MA reads cover required locales; raw invariants remain.
+- Relations/assets: avoid resolving references if writer expects raw JSON.
 
 ## Test Matrix (Per Phase)
 
 - Phase 1: retry/backoff/limiting; Retry‑After parsing; context cancel.
-- Phase 2: token precedence; MA discovery allowed/denied; fallback path; redaction.
-- Phase 3: batch hydration; draft vs published; fallback correctness; memory caps.
-- Phase 4: concurrent folder creation; per‑path locking; coalescing; idempotency.
-- Phase 5: stats sampling bounded; non‑blocking updates.
-- Phase 6: canonicalization and skip; no false positives.
-- Phase 7: dynamic concurrency adjustments; breaker behavior and recovery.
+- Phase 2: on‑demand MA reads; cache behavior; correctness retained.
+- Phase 3: concurrent folder creation; per‑path locking; coalescing; idempotency.
+- Phase 4: stats sampling bounded; non‑blocking updates.
+- Phase 5: dynamic concurrency adjustments; breaker behavior and recovery.
+- Phase 6: resume behavior; report formatting and correctness.

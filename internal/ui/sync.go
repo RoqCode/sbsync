@@ -187,8 +187,6 @@ func (m *Model) runNextItem() tea.Cmd {
 	// Create orchestrator for this operation
 	reportAdapter := &reportAdapter{report: &m.report}
 	orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace)
-	// Attach hydration cache if available
-	orchestrator.SetHydrationCache(m.hydrationCache)
 
 	// Create a sync item adapter
 	item := &preflightItemAdapter{item: m.preflight.items[idx]}

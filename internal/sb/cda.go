@@ -47,6 +47,11 @@ type cdaStoriesResp struct {
 
 // GetStoryRawBySlug fetches a story by slug from CDA (version optional: "published" or "draft").
 func (c *CDAClient) GetStoryRawBySlug(ctx context.Context, spaceID int, slug string, version string) (map[string]any, error) {
+	return c.GetStoryRawBySlugLang(ctx, spaceID, slug, version, "")
+}
+
+// GetStoryRawBySlugLang fetches a story by slug and language from CDA (language optional).
+func (c *CDAClient) GetStoryRawBySlugLang(ctx context.Context, spaceID int, slug string, version string, language string) (map[string]any, error) {
 	if c.token == "" {
 		return nil, errors.New("cda token empty")
 	}
@@ -58,6 +63,9 @@ func (c *CDAClient) GetStoryRawBySlug(ctx context.Context, spaceID int, slug str
 	q.Set("token", c.token)
 	q.Set("version", version)
 	q.Set("cv", "0") // placeholder; snapshotting may pass real cv later
+	if language != "" {
+		q.Set("language", language)
+	}
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -82,6 +90,11 @@ func (c *CDAClient) GetStoryRawBySlug(ctx context.Context, spaceID int, slug str
 // WalkStoriesByPrefix iterates all stories under the given starts_with prefix,
 // invoking fn for each story across all pages (per_page up to 100).
 func (c *CDAClient) WalkStoriesByPrefix(ctx context.Context, startsWith, version string, perPage int, fn func(map[string]any) error) error {
+	return c.WalkStoriesByPrefixLang(ctx, startsWith, version, "", perPage, fn)
+}
+
+// WalkStoriesByPrefixLang iterates all stories for a given language
+func (c *CDAClient) WalkStoriesByPrefixLang(ctx context.Context, startsWith, version, language string, perPage int, fn func(map[string]any) error) error {
 	if c.token == "" {
 		return errors.New("cda token empty")
 	}
@@ -100,6 +113,9 @@ func (c *CDAClient) WalkStoriesByPrefix(ctx context.Context, startsWith, version
 		q.Set("starts_with", startsWith)
 		q.Set("per_page", fmt.Sprint(perPage))
 		q.Set("page", fmt.Sprint(page))
+		if language != "" {
+			q.Set("language", language)
+		}
 		u.RawQuery = q.Encode()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)

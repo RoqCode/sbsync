@@ -110,10 +110,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateSpaceSelect // zurück; du kannst auch einen Fehler-Screen bauen
 			return m, nil
 		}
-		// Persist resolved CDA token (do not log token value)
-		m.sourceCDAToken = msg.cdaToken
-		m.sourceCDATokenKind = msg.cdaTokenKind
-		m.hasSourceCDAToken = len(msg.cdaToken) > 0
 		m.storiesSource = msg.src
 		m.storiesTarget = msg.tgt
 		m.selection.listIndex = 0
@@ -128,39 +124,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = fmt.Sprintf("Scan ok. Source: %d Stories, Target: %d Stories.", len(m.storiesSource), len(m.storiesTarget))
 		m.state = stateBrowseList
 		m.updateViewportContent()
-		return m, nil
-
-	case hydrateStartMsg:
-		// Initialize hydration progress and start listening
-		m.hydrationInProgress = true
-		m.hydrationProgressCh = msg.ch
-		m.hydrationTotal = 0
-		m.hydrationDrafts = 0
-		m.hydrationPublished = 0
-		m.statusMsg = "Hydrating content…"
-		return m, tea.Batch(m.spinner.Tick, listenHydrateProgress(msg.ch), m.runHydrationCmd(msg.ch))
-
-	case hydrateMsg:
-		// Attach hydration cache (if any) and proceed to run items
-		if msg.err != nil {
-			m.statusMsg = "Hydration failed (continuing with MA reads)"
-		} else {
-			m.hydrationCache = msg.cache
-			m.statusMsg = fmt.Sprintf("Hydration done: drafts=%d, published=%d", msg.drafts, msg.published)
-		}
-		m.hydrationInProgress = false
-		return m, m.runNextItem()
-
-	case hydrateProgressMsg:
-		if msg.total > 0 {
-			m.hydrationTotal = msg.total
-		}
-		m.hydrationDrafts += msg.addDrafts
-		m.hydrationPublished += msg.addPublished
-		// Keep listening for more updates
-		if m.hydrationProgressCh != nil {
-			return m, listenHydrateProgress(m.hydrationProgressCh)
-		}
 		return m, nil
 
 	case spinner.TickMsg:

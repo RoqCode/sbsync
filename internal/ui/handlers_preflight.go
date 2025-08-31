@@ -184,11 +184,6 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.report = *NewReport(sourceSpaceName, targetSpaceName)
 
-		// If we have a CDA token, run hydration first, then proceed to sync items
-		if m.hasSourceCDAToken {
-			m.statusMsg = fmt.Sprintf("Hydrating content for %d items…", len(m.preflight.items))
-			return m, tea.Batch(m.spinner.Tick, m.hydrateContentCmd())
-		}
 		m.statusMsg = fmt.Sprintf("Synchronisiere %d Items…", len(m.preflight.items))
 		return m, tea.Batch(m.spinner.Tick, m.runNextItem())
 	}

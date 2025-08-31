@@ -53,13 +53,6 @@ func NewSyncOrchestrator(api SyncAPI, report ReportInterface, sourceSpace, targe
 	}
 }
 
-// SetHydrationCache attaches a hydration cache so all sync operations read from it.
-func (so *SyncOrchestrator) SetHydrationCache(h *HydrationCache) {
-	if so.contentMgr != nil {
-		so.contentMgr.SetHydrationCache(h)
-	}
-}
-
 // RunSyncItem executes sync for a single item and returns a Bubble Tea command
 func (so *SyncOrchestrator) RunSyncItem(ctx context.Context, idx int, item SyncItem) tea.Cmd {
 	return func() tea.Msg {
@@ -134,7 +127,6 @@ func (so *SyncOrchestrator) ShouldPublish() bool {
 // SyncFolderDetailed synchronizes a folder using StorySyncer
 func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult, error) {
 	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
-	syncer.SetContentManager(so.contentMgr)
 	// Publish folders: never; for completeness compute publish flag but it will be ignored for folders
 	publish := so.ShouldPublish() && story.Published
 	return syncer.SyncFolderDetailed(story, publish)
@@ -151,7 +143,6 @@ func (so *SyncOrchestrator) SyncStoryDetailed(story sb.Story) (*SyncItemResult, 
 	publish := so.ShouldPublish() && story.Published
 
 	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
-	syncer.SetContentManager(so.contentMgr)
 	return syncer.SyncStoryDetailed(story, publish)
 }
 

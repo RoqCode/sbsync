@@ -14,12 +14,11 @@ type folderAPI interface {
 
 // ContentManager handles story content fetching and caching
 type ContentManager struct {
-	api       folderAPI
-	spaceID   int
-	cache     map[int]sb.Story
-	maxSize   int
-	hitCount  int
-	hydration *HydrationCache
+	api      folderAPI
+	spaceID  int
+	cache    map[int]sb.Story
+	maxSize  int
+	hitCount int
 }
 
 // NewContentManager creates a new content manager with cache size limit
@@ -39,21 +38,7 @@ func (cm *ContentManager) EnsureContent(ctx context.Context, story sb.Story) (sb
 		return story, nil
 	}
 
-	// Try hydration cache first (prefer draft if available)
-	if cm.hydration != nil {
-		if v, ok := cm.hydration.Get(story.ID); ok {
-			if len(v.Draft) > 0 {
-				story.Content = v.Draft
-				cm.addToCache(story)
-				return story, nil
-			}
-			if len(v.Published) > 0 {
-				story.Content = v.Published
-				cm.addToCache(story)
-				return story, nil
-			}
-		}
-	}
+	// No pre-hydration cache: always prefer API + small cache
 
 	// Check cache first
 	if cached, exists := cm.cache[story.ID]; exists && len(cached.Content) > 0 {
@@ -104,9 +89,4 @@ func (cm *ContentManager) CacheStats() (size, maxSize int) {
 }
 
 // ClearCache clears the entire cache
-func (cm *ContentManager) ClearCache() {
-	cm.cache = make(map[int]sb.Story)
-}
-
-// SetHydrationCache attaches a hydration cache used to satisfy content fetches.
-func (cm *ContentManager) SetHydrationCache(h *HydrationCache) { cm.hydration = h }
+func (cm *ContentManager) ClearCache() { cm.cache = make(map[int]sb.Story) }

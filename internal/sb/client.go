@@ -95,6 +95,51 @@ type spacesResp struct {
 	Spaces []Space `json:"spaces"`
 }
 
+// ---------- Space Details ----------
+type SpaceDetails struct {
+	ID      int          `json:"id"`
+	Name    string       `json:"name"`
+	Options SpaceOptions `json:"options"`
+}
+
+type SpaceOptions struct {
+	Languages []Language `json:"languages"`
+}
+
+type Language struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// GetSpaceDetails fetches a space including options (languages list)
+func (c *Client) GetSpaceDetails(ctx context.Context, spaceID int) (SpaceDetails, error) {
+	if c.token == "" {
+		return SpaceDetails{}, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d", spaceID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return SpaceDetails{}, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return SpaceDetails{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return SpaceDetails{}, fmt.Errorf("space.get status %s", res.Status)
+	}
+	var payload struct {
+		Space SpaceDetails `json:"space"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return SpaceDetails{}, err
+	}
+	return payload.Space, nil
+}
+
 func (c *Client) ListSpaces(ctx context.Context) ([]Space, error) {
 	if c.token == "" {
 		return nil, errors.New("token leer")

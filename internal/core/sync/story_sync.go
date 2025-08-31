@@ -34,12 +34,7 @@ func NewStorySyncer(api SyncAPI, sourceSpaceID, targetSpaceID int) *StorySyncer 
 	}
 }
 
-// SetContentManager overrides the default content manager (for hydration cache sharing).
-func (ss *StorySyncer) SetContentManager(cm *ContentManager) {
-	if cm != nil {
-		ss.contentMgr = cm
-	}
-}
+// Content manager is internal; on-demand MA reads ensure correctness.
 
 // SyncStory synchronizes a single story
 func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPublish bool) (sb.Story, error) {

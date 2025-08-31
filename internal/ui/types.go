@@ -140,17 +140,5 @@ type Model struct {
 	// preserve browse collapse state when entering preflight
 	collapsedBeforePreflight map[int]bool
 
-	// CDA token resolution for source space (Phase 2)
-	sourceCDAToken     string // selected token (preview preferred)
-	sourceCDATokenKind string // "preview" or "public"
-	hasSourceCDAToken  bool
-
-	// Hydration cache (Phase 3)
-	hydrationCache *sync.HydrationCache
-	// Hydration progress (Phase 3+ batching)
-	hydrationInProgress bool
-	hydrationTotal      int
-	hydrationDrafts     int
-	hydrationPublished  int
-	hydrationProgressCh chan hydrateProgressMsg
+	// (no pre-hydration; on-demand MA reads during sync)
 }
