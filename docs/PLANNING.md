@@ -102,21 +102,75 @@ Tests
 
 Scope
 
-- Add a stats panel to the Sync view with live throughput and worker utilization.
+- Add a non‑blocking stats panel to the Sync view with live throughput (items/sec) and worker utilization (active/total).
 
-Details
+Design Overview
 
-- Items/sec: maintain a rolling window via a small ring buffer; update ~500ms.
-- Workers: display active vs total workers as compact bars.
-- Non‑blocking: rendering must be inexpensive and must not block sync.
+- Sampling model: record item completion timestamps in a fixed‑size ring buffer; compute moving throughput over a short window (e.g., last 15–30s).
+- Update cadence: recompute display at most every 500ms via a Tea tick; no tight loops, no per‑frame heavy work.
+- Worker utilization: maintain counters of active/running workers vs configured max; show as a compact bar and numeric fraction.
+- Thread‑safety: stats updates are done only inside Bubble Tea’s Update loop, driven by messages (no background goroutines modifying model state).
 
-Acceptance
+Implementation Plan
 
-- Panel updates periodically during sync; no visible UI jitter or slowdown.
+1) Model additions (internal/ui/types.go)
+   - Add `stats` struct to `Model`:
+     - `completedTimes []time.Time` (ring buffer with capacity, e.g., 512)
+     - `head int` (ring index)
+     - `window time.Duration` (e.g., 15s)
+     - `lastSample time.Time` (to throttle updates)
+     - `itemsPerSec float64`
+     - `activeWorkers int` and `maxWorkers int` (live view of current worker pool)
+   - Keep fields small to avoid increasing copy costs of the model.
 
-Tests
+2) Sync integration (internal/ui/update_main.go)
+   - On each `syncResultMsg`, append `time.Now()` to the ring buffer.
+   - Maintain `activeWorkers` by:
+     - Increment when scheduling a worker (`RunRunning` set) and decrement when a worker produces a `syncResultMsg`.
+     - Set `maxWorkers` from the current pool policy (Phase 3 fixed value, Phase 5 will adapt).
 
-- Sampling logic bounded; panel updates without blocking; works under idle and loaded runs.
+3) Sampling command (internal/ui/update_main.go)
+   - Introduce a `statsTickMsg` driven by `tea.Tick(500 * time.Millisecond, ...)` while in `stateSync`.
+   - On `statsTickMsg`, prune timestamps older than `now - window`, compute `itemsPerSec = float64(len(windowEvents)) / window.Seconds()`.
+   - Re‑enqueue the next tick only while `state == stateSync`.
+
+4) View (internal/ui/view_sync.go)
+   - Render a single‑line or two‑line panel under the progress header, e.g.:
+     - `Throughput: 3.2 it/s  |  Workers: [◼◼◼◻◻◻] 3/6`
+   - Use existing lipgloss styles; keep to a fixed width budget and truncate gracefully.
+   - Only compute derived strings from already‑stored `itemsPerSec`, `activeWorkers`, `maxWorkers` in the view function (no scanning data here).
+
+5) Ring buffer helper (internal/ui/utils.go or dedicated file)
+   - Provide small helpers: `statsInit(capacity)`, `statsAppend(ts time.Time)`, `statsPruneBefore(cutoff time.Time)`.
+   - Avoid allocations: reuse the fixed slice and wrap around via modulo.
+
+6) Non‑blocking guarantees
+   - No logging inside the tick handler; O(n) prune cost bounded by ring capacity (≤512).
+   - Cap window to 30s; cap tick at ≥250ms if the UI becomes tight on small terminals.
+
+7) Feature flag (optional)
+   - `SB_TUI_STATS=0/1` env var to enable/disable the panel quickly if needed.
+
+Acceptance Criteria
+
+- The stats panel appears in `stateSync` and updates roughly twice per second.
+- Under sustained load, no visible UI slowdown or input lag; CPU overhead remains negligible.
+- Items/sec stabilizes to a reasonable value; worker bar reflects active workers.
+
+Testing Strategy
+
+- Unit tests for ring buffer prune/append behavior and items/sec calculation boundaries (empty window, full window, rolling).
+- Update loop tests: feed synthetic `syncResultMsg` at known intervals; assert computed `itemsPerSec` within tolerance.
+- View tests: ensure rendering uses precomputed fields and does not panic on small widths.
+- Concurrency: verify counters update only via messages; no data races in tests with `-race`.
+
+Rollout Steps
+
+1) Land ring buffer and sampling without rendering (behind a no‑op view).
+2) Add simple one‑line panel; verify correctness in tests and manual runs.
+3) Iterate on styling and spacing; keep truncation to fit common terminal widths.
+4) Optional: gate via `SB_TUI_STATS` if any regressions appear.
+
 
 ### Phase 5: Dynamic Concurrency & Circuit Breakers
 

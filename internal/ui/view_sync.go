@@ -1,14 +1,15 @@
 package ui
 
 import (
-	"fmt"
-	"strings"
+    "fmt"
+    "math"
+    "strings"
 
-	"github.com/charmbracelet/lipgloss"
+    "github.com/charmbracelet/lipgloss"
 )
 
 func (m Model) renderSyncHeader() string {
-	var b strings.Builder
+    var b strings.Builder
 
 	// Count states for progress information
 	total := len(m.preflight.items)
@@ -61,30 +62,37 @@ func (m Model) renderSyncHeader() string {
 	}
 
 	b.WriteString("\n")
-	return b.String()
+    // Stats panel: requests/sec and workers + rolling graph
+    b.WriteString(m.renderStatsPanel())
+    return b.String()
 }
 
 func (m Model) renderSyncFooter() string {
-	statusLine := ""
-	if m.syncing {
-		statusLine = m.spinner.View() + " Synchronisiere..."
-	}
+    // Build a single-line footer combining status and help
+    left := ""
+    if m.syncing {
+        left = m.spinner.View() + " Synchronisiere..."
+    }
 
-	help := "ctrl+c: Abbrechen"
-	// If paused (not syncing) and there are pending items, offer resume hint
-	if !m.syncing {
-		hasPending := false
-		for _, it := range m.preflight.items {
-			if it.Run == RunPending {
-				hasPending = true
-				break
-			}
-		}
-		if hasPending {
-			help = "r: Fortsetzen  |  ctrl+c: Abbrechen"
-		}
-	}
-	return renderFooter(statusLine, help)
+    help := "ctrl+c: Abbrechen"
+    // If paused (not syncing) and there are pending items, offer resume hint
+    if !m.syncing {
+        hasPending := false
+        for _, it := range m.preflight.items {
+            if it.Run == RunPending {
+                hasPending = true
+                break
+            }
+        }
+        if hasPending {
+            help = "r: Fortsetzen  |  ctrl+c: Abbrechen"
+        }
+    }
+    line := help
+    if left != "" {
+        line = subtleStyle.Render(left) + "  |  " + help
+    }
+    return renderFooter("", line)
 }
 
 func (m *Model) updateSyncViewport() {
@@ -181,6 +189,103 @@ func (m *Model) updateSyncViewport() {
 	}
 
 	m.viewport.SetContent(content.String())
+}
+
+func (m Model) renderStatsPanel() string {
+    // Requests/sec from sampled window
+    rps := m.rpsCurrent
+    // Active workers: count running
+    running := 0
+    for _, it := range m.preflight.items {
+        if it.Run == RunRunning {
+            running++
+        }
+    }
+    maxW := m.maxWorkers
+    if maxW <= 0 {
+        maxW = 1
+    }
+    // Compact worker bar
+    barWidth := m.workerBarWidth
+    if barWidth <= 0 {
+        barWidth = 8
+    }
+    filled := int(float64(barWidth) * float64(running) / float64(maxW))
+    if filled > barWidth {
+        filled = barWidth
+    }
+    if filled < 0 {
+        filled = 0
+    }
+    bar := "["
+    for i := 0; i < barWidth; i++ {
+        if i < filled {
+            bar += "█"
+        } else {
+            bar += "·"
+        }
+    }
+    bar += "]"
+
+    // First line
+    var out strings.Builder
+    out.WriteString(fmt.Sprintf("Req/s: %.1f  |  Workers: %s %d/%d\n", rps, bar, running, maxW))
+    // Multi-row bar graph for RPS
+    graph := m.renderRpsBarGraph()
+    if graph != "" {
+        out.WriteString(graph)
+    }
+    // Keep it subtle and within width
+    return subtleStyle.Render(out.String())
+}
+
+func (m Model) renderRpsBarGraph() string {
+    if len(m.reqSamples) == 0 {
+        return ""
+    }
+    width := m.rpsGraphWidth
+    if width <= 0 {
+        width = 24
+    }
+    height := m.rpsGraphHeight
+    if height <= 1 {
+        height = 1
+    }
+    start := 0
+    if len(m.reqSamples) > width {
+        start = len(m.reqSamples) - width
+    }
+    samples := m.reqSamples[start:]
+    // Find max for scaling
+    maxv := 0.0
+    for _, v := range samples {
+        if v > maxv {
+            maxv = v
+        }
+    }
+    if maxv <= 0 {
+        maxv = 1
+    }
+    // Build rows from top (height) to bottom (1)
+    var b strings.Builder
+    for row := height; row >= 1; row-- {
+        threshold := float64(row-1) / float64(height)
+        for _, v := range samples {
+            frac := v / maxv
+            if frac >= threshold {
+                // Use full block for filled cell; add minimal spacing for readability
+                b.WriteRune('█')
+            } else {
+                b.WriteRune(' ')
+            }
+        }
+        if row > 1 {
+            b.WriteRune('\n')
+        }
+    }
+    // Optional baseline marker using min value (simple)
+    _ = math.Abs(0) // silence unused import if math becomes unused later
+    return b.String()
 }
 
 func (m Model) getItemStatusDisplay(runState string) (string, lipgloss.Style) {

@@ -1,14 +1,15 @@
 package ui
 
 import (
-	"context"
-	"storyblok-sync/internal/config"
-	sync "storyblok-sync/internal/core/sync"
-	"storyblok-sync/internal/sb"
+    "context"
+    "storyblok-sync/internal/config"
+    sync "storyblok-sync/internal/core/sync"
+    "storyblok-sync/internal/sb"
+    "time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
+    "github.com/charmbracelet/bubbles/spinner"
+    "github.com/charmbracelet/bubbles/textinput"
+    "github.com/charmbracelet/bubbles/viewport"
 )
 
 // --- Model / State ---
@@ -144,4 +145,18 @@ type Model struct {
 	collapsedBeforePreflight map[int]bool
 
 	// (no pre-hydration; on-demand MA reads during sync)
+
+	// --- Stats (Phase 4: TUI Performance Panel) ---
+	// Requests/sec sampling via transport metrics snapshots
+	rpsCurrent   float64
+	reqTimes     []time.Time
+	reqSamples   []float64
+	reqWindow    time.Duration
+	lastSnapTime time.Time
+	lastSnap     sb.MetricsSnapshot
+	// Worker utilization
+	maxWorkers     int
+	workerBarWidth int
+	rpsGraphWidth  int
+	rpsGraphHeight int
 }

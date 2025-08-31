@@ -199,9 +199,12 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if hasFolders {
 			parallel = 1
 		}
+		m.maxWorkers = parallel
 		for i := 0; i < parallel; i++ {
 			cmds = append(cmds, m.runNextItem())
 		}
+		// kick off stats tick for performance panel
+		cmds = append(cmds, m.statsTick())
 		return m, tea.Batch(cmds...)
 	}
 	return m, nil

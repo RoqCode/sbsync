@@ -93,11 +93,11 @@ func (m Model) viewReport() string {
 				if entry.TargetStory != nil && entry.TargetStory.IsFolder {
 					symbol = symbolFolder
 				}
-                extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
-                b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
-                    symbol, entry.Slug, entry.Operation, duration, extra))
-            }
-        }
+				extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
+				b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
+					symbol, entry.Slug, entry.Operation, duration, extra))
+			}
+		}
 	}
 
 	b.WriteString("\n")
@@ -197,11 +197,11 @@ func (m Model) renderReportContent() string {
 				if entry.TargetStory != nil && entry.TargetStory.IsFolder {
 					symbol = symbolFolder
 				}
-                extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
-                b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
-                    symbol, entry.Slug, entry.Operation, duration, extra))
-            }
-        }
+				extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
+				b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
+					symbol, entry.Slug, entry.Operation, duration, extra))
+			}
+		}
 	}
 
 	return b.String()

@@ -3,6 +3,7 @@ package ui
 import (
 	"storyblok-sync/internal/config"
 	"storyblok-sync/internal/sb"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -71,6 +72,14 @@ func InitialModel() Model {
 	// viewport
 	vp := viewport.New(80, 24) // initial dimensions, will be updated in WindowSize
 	m.viewport = vp
+
+	// stats: requests per second window and visual widths
+	m.reqWindow = 30 * time.Second
+	m.reqTimes = nil
+	m.reqSamples = nil
+	m.workerBarWidth = 8
+	m.rpsGraphWidth = 24
+	m.rpsGraphHeight = 3
 
 	// metrics tracking for per-item retry deltas
 	m.syncStartMetrics = make(map[int]sb.MetricsSnapshot)

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -57,23 +58,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleReportKey(key)
 		}
 
-	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
+    case tea.WindowSizeMsg:
+        m.width, m.height = msg.Width, msg.Height
 
-		// Update viewport dimensions
-		headerHeight := 3 // title + divider + state header
-		footerHeight := 3 // help text lines
-		viewportHeight := msg.Height - headerHeight - footerHeight
-		if viewportHeight < 5 {
-			viewportHeight = 5
-		}
-		m.viewport.Width = msg.Width
-		m.viewport.Height = viewportHeight
+        // Update viewport dimensions
+        // Header height: default 3 (title + divider + 1-line state header)
+        headerHeight := 3
+        if m.state == stateSync {
+            // Empirically account for:
+            // - progress line with style margin
+            // - current item line
+            // - stats line
+            // - multi-row RPS graph
+            // This totals 6 + graphHeight lines for the state header portion.
+            headerHeight = 6
+            if m.rpsGraphHeight > 0 {
+                headerHeight += m.rpsGraphHeight
+            }
+        }
+        footerHeight := 3 // help text lines
+        viewportHeight := msg.Height - headerHeight - footerHeight
+        if viewportHeight < 5 {
+            viewportHeight = 5
+        }
+        m.viewport.Width = msg.Width
+        m.viewport.Height = viewportHeight
 
-		// BubbleTea viewport handles all scrolling now
+        // BubbleTea viewport handles all scrolling now
 
-		// Update viewport content after resize
-		m.updateViewportContent()
+        // Update viewport content after resize
+        m.updateViewportContent()
 
 	case validateMsg:
 		if msg.err != nil {
@@ -138,18 +152,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-    case syncResultMsg:
-        // Prefer counters reported by result; fallback to client metrics delta
-        rate429Delta := 0
-        if msg.Result != nil {
-            rate429Delta = msg.Result.Retry429
-        } else if m.api != nil {
-            after := m.api.MetricsSnapshot()
-            if before, ok := m.syncStartMetrics[msg.Index]; ok {
-                rate429Delta = int(after.Status429 - before.Status429)
-                delete(m.syncStartMetrics, msg.Index)
+    case statsTickMsg:
+        if m.state != stateSync {
+            return m, nil
+        }
+        now := time.Now()
+        if m.api != nil {
+            snap := m.api.MetricsSnapshot()
+            if m.lastSnapTime.IsZero() {
+                m.lastSnapTime = now
+                m.lastSnap = snap
+            } else {
+                dt := now.Sub(m.lastSnapTime).Seconds()
+                if dt > 0 {
+                    delta := float64(snap.TotalRequests - m.lastSnap.TotalRequests)
+                    rps := delta / dt
+                    m.rpsCurrent = rps
+                    // append sample
+                    m.reqTimes = append(m.reqTimes, now)
+                    m.reqSamples = append(m.reqSamples, rps)
+                    // prune window
+                    cutoff := now.Add(-m.reqWindow)
+                    j := 0
+                    for j < len(m.reqTimes) && m.reqTimes[j].Before(cutoff) {
+                        j++
+                    }
+                    if j > 0 {
+                        m.reqTimes = append([]time.Time(nil), m.reqTimes[j:]...)
+                        m.reqSamples = append([]float64(nil), m.reqSamples[j:]...)
+                    }
+                }
+                m.lastSnapTime = now
+                m.lastSnap = snap
             }
         }
+        return m, m.statsTick()
+
+	case syncResultMsg:
+		// Prefer counters reported by result; fallback to client metrics delta
+		rate429Delta := 0
+		if msg.Result != nil {
+			rate429Delta = msg.Result.Retry429
+		} else if m.api != nil {
+			after := m.api.MetricsSnapshot()
+			if before, ok := m.syncStartMetrics[msg.Index]; ok {
+				rate429Delta = int(after.Status429 - before.Status429)
+				delete(m.syncStartMetrics, msg.Index)
+			}
+		}
 
 		if msg.Index < len(m.preflight.items) {
 			if msg.Cancelled {
@@ -172,12 +222,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Clear any previous issue by default
 			m.preflight.items[msg.Index].Issue = ""
-            if msg.Err != nil {
-                // Add error to report with complete source story
-                m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "sync", Error: msg.Err.Error(), Duration: msg.Duration, Story: &it.Story, RateLimit429: rate429Delta})
-                // Set inline issue message
-                m.preflight.items[msg.Index].Issue = msg.Err.Error()
-            } else if msg.Result != nil {
+			if msg.Err != nil {
+				// Add error to report with complete source story
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "sync", Error: msg.Err.Error(), Duration: msg.Duration, Story: &it.Story, RateLimit429: rate429Delta})
+				// Set inline issue message
+				m.preflight.items[msg.Index].Issue = msg.Err.Error()
+			} else if msg.Result != nil {
 				// Add successful sync to report
 				if msg.Result.Warning != "" {
 					// Success with warning
@@ -207,6 +257,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success", Operation: "unknown", Duration: msg.Duration, RateLimit429: rate429Delta})
 			}
 		}
+
+        // no-op: throughput by requests/sec is sampled via metrics snapshots
 
 		// Recompute aggregate counts
 		done := 0
@@ -251,6 +303,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if hasPendingFolders {
 			allowed = 1
 		}
+		m.maxWorkers = allowed
 		if pending > 0 && !m.paused {
 			toStart := allowed - running
 			if toStart > pending {
@@ -293,4 +346,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// countLines returns the number of visual lines in a string by counting newlines.
+// Returns 0 for empty strings.
+// (no dynamic header/footer counting; use fixed base + known extras for stability)
+
+// --- Stats tick (Phase 4) ---
+type statsTickMsg struct{}
+
+func (m Model) statsTick() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg { return statsTickMsg{} })
 }
