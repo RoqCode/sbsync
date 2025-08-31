@@ -78,7 +78,8 @@ func InitialModel() Model {
 	// stats: requests per second window and visual widths
 	m.reqWindow = 30 * time.Second
 	m.reqTimes = nil
-	m.reqSamples = nil
+    m.reqSamples = nil
+    m.reqTotals = nil
 	m.workerBarWidth = 8
     m.rpsGraphWidth = 24
     m.rpsGraphHeight = 3

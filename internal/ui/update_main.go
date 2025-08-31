@@ -160,28 +160,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         if m.api != nil {
             snap := m.api.MetricsSnapshot()
             if m.lastSnapTime.IsZero() {
+                // initialize
                 m.lastSnapTime = now
                 m.lastSnap = snap
+                // store first point
+                m.reqTimes = append(m.reqTimes, now)
+                m.reqTotals = append(m.reqTotals, snap.TotalRequests)
             } else {
                 dt := now.Sub(m.lastSnapTime).Seconds()
+                var rpsInst float64
                 if dt > 0 {
                     delta := float64(snap.TotalRequests - m.lastSnap.TotalRequests)
-                    rps := delta / dt
-                    m.rpsCurrent = rps
-                    // append sample
-                    m.reqTimes = append(m.reqTimes, now)
-                    m.reqSamples = append(m.reqSamples, rps)
-                    // prune window
-                    cutoff := now.Add(-m.reqWindow)
-                    j := 0
-                    for j < len(m.reqTimes) && m.reqTimes[j].Before(cutoff) {
-                        j++
-                    }
-                    if j > 0 {
-                        m.reqTimes = append([]time.Time(nil), m.reqTimes[j:]...)
-                        m.reqSamples = append([]float64(nil), m.reqSamples[j:]...)
-                    }
+                    rpsInst = delta / dt
                 }
+                // append sample + cumulative total
+                m.reqTimes = append(m.reqTimes, now)
+                m.reqSamples = append(m.reqSamples, rpsInst)
+                m.reqTotals = append(m.reqTotals, snap.TotalRequests)
+                // prune window
+                cutoff := now.Add(-m.reqWindow)
+                j := 0
+                for j < len(m.reqTimes) && m.reqTimes[j].Before(cutoff) {
+                    j++
+                }
+                if j > 0 {
+                    m.reqTimes = append([]time.Time(nil), m.reqTimes[j:]...)
+                    m.reqSamples = append([]float64(nil), m.reqSamples[j:]...)
+                    m.reqTotals = append([]int64(nil), m.reqTotals[j:]...)
+                }
+                // window-based RPS using first and last totals
+                if len(m.reqTimes) >= 2 {
+                    elapsed := now.Sub(m.reqTimes[0]).Seconds()
+                    if elapsed > 0 {
+                        totalDelta := float64(m.reqTotals[len(m.reqTotals)-1] - m.reqTotals[0])
+                        m.rpsCurrent = totalDelta / elapsed
+                    } else {
+                        m.rpsCurrent = rpsInst
+                    }
+                } else {
+                    m.rpsCurrent = rpsInst
+                }
+                // update last snapshot
                 m.lastSnapTime = now
                 m.lastSnap = snap
             }

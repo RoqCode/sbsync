@@ -151,6 +151,7 @@ type Model struct {
 	rpsCurrent   float64
 	reqTimes     []time.Time
 	reqSamples   []float64
+	reqTotals    []int64
 	reqWindow    time.Duration
 	lastSnapTime time.Time
 	lastSnap     sb.MetricsSnapshot
