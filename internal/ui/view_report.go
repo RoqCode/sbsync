@@ -83,29 +83,21 @@ func (m Model) viewReport() string {
 			b.WriteString("\n")
 		}
 
-		// Show recent successes (limit to avoid clutter)
+		// Show all successes; rely on viewport for scrolling
 		if len(successes) > 0 {
-			b.WriteString(successStyle.Render("✓ SUCCESSES") + " ")
-			if len(successes) > 10 {
-				b.WriteString(subtleStyle.Render(fmt.Sprintf("(showing last 10 of %d)", len(successes))))
-			}
-			b.WriteString("\n")
-
-			start := len(successes) - 10
-			if start < 0 {
-				start = 0
-			}
-			for i := start; i < len(successes); i++ {
+			b.WriteString(successStyle.Render("✓ SUCCESSES") + "\n")
+			for i := 0; i < len(successes); i++ {
 				entry := successes[i]
 				duration := fmt.Sprintf("%dms", entry.Duration)
 				symbol := symbolStory
 				if entry.TargetStory != nil && entry.TargetStory.IsFolder {
 					symbol = symbolFolder
 				}
-				b.WriteString(fmt.Sprintf("  %s %s (%s) %s\n",
-					symbol, entry.Slug, entry.Operation, duration))
-			}
-		}
+                extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
+                b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
+                    symbol, entry.Slug, entry.Operation, duration, extra))
+            }
+        }
 	}
 
 	b.WriteString("\n")
@@ -195,29 +187,21 @@ func (m Model) renderReportContent() string {
 			b.WriteString("\n")
 		}
 
-		// Show recent successes (limit to avoid clutter)
+		// Show all successes; rely on viewport for scrolling
 		if len(successes) > 0 {
-			b.WriteString(successStyle.Render("✓ SUCCESSES") + " ")
-			if len(successes) > 10 {
-				b.WriteString(subtleStyle.Render(fmt.Sprintf("(showing last 10 of %d)", len(successes))))
-			}
-			b.WriteString("\n")
-
-			start := len(successes) - 10
-			if start < 0 {
-				start = 0
-			}
-			for i := start; i < len(successes); i++ {
+			b.WriteString(successStyle.Render("✓ SUCCESSES") + "\n")
+			for i := 0; i < len(successes); i++ {
 				entry := successes[i]
 				duration := fmt.Sprintf("%dms", entry.Duration)
 				symbol := symbolStory
 				if entry.TargetStory != nil && entry.TargetStory.IsFolder {
 					symbol = symbolFolder
 				}
-				b.WriteString(fmt.Sprintf("  %s %s (%s) %s\n",
-					symbol, entry.Slug, entry.Operation, duration))
-			}
-		}
+                extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
+                b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
+                    symbol, entry.Slug, entry.Operation, duration, extra))
+            }
+        }
 	}
 
 	return b.String()
@@ -226,9 +210,9 @@ func (m Model) renderReportContent() string {
 func (m Model) renderReportFooter() string {
 	var helpText string
 	if m.report.Summary.Failure > 0 {
-		helpText = "r retry failures  |  enter/b back to scan  |  q exit"
+		helpText = "j/k scroll  |  pgup/pgdown blättern  |  r retry failures  |  enter/b back to scan  |  q exit"
 	} else {
-		helpText = "enter/b back to scan  |  q exit"
+		helpText = "j/k scroll  |  pgup/pgdown blättern  |  enter/b back to scan  |  q exit"
 	}
 	return renderFooter("", helpText)
 }

@@ -110,6 +110,8 @@ type Model struct {
 	paused      bool               // pause flag to stop scheduling new work
 	api         *sb.Client
 	report      Report
+	// Per-item metrics snapshots to compute rate-limit retry deltas
+	syncStartMetrics map[int]sb.MetricsSnapshot
 
 	// token input
 	ti textinput.Model

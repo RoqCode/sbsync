@@ -2,6 +2,7 @@ package ui
 
 import (
 	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/sb"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -70,6 +71,9 @@ func InitialModel() Model {
 	// viewport
 	vp := viewport.New(80, 24) // initial dimensions, will be updated in WindowSize
 	m.viewport = vp
+
+	// metrics tracking for per-item retry deltas
+	m.syncStartMetrics = make(map[int]sb.MetricsSnapshot)
 
 	return m
 }

@@ -138,12 +138,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case syncResultMsg:
+    case syncResultMsg:
+        // Prefer counters reported by result; fallback to client metrics delta
+        rate429Delta := 0
+        if msg.Result != nil {
+            rate429Delta = msg.Result.Retry429
+        } else if m.api != nil {
+            after := m.api.MetricsSnapshot()
+            if before, ok := m.syncStartMetrics[msg.Index]; ok {
+                rate429Delta = int(after.Status429 - before.Status429)
+                delete(m.syncStartMetrics, msg.Index)
+            }
+        }
+
 		if msg.Index < len(m.preflight.items) {
 			if msg.Cancelled {
 				m.preflight.items[msg.Index].Run = RunCancelled
 				it := m.preflight.items[msg.Index]
-				m.report.AddError(it.Story.FullSlug, "cancelled", "Sync cancelled by user", 0, &it.Story)
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "cancelled", Error: "Sync cancelled by user", Duration: 0, Story: &it.Story, RateLimit429: rate429Delta})
 				// Set inline issue for cancelled item
 				m.preflight.items[msg.Index].Issue = "Sync cancelled by user"
 
@@ -160,21 +172,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Clear any previous issue by default
 			m.preflight.items[msg.Index].Issue = ""
-			if msg.Err != nil {
-				// Add error to report with complete source story
-				m.report.AddError(it.Story.FullSlug, "sync", msg.Err.Error(), msg.Duration, &it.Story)
-				// Set inline issue message
-				m.preflight.items[msg.Index].Issue = msg.Err.Error()
-			} else if msg.Result != nil {
+            if msg.Err != nil {
+                // Add error to report with complete source story
+                m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "sync", Error: msg.Err.Error(), Duration: msg.Duration, Story: &it.Story, RateLimit429: rate429Delta})
+                // Set inline issue message
+                m.preflight.items[msg.Index].Issue = msg.Err.Error()
+            } else if msg.Result != nil {
 				// Add successful sync to report
 				if msg.Result.Warning != "" {
 					// Success with warning
-					m.report.AddWarning(it.Story.FullSlug, msg.Result.Operation, msg.Result.Warning, msg.Duration, &it.Story, msg.Result.TargetStory)
+					m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "warning", Operation: msg.Result.Operation, Warning: msg.Result.Warning, Duration: msg.Duration, Story: &it.Story, TargetStory: msg.Result.TargetStory, RateLimit429: rate429Delta})
 					// Set inline issue message
 					m.preflight.items[msg.Index].Issue = msg.Result.Warning
 				} else {
 					// Pure success
-					m.report.AddSuccess(it.Story.FullSlug, msg.Result.Operation, msg.Duration, msg.Result.TargetStory)
+					m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success", Operation: msg.Result.Operation, Duration: msg.Duration, TargetStory: msg.Result.TargetStory, RateLimit429: rate429Delta})
 					// Keep target index fresh: if a folder was created/updated, update m.storiesTarget
 					if msg.Result.TargetStory != nil && msg.Result.TargetStory.IsFolder {
 						updated := false
@@ -192,7 +204,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else {
 				// Fallback for unexpected case
-				m.report.AddSuccess(it.Story.FullSlug, "unknown", msg.Duration, nil)
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success", Operation: "unknown", Duration: msg.Duration, RateLimit429: rate429Delta})
 			}
 		}
 

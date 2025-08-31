@@ -420,8 +420,11 @@ func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPu
 
 // SyncStoryDetailed synchronizes a story and returns detailed result
 func (ss *StorySyncer) SyncStoryDetailed(story sb.Story, shouldPublish bool) (*SyncItemResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    // Attach per-item retry counters to context so transport can attribute retries
+    rc := &sb.RetryCounters{}
+    ctx = sb.WithRetryCounters(ctx, rc)
 
 	// Determine operation type based on whether story exists BEFORE syncing
 	operation := OperationCreate
@@ -429,22 +432,28 @@ func (ss *StorySyncer) SyncStoryDetailed(story sb.Story, shouldPublish bool) (*S
 		operation = OperationUpdate
 	}
 
-	targetStory, err := ss.SyncStory(ctx, story, shouldPublish)
-	if err != nil {
-		return nil, err
-	}
+    targetStory, err := ss.SyncStory(ctx, story, shouldPublish)
+    if err != nil {
+        // Return counters even on error
+        return &SyncItemResult{Operation: operation, RetryTotal: int(rc.Total), Retry429: int(rc.Status429)}, err
+    }
 
-	return &SyncItemResult{
-		Operation:   operation,
-		TargetStory: &targetStory,
-		Warning:     "",
-	}, nil
+    return &SyncItemResult{
+        Operation:   operation,
+        TargetStory: &targetStory,
+        Warning:     "",
+        RetryTotal:  int(rc.Total),
+        Retry429:    int(rc.Status429),
+    }, nil
 }
 
 // SyncFolderDetailed synchronizes a folder and returns detailed result
 func (ss *StorySyncer) SyncFolderDetailed(folder sb.Story, shouldPublish bool) (*SyncItemResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+    // Attach per-item retry counters to context
+    rc := &sb.RetryCounters{}
+    ctx = sb.WithRetryCounters(ctx, rc)
 
 	// Determine operation type based on whether folder exists BEFORE syncing
 	operation := OperationCreate
@@ -452,16 +461,18 @@ func (ss *StorySyncer) SyncFolderDetailed(folder sb.Story, shouldPublish bool) (
 		operation = OperationUpdate
 	}
 
-	targetFolder, err := ss.SyncFolder(ctx, folder, shouldPublish)
-	if err != nil {
-		return nil, err
-	}
+    targetFolder, err := ss.SyncFolder(ctx, folder, shouldPublish)
+    if err != nil {
+        return &SyncItemResult{Operation: operation, RetryTotal: int(rc.Total), Retry429: int(rc.Status429)}, err
+    }
 
-	return &SyncItemResult{
-		Operation:   operation,
-		TargetStory: &targetFolder,
-		Warning:     "",
-	}, nil
+    return &SyncItemResult{
+        Operation:   operation,
+        TargetStory: &targetFolder,
+        Warning:     "",
+        RetryTotal:  int(rc.Total),
+        Retry429:    int(rc.Status429),
+    }, nil
 }
 
 // resolveParentFolder resolves and sets the correct parent folder ID for a story

@@ -233,42 +233,62 @@ func (t *RetryingLimiterTransport) RoundTrip(req *http.Request) (*http.Response,
 			req.Body = body
 		}
 
-		resp, err := t.base().RoundTrip(req)
-		if err != nil {
-			// Retry on transient network errors
-			if isTransientNetErr(err) && attempt < attempts-1 {
-				lastErr = err
-				t.sleepBackoff(attempt)
-				continue
-			}
-			return nil, err
-		}
+        resp, err := t.base().RoundTrip(req)
+        if err != nil {
+            // Retry on transient network errors
+            if isTransientNetErr(err) && attempt < attempts-1 {
+                lastErr = err
+                if rc := getRetryCounters(req.Context()); rc != nil {
+                    rc.Total++
+                    rc.Net++
+                }
+                t.sleepBackoff(attempt)
+                continue
+            }
+            return nil, err
+        }
 
 		// Track status
 		if t.Opts.Metrics != nil {
 			t.Opts.Metrics.IncStatus(resp.StatusCode)
 		}
 
-		// Retry on HTTP 429/5xx (subset)
-		if shouldRetryStatus(resp.StatusCode) && attempt < attempts-1 {
-			// Respect Retry-After when present
-			if ra := parseRetryAfter(resp.Header.Get("Retry-After"), t.clock().Now()); ra > 0 {
-				if t.Opts.Metrics != nil {
-					t.Opts.Metrics.IncRetry()
-					t.Opts.Metrics.AddBackoff(ra)
-				}
-				resp.Body.Close()
-				t.clock().Sleep(minDur(ra, t.Opts.BackoffCap))
-				continue
-			}
-			// Otherwise exponential backoff with jitter
-			resp.Body.Close()
-			t.sleepBackoff(attempt)
-			if t.Opts.Metrics != nil {
-				t.Opts.Metrics.IncRetry()
-			}
-			continue
-		}
+        // Retry on HTTP 429/5xx (subset)
+        if shouldRetryStatus(resp.StatusCode) && attempt < attempts-1 {
+            // Respect Retry-After when present
+            if ra := parseRetryAfter(resp.Header.Get("Retry-After"), t.clock().Now()); ra > 0 {
+                if t.Opts.Metrics != nil {
+                    t.Opts.Metrics.IncRetry()
+                    t.Opts.Metrics.AddBackoff(ra)
+                }
+                if rc := getRetryCounters(req.Context()); rc != nil {
+                    rc.Total++
+                    if resp.StatusCode == 429 {
+                        rc.Status429++
+                    } else if resp.StatusCode >= 500 {
+                        rc.Status5xx++
+                    }
+                }
+                resp.Body.Close()
+                t.clock().Sleep(minDur(ra, t.Opts.BackoffCap))
+                continue
+            }
+            // Otherwise exponential backoff with jitter
+            resp.Body.Close()
+            t.sleepBackoff(attempt)
+            if t.Opts.Metrics != nil {
+                t.Opts.Metrics.IncRetry()
+            }
+            if rc := getRetryCounters(req.Context()); rc != nil {
+                rc.Total++
+                if resp.StatusCode == 429 {
+                    rc.Status429++
+                } else if resp.StatusCode >= 500 {
+                    rc.Status5xx++
+                }
+            }
+            continue
+        }
 
 		return resp, nil
 	}

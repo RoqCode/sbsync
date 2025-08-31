@@ -204,6 +204,11 @@ func (m *Model) runNextItem() tea.Cmd {
 	m.syncIndex = idx
 	m.preflight.items[idx].Run = RunRunning
 
+	// Capture metrics snapshot to compute per-item retry deltas later
+	if m.api != nil {
+		m.syncStartMetrics[idx] = m.api.MetricsSnapshot()
+	}
+
 	// Lazily create orchestrator inside the returned command to avoid panics
 	// when spaces/API are not initialized in tests.
 	// Build a lightweight adapter to capture current index and item.

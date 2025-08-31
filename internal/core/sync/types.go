@@ -6,9 +6,12 @@ import (
 
 // SyncItemResult represents the result of a single sync operation
 type SyncItemResult struct {
-	Operation   string    `json:"operation"`   // create|update|skip
-	TargetStory *sb.Story `json:"targetStory"` // created/updated story
-	Warning     string    `json:"warning"`     // any warnings
+    Operation   string    `json:"operation"`   // create|update|skip
+    TargetStory *sb.Story `json:"targetStory"` // created/updated story
+    Warning     string    `json:"warning"`     // any warnings
+    // Retry counters (per item) captured from HTTP transport via context
+    RetryTotal int `json:"retryTotal"`
+    Retry429   int `json:"retry429"`
 }
 
 // SyncResultMsg represents a message containing sync operation results

@@ -42,6 +42,15 @@ func NewWithOptions(token string, opts TransportOptions) *Client {
 	}
 }
 
+// MetricsSnapshot returns a copy of the HTTP metrics collected by the client.
+// Useful for attributing retry counts to individual sync items.
+func (c *Client) MetricsSnapshot() MetricsSnapshot {
+	if c == nil || c.metrics == nil {
+		return MetricsSnapshot{}
+	}
+	return c.metrics.Snapshot()
+}
+
 // ---------- Access Tokens (CDA) ----------
 
 // APIKey represents an access token for CDA (public or private/preview).
