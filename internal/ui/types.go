@@ -139,4 +139,9 @@ type Model struct {
 
 	// preserve browse collapse state when entering preflight
 	collapsedBeforePreflight map[int]bool
+
+	// CDA token resolution for source space (Phase 2)
+	sourceCDAToken     string // selected token (preview preferred)
+	sourceCDATokenKind string // "preview" or "public"
+	hasSourceCDAToken  bool
 }

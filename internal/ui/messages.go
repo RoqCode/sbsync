@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	sync "storyblok-sync/internal/core/sync"
 	"storyblok-sync/internal/sb"
 )
 
@@ -17,9 +18,11 @@ type validateMsg struct {
 }
 
 type scanMsg struct {
-	src []sb.Story
-	tgt []sb.Story
-	err error
+	src          []sb.Story
+	tgt          []sb.Story
+	err          error
+	cdaToken     string
+	cdaTokenKind string
 }
 
 func (m Model) validateTokenCmd() tea.Cmd {
@@ -50,6 +53,15 @@ func (m Model) scanStoriesCmd() tea.Cmd {
 		defer cancel()
 		c := sb.New(token)
 
+		// Phase 2: resolve CDA token for source space (preview preferred)
+		var cdaToken, cdaKind string
+		if srcID > 0 {
+			if info, _ := sync.ResolveCDAToken(ctx, c, srcID); info.Available {
+				cdaToken = info.Selected
+				cdaKind = info.Kind
+			}
+		}
+
 		// Parallel wäre nice-to-have, hier sequentiell für Klarheit
 		src, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: srcID, PerPage: 50})
 		if err != nil {
@@ -61,6 +73,6 @@ func (m Model) scanStoriesCmd() tea.Cmd {
 			return scanMsg{err: fmt.Errorf("target scan: %w", err)}
 		}
 		sortStories(tgt)
-		return scanMsg{src: src, tgt: tgt, err: nil}
+		return scanMsg{src: src, tgt: tgt, err: nil, cdaToken: cdaToken, cdaTokenKind: cdaKind}
 	}
 }

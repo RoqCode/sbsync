@@ -42,6 +42,48 @@ func NewWithOptions(token string, opts TransportOptions) *Client {
 	}
 }
 
+// ---------- Access Tokens (CDA) ----------
+
+// APIKey represents an access token for CDA (public or private/preview).
+type APIKey struct {
+	ID      int64   `json:"id"`
+	Access  string  `json:"access"` // "public" or "private" (preview)
+	Name    *string `json:"name,omitempty"`
+	SpaceID int     `json:"space_id"`
+	Token   string  `json:"token"`
+}
+
+type apiKeysResp struct {
+	APIKeys []APIKey `json:"api_keys"`
+}
+
+// ListSpaceAPIKeys lists CDA access tokens for a space via Management API.
+func (c *Client) ListSpaceAPIKeys(ctx context.Context, spaceID int) ([]APIKey, error) {
+	if c.token == "" {
+		return nil, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/api_keys", spaceID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("api_keys.list status %s", res.Status)
+	}
+	var payload apiKeysResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	return payload.APIKeys, nil
+}
+
 // ---------- Spaces ----------
 type Space struct {
 	ID        int    `json:"id"`

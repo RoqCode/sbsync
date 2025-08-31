@@ -217,26 +217,26 @@ func TestRunSyncItem_StoryCreate_PublishRespectsPlan(t *testing.T) {
 }
 
 func TestRunSyncItem_NoRetry_TransportOwnsRetries(t *testing.T) {
-    api := newMockSyncAPI()
-    api.failFirstCreate = true // first create fails
-    api.source[20] = sb.Story{ID: 20, Name: "s2", Slug: "s2", FullSlug: "s2", Published: true}
+	api := newMockSyncAPI()
+	api.failFirstCreate = true // first create fails
+	api.source[20] = sb.Story{ID: 20, Name: "s2", Slug: "s2", FullSlug: "s2", Published: true}
 
-    src := &sb.Space{ID: 1, Name: "src"}
-    tgt := &sb.Space{ID: 2, Name: "tgt"}
-    orch := NewSyncOrchestrator(api, mockReport{}, src, tgt)
+	src := &sb.Space{ID: 1, Name: "src"}
+	tgt := &sb.Space{ID: 2, Name: "tgt"}
+	orch := NewSyncOrchestrator(api, mockReport{}, src, tgt)
 
-    item := testSyncItem{s: api.source[20], folder: false}
-    msg := orch.RunSyncItem(context.Background(), 0, item)()
-    res, ok := msg.(SyncResultMsg)
-    if !ok {
-        t.Fatalf("expected SyncResultMsg, got %T", msg)
-    }
-    if res.Err == nil {
-        t.Fatalf("expected error on first failure without orchestrator retry")
-    }
-    if got := api.createAttempts; got != 1 {
-        t.Fatalf("expected exactly 1 create attempt, got %d", got)
-    }
+	item := testSyncItem{s: api.source[20], folder: false}
+	msg := orch.RunSyncItem(context.Background(), 0, item)()
+	res, ok := msg.(SyncResultMsg)
+	if !ok {
+		t.Fatalf("expected SyncResultMsg, got %T", msg)
+	}
+	if res.Err == nil {
+		t.Fatalf("expected error on first failure without orchestrator retry")
+	}
+	if got := api.createAttempts; got != 1 {
+		t.Fatalf("expected exactly 1 create attempt, got %d", got)
+	}
 }
 
 func TestRunSyncItem_StoryUpdate_PublishRespectsPlan(t *testing.T) {

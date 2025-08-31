@@ -110,6 +110,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateSpaceSelect // zurück; du kannst auch einen Fehler-Screen bauen
 			return m, nil
 		}
+		// Persist resolved CDA token (do not log token value)
+		m.sourceCDAToken = msg.cdaToken
+		m.sourceCDATokenKind = msg.cdaTokenKind
+		m.hasSourceCDAToken = len(msg.cdaToken) > 0
 		m.storiesSource = msg.src
 		m.storiesTarget = msg.tgt
 		m.selection.listIndex = 0
