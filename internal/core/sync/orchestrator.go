@@ -109,47 +109,9 @@ func (so *SyncOrchestrator) RunSyncItem(ctx context.Context, idx int, item SyncI
 
 // SyncWithRetry executes an operation with retry logic for rate limiting and transient errors
 func (so *SyncOrchestrator) SyncWithRetry(operation func() error) error {
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		err := operation()
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-		log.Printf("Sync attempt %d failed: %v", attempt+1, err)
-
-		// Log additional context for retries
-		if attempt < 2 {
-			retryDelay := so.calculateRetryDelay(err, attempt)
-			log.Printf("  Will retry in %v (attempt %d/3)", retryDelay, attempt+2)
-			time.Sleep(retryDelay)
-		} else {
-			log.Printf("  Max retries (3) exceeded, giving up")
-		}
-
-		// Check if it's a rate limiting error
-		if IsRateLimited(err) {
-			sleepDuration := time.Second * time.Duration(attempt+1)
-			log.Printf("Rate limited, sleeping for %v", sleepDuration)
-			time.Sleep(sleepDuration)
-			continue
-		}
-
-		// For other errors, use shorter delay
-		if attempt < 2 {
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
-	return lastErr
-}
-
-// calculateRetryDelay calculates the delay before retrying based on error type
-func (so *SyncOrchestrator) calculateRetryDelay(err error, attempt int) time.Duration {
-	if IsRateLimited(err) {
-		return time.Second * time.Duration(attempt+1)
-	}
-	return time.Millisecond * 500
+	// Transport-level retries, backoff and rate limiting are now centralized
+	// in the HTTP client. Execute the operation once here.
+	return operation()
 }
 
 // ShouldPublish determines if stories should be published based on space plan

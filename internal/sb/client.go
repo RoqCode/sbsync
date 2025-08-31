@@ -11,20 +11,34 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 const base = "https://mapi.storyblok.com/v1"
 
 type Client struct {
-	http  *http.Client
-	token string
+	http    *http.Client
+	token   string
+	metrics *Metrics
 }
 
 func New(token string) *Client {
+	// Default transport with MA/CDA limits and retry/backoff
+	opts := DefaultTransportOptionsFromEnv()
+	rt := NewRetryingLimiterTransport(opts)
 	return &Client{
-		http:  &http.Client{Timeout: 10 * time.Second},
-		token: token,
+		http:    &http.Client{Transport: rt, Timeout: 0}, // rely on per-request contexts
+		token:   token,
+		metrics: opts.Metrics,
+	}
+}
+
+// NewWithOptions allows tests or callers to override transport options.
+func NewWithOptions(token string, opts TransportOptions) *Client {
+	rt := NewRetryingLimiterTransport(opts)
+	return &Client{
+		http:    &http.Client{Transport: rt, Timeout: 0},
+		token:   token,
+		metrics: opts.Metrics,
 	}
 }
 
