@@ -146,7 +146,7 @@ func TestRunSyncItem_FolderCreate_NoPublish(t *testing.T) {
 
 	src := &sb.Space{ID: 1, Name: "src"}
 	tgt := &sb.Space{ID: 2, Name: "tgt"}
-	orch := NewSyncOrchestrator(api, mockReport{}, src, tgt)
+	orch := NewSyncOrchestrator(api, mockReport{}, src, tgt, map[string]sb.Story{})
 
 	item := testSyncItem{s: sb.Story{ID: 1, Name: "foo", Slug: "foo", FullSlug: "foo", IsFolder: true}, folder: true}
 	cmd := orch.RunSyncItem(context.Background(), 0, item)
@@ -190,7 +190,8 @@ func TestRunSyncItem_StoryCreate_PublishRespectsPlan(t *testing.T) {
 
 			src := &sb.Space{ID: 1, Name: "src"}
 			tgt := &sb.Space{ID: 2, Name: "tgt", PlanLevel: tc.planLevel}
-			orch := NewSyncOrchestrator(api, mockReport{}, src, tgt)
+			tgtIndex := map[string]sb.Story{"s3": {ID: 999, FullSlug: "s3"}}
+			orch := NewSyncOrchestrator(api, mockReport{}, src, tgt, tgtIndex)
 
 			item := testSyncItem{s: api.source[10], folder: false}
 			cmd := orch.RunSyncItem(context.Background(), 0, item)
@@ -223,7 +224,8 @@ func TestRunSyncItem_NoRetry_TransportOwnsRetries(t *testing.T) {
 
 	src := &sb.Space{ID: 1, Name: "src"}
 	tgt := &sb.Space{ID: 2, Name: "tgt"}
-	orch := NewSyncOrchestrator(api, mockReport{}, src, tgt)
+	tgtIndex := map[string]sb.Story{"foo": {ID: 500, FullSlug: "foo", IsFolder: true}}
+	orch := NewSyncOrchestrator(api, mockReport{}, src, tgt, tgtIndex)
 
 	item := testSyncItem{s: api.source[20], folder: false}
 	msg := orch.RunSyncItem(context.Background(), 0, item)()
@@ -260,7 +262,7 @@ func TestRunSyncItem_StoryUpdate_PublishRespectsPlan(t *testing.T) {
 
 			src := &sb.Space{ID: 1, Name: "src"}
 			tgt := &sb.Space{ID: 2, Name: "tgt", PlanLevel: tc.planLevel}
-			orch := NewSyncOrchestrator(api, mockReport{}, src, tgt)
+			orch := NewSyncOrchestrator(api, mockReport{}, src, tgt, map[string]sb.Story{})
 
 			item := testSyncItem{s: srcStory, folder: false}
 			msg := orch.RunSyncItem(context.Background(), 0, item)()
@@ -294,7 +296,7 @@ func TestRunSyncItem_FolderUpdate_NoPublish(t *testing.T) {
 
 	src := &sb.Space{ID: 1, Name: "src"}
 	tgt := &sb.Space{ID: 2, Name: "tgt"}
-	orch := NewSyncOrchestrator(api, mockReport{}, src, tgt)
+	orch := NewSyncOrchestrator(api, mockReport{}, src, tgt, map[string]sb.Story{})
 
 	item := testSyncItem{s: api.source[40], folder: true}
 	msg := orch.RunSyncItem(context.Background(), 0, item)()

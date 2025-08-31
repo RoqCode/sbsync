@@ -186,7 +186,12 @@ func (m *Model) runNextItem() tea.Cmd {
 
 	// Create orchestrator for this operation
 	reportAdapter := &reportAdapter{report: &m.report}
-	orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace)
+	// Build a slug->target index from scan results (cheap to rebuild)
+	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+	for _, s := range m.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace, tgtIndex)
 
 	// Create a sync item adapter
 	item := &preflightItemAdapter{item: m.preflight.items[idx]}
@@ -528,7 +533,12 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 
 // syncFolderDetailed handles folder synchronization and returns detailed results
 func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, error) {
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID)
+	// Build a minimal target index
+	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+	for _, s := range m.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
 	return syncer.SyncFolderDetailed(sourceFolder, m.shouldPublish())
 }
 
@@ -633,7 +643,11 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 // syncStoryContentDetailed handles story synchronization and returns detailed results
 // Note: Folder structure is now pre-planned in optimizePreflight(), so no need to ensure folder path here
 func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult, error) {
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID)
+	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+	for _, s := range m.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
 	return syncer.SyncStoryDetailed(sourceStory, m.shouldPublish())
 }
 

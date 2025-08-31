@@ -206,7 +206,7 @@ func TestDataFlowLogging_TwoFoldersTwoStories(t *testing.T) {
 	}
 
 	// 2) Sync both stories and record all pushes
-	syncer := NewStorySyncer(api, sourceID, targetID)
+	syncer := NewStorySyncer(api, sourceID, targetID, map[string]sb.Story{})
 	ctx := context.Background()
 	if _, err := syncer.SyncStory(ctx, story1, false); err != nil {
 		t.Fatalf("sync story1: %v", err)

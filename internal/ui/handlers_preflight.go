@@ -185,7 +185,13 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.report = *NewReport(sourceSpaceName, targetSpaceName)
 
 		m.statusMsg = fmt.Sprintf("Synchronisiere %d Items…", len(m.preflight.items))
-		return m, tea.Batch(m.spinner.Tick, m.runNextItem())
+		// Start a small worker pool by scheduling multiple items at once
+		// Keep it simple: schedule 6 parallel runNextItem commands
+		cmds := []tea.Cmd{m.spinner.Tick}
+		for i := 0; i < 6; i++ {
+			cmds = append(cmds, m.runNextItem())
+		}
+		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }

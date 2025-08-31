@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	"storyblok-sync/internal/sb"
@@ -11,10 +12,11 @@ import (
 
 // StorySyncer handles story and folder synchronization operations
 type StorySyncer struct {
-	api           SyncAPI
-	contentMgr    *ContentManager
-	sourceSpaceID int
-	targetSpaceID int
+	api            SyncAPI
+	contentMgr     *ContentManager
+	sourceSpaceID  int
+	targetSpaceID  int
+	existingBySlug map[string]sb.Story
 }
 
 // storyRawAPI captures optional raw story methods available on the API client
@@ -25,12 +27,13 @@ type storyRawAPI interface {
 }
 
 // NewStorySyncer creates a new story synchronizer
-func NewStorySyncer(api SyncAPI, sourceSpaceID, targetSpaceID int) *StorySyncer {
+func NewStorySyncer(api SyncAPI, sourceSpaceID, targetSpaceID int, existing map[string]sb.Story) *StorySyncer {
 	return &StorySyncer{
-		api:           api,
-		contentMgr:    NewContentManager(api, sourceSpaceID),
-		sourceSpaceID: sourceSpaceID,
-		targetSpaceID: targetSpaceID,
+		api:            api,
+		contentMgr:     NewContentManager(api, sourceSpaceID),
+		sourceSpaceID:  sourceSpaceID,
+		targetSpaceID:  targetSpaceID,
+		existingBySlug: existing,
 	}
 }
 
@@ -39,34 +42,35 @@ func NewStorySyncer(api SyncAPI, sourceSpaceID, targetSpaceID int) *StorySyncer 
 // SyncStory synchronizes a single story
 func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPublish bool) (sb.Story, error) {
 	log.Printf("Syncing story: %s", story.FullSlug)
+	fullStory := story
 
-	// Ensure content is loaded
-	fullStory, err := ss.contentMgr.EnsureContent(ctx, story)
-	if err != nil {
-		return sb.Story{}, err
+	// Determine existence from in-memory index
+	var existingTarget *sb.Story
+	if s, ok := ss.existingBySlug[story.FullSlug]; ok {
+		existingTarget = &s
+	}
+	// Fallback: if not in index, query target API to detect existing story
+	if existingTarget == nil {
+		if existing, err := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug); err == nil && len(existing) > 0 {
+			// use the first match; slugs are unique per space
+			st := existing[0]
+			existingTarget = &st
+		}
 	}
 
-	// DEBUG: minimal info about typed content presence
-	log.Printf("DEBUG: SOURCE_TYPED content present for %s: %t", story.FullSlug, len(fullStory.Content) > 0)
-
-	// Ensure non-folder stories have default content
-	fullStory = EnsureDefaultContent(fullStory)
-
-	// Check if story already exists in target
-	existing, err := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, story.FullSlug)
-	if err != nil {
-		return sb.Story{}, err
-	}
-
-	// Resolve parent folder ID if needed
-	fullStory = ss.resolveParentFolder(ctx, fullStory)
+	// Resolve parent folder ID using in-memory target index
+	fullStory = ss.resolveParentFolderFromIndex(fullStory)
 
 	// Handle translated slugs
-	fullStory = ProcessTranslatedSlugs(fullStory, existing)
+	var existingSlice []sb.Story
+	if existingTarget != nil {
+		existingSlice = []sb.Story{*existingTarget}
+	}
+	fullStory = ProcessTranslatedSlugs(fullStory, existingSlice)
 
-	if len(existing) > 0 {
+	if existingTarget != nil {
 		// Update existing story
-		existingStory := existing[0]
+		existingStory := *existingTarget
 
 		// Prefer raw update if available to preserve unknown fields
 		if rawAPI, ok := any(ss.api).(storyRawAPI); ok {
@@ -102,7 +106,7 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			// DEBUG: omit raw payload dump to keep logs readable
 			log.Printf("DEBUG: PUSH_RAW_UPDATE story %s (payload omitted)", story.FullSlug)
 
-			updated, err := rawAPI.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, existingStory.ID, raw, shouldPublish)
+			updated, err := ss.updateWithFolderFallback(ctx, rawAPI, existingStory.ID, raw, shouldPublish, ParentSlug(story.FullSlug))
 			if err != nil {
 				return sb.Story{}, err
 			}
@@ -181,7 +185,7 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			// DEBUG: omit raw create payload dump
 			log.Printf("DEBUG: PUSH_RAW_CREATE story %s (payload omitted)", story.FullSlug)
 
-			created, err := rawAPI.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, raw, shouldPublish)
+			created, err := ss.createWithFolderFallback(ctx, rawAPI, raw, shouldPublish, ParentSlug(story.FullSlug))
 			if err != nil {
 				return sb.Story{}, err
 			}
@@ -218,6 +222,65 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 		log.Printf("Created story: %s", fullStory.FullSlug)
 		return created, nil
 	}
+}
+
+// resolveParentFolderFromIndex resolves and sets the correct parent folder ID using the in-memory target index
+func (ss *StorySyncer) resolveParentFolderFromIndex(story sb.Story) sb.Story {
+	parent := ParentSlug(story.FullSlug)
+	if parent == "" {
+		story.FolderID = nil
+		return story
+	}
+	if p, ok := ss.existingBySlug[parent]; ok {
+		story.FolderID = &p.ID
+	} else {
+		story.FolderID = nil
+	}
+	return story
+}
+
+func isUnprocessable(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "422") || strings.Contains(strings.ToLower(s), "unprocessable")
+}
+
+func (ss *StorySyncer) createWithFolderFallback(ctx context.Context, rawAPI storyRawAPI, raw map[string]interface{}, publish bool, parentSlug string) (sb.Story, error) {
+	created, err := rawAPI.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, raw, publish)
+	if err == nil {
+		return created, nil
+	}
+	if !isUnprocessable(err) {
+		return sb.Story{}, err
+	}
+	// ensure parent folders and retry
+	_, _ = EnsureFolderPathStatic(ss.api, nil, nil, ss.sourceSpaceID, ss.targetSpaceID, parentSlug, false)
+	// best effort: fetch parent id and set into raw
+	if parentSlug != "" {
+		if parents, e := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, parentSlug); e == nil && len(parents) > 0 {
+			raw["parent_id"] = parents[0].ID
+		}
+	}
+	return rawAPI.CreateStoryRawWithPublish(ctx, ss.targetSpaceID, raw, publish)
+}
+
+func (ss *StorySyncer) updateWithFolderFallback(ctx context.Context, rawAPI storyRawAPI, storyID int, raw map[string]interface{}, publish bool, parentSlug string) (sb.Story, error) {
+	updated, err := rawAPI.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, storyID, raw, publish)
+	if err == nil {
+		return updated, nil
+	}
+	if !isUnprocessable(err) {
+		return sb.Story{}, err
+	}
+	_, _ = EnsureFolderPathStatic(ss.api, nil, nil, ss.sourceSpaceID, ss.targetSpaceID, parentSlug, false)
+	if parentSlug != "" {
+		if parents, e := ss.api.GetStoriesBySlug(ctx, ss.targetSpaceID, parentSlug); e == nil && len(parents) > 0 {
+			raw["parent_id"] = parents[0].ID
+		}
+	}
+	return rawAPI.UpdateStoryRawWithPublish(ctx, ss.targetSpaceID, storyID, raw, publish)
 }
 
 // toMap converts a JSON blob to map[string]interface{} for raw payloads

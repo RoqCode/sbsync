@@ -17,6 +17,7 @@ type SyncOrchestrator struct {
 	report      ReportInterface
 	sourceSpace *sb.Space
 	targetSpace *sb.Space
+	targetIndex map[string]sb.Story
 }
 
 // SyncAPI defines the interface for sync API operations
@@ -43,13 +44,14 @@ type SyncItem interface {
 }
 
 // NewSyncOrchestrator creates a new sync orchestrator
-func NewSyncOrchestrator(api SyncAPI, report ReportInterface, sourceSpace, targetSpace *sb.Space) *SyncOrchestrator {
+func NewSyncOrchestrator(api SyncAPI, report ReportInterface, sourceSpace, targetSpace *sb.Space, targetIndex map[string]sb.Story) *SyncOrchestrator {
 	return &SyncOrchestrator{
 		api:         api,
 		contentMgr:  NewContentManager(api, sourceSpace.ID),
 		report:      report,
 		sourceSpace: sourceSpace,
 		targetSpace: targetSpace,
+		targetIndex: targetIndex,
 	}
 }
 
@@ -97,10 +99,8 @@ func (so *SyncOrchestrator) RunSyncItem(ctx context.Context, idx int, item SyncI
 			} else {
 				LogSuccess(result.Operation, story.FullSlug, duration, result.TargetStory)
 			}
-			time.Sleep(50 * time.Millisecond) // Brief pause between operations
 		} else {
 			log.Printf("Sync completed for %s (no detailed result)", story.FullSlug)
-			time.Sleep(50 * time.Millisecond)
 		}
 
 		return SyncResultMsg{Index: idx, Err: err, Result: result, Duration: duration}
@@ -126,7 +126,7 @@ func (so *SyncOrchestrator) ShouldPublish() bool {
 
 // SyncFolderDetailed synchronizes a folder using StorySyncer
 func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult, error) {
-	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
+	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex)
 	// Publish folders: never; for completeness compute publish flag but it will be ignored for folders
 	publish := so.ShouldPublish() && story.Published
 	return syncer.SyncFolderDetailed(story, publish)
@@ -134,15 +134,10 @@ func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult,
 
 // SyncStoryDetailed synchronizes a story using StorySyncer
 func (so *SyncOrchestrator) SyncStoryDetailed(story sb.Story) (*SyncItemResult, error) {
-	// Ensure parent folder chain exists before syncing the story (no-op for root-only)
-	adapter := newFolderReportAdapter(so.report)
-	// SyncAPI now includes raw methods; pass directly as FolderAPI
-	_, _ = EnsureFolderPathStatic(so.api, adapter, nil, so.sourceSpace.ID, so.targetSpace.ID, story.FullSlug, false)
-
 	// Compute publish flag from source item and target dev mode
 	publish := so.ShouldPublish() && story.Published
 
-	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
+	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex)
 	return syncer.SyncStoryDetailed(story, publish)
 }
 

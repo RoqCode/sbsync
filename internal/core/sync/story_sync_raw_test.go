@@ -117,7 +117,7 @@ func TestSyncStory_Create_UsesRawPayload(t *testing.T) {
 	}
 	api.sourceRawByID[sourceID] = raw
 
-	syncer := NewStorySyncer(api, 10, 20)
+	syncer := NewStorySyncer(api, 10, 20, map[string]sb.Story{})
 	st := sb.Story{ID: sourceID, Slug: "page", FullSlug: "folder/page"}
 	ctx := context.Background()
 	if _, err := syncer.SyncStory(ctx, st, true); err != nil {
@@ -159,7 +159,7 @@ func TestSyncStory_Update_UsesRawPayload(t *testing.T) {
 	}
 	api.sourceRawByID[sourceID] = raw
 
-	syncer := NewStorySyncer(api, 10, 20)
+	syncer := NewStorySyncer(api, 10, 20, map[string]sb.Story{})
 	st := sb.Story{ID: sourceID, Slug: "page", FullSlug: existing.FullSlug, UUID: "uuid-2"}
 	ctx := context.Background()
 	if _, err := syncer.SyncStory(ctx, st, true); err != nil {
@@ -193,7 +193,7 @@ func TestSyncFolder_Create_UsesRawPayload(t *testing.T) {
 	}
 	api.sourceRawByID[sourceID] = raw
 
-	syncer := NewStorySyncer(api, 10, 20)
+	syncer := NewStorySyncer(api, 10, 20, map[string]sb.Story{})
 	folder := sb.Story{ID: sourceID, Slug: "folder", FullSlug: "folder", IsFolder: true}
 	ctx := context.Background()
 	if _, err := syncer.SyncFolder(ctx, folder, false); err != nil {
