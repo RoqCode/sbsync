@@ -49,7 +49,7 @@ func TestHydrate_PreviewPublishedAndDraft(t *testing.T) {
 		{Story: sb.Story{ID: 1, FullSlug: "s1", Published: true}},
 	}
 	cache := NewHydrationCache(10)
-	stats := Hydrate(context.Background(), cda, 1, items, "preview", 4, cache)
+	stats := Hydrate(context.Background(), cda, 1, items, "preview", 4, cache, nil)
 	if stats.Drafts != 1 || stats.Published != 1 {
 		t.Fatalf("want both variants, got %+v", stats)
 	}
@@ -65,7 +65,7 @@ func TestHydrate_PublicOnlyPublished(t *testing.T) {
 	}}
 	items := []PreflightItem{{Story: sb.Story{ID: 2, FullSlug: "s2", Published: true}}}
 	cache := NewHydrationCache(10)
-	stats := Hydrate(context.Background(), cda, 1, items, "public", 2, cache)
+	stats := Hydrate(context.Background(), cda, 1, items, "public", 2, cache, nil)
 	if stats.Published != 1 || stats.Drafts != 0 {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
@@ -81,7 +81,7 @@ func TestHydrate_UnpublishedPreviewGetsDraft(t *testing.T) {
 	}}
 	items := []PreflightItem{{Story: sb.Story{ID: 3, FullSlug: "s3", Published: false}}}
 	cache := NewHydrationCache(10)
-	stats := Hydrate(context.Background(), cda, 1, items, "preview", 2, cache)
+	stats := Hydrate(context.Background(), cda, 1, items, "preview", 2, cache, nil)
 	if stats.Drafts != 1 {
 		t.Fatalf("want 1 draft, got %+v", stats)
 	}

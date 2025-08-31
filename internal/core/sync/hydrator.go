@@ -90,9 +90,20 @@ type HydrationStats struct {
 	Misses    int
 }
 
+// HydrationProgress provides incremental updates for UI.
+type HydrationProgress struct {
+	// Total is set on the initial call to indicate the expected total units.
+	// For preview tokens this equals the number of selected stories.
+	// For public tokens this equals the number of selected published stories.
+	Total int
+	// Increments to apply to current counters.
+	IncrDrafts    int
+	IncrPublished int
+}
+
 // Hydrate fetches content for the given stories using CDA. tokenKind is "preview" or "public".
 // workers bounds concurrency. Errors are per-item; function completes regardless.
-func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightItem, tokenKind string, workers int, cache *HydrationCache) HydrationStats {
+func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightItem, tokenKind string, workers int, cache *HydrationCache, progress func(HydrationProgress)) HydrationStats {
 	if workers <= 0 {
 		workers = 10
 	}
@@ -111,6 +122,10 @@ func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightI
 	}
 
 	stats := HydrationStats{Total: len(tasks)}
+	if progress != nil {
+		// For plain per-slug hydration, Total equals tasks length regardless of token kind
+		progress(HydrationProgress{Total: len(tasks)})
+	}
 	var wg sync.WaitGroup
 	ch := make(chan task)
 	// Workers
@@ -131,6 +146,9 @@ func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightI
 						if raw, ok := extractContentRaw(m); ok {
 							cache.PutDraft(t.id, raw)
 							add(&stats.Drafts, 1)
+							if progress != nil {
+								progress(HydrationProgress{IncrDrafts: 1})
+							}
 						}
 					}
 					// If published, also fetch published variant
@@ -139,6 +157,9 @@ func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightI
 							if raw, ok := extractContentRaw(m); ok {
 								cache.PutPublished(t.id, raw)
 								add(&stats.Published, 1)
+								if progress != nil {
+									progress(HydrationProgress{IncrPublished: 1})
+								}
 							}
 						}
 					}
@@ -148,6 +169,9 @@ func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightI
 							if raw, ok := extractContentRaw(m); ok {
 								cache.PutPublished(t.id, raw)
 								add(&stats.Published, 1)
+								if progress != nil {
+									progress(HydrationProgress{IncrPublished: 1})
+								}
 							}
 						}
 					}
@@ -181,7 +205,7 @@ func Hydrate(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightI
 
 // HydrateBatched hydrates using batched prefix reads for fully-selected folders
 // and falls back to per-slug reads for remaining stories.
-func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightItem, allSource []sb.Story, tokenKind string, batchWorkers, slugWorkers, cacheMax int, cache *HydrationCache) HydrationStats {
+func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []PreflightItem, allSource []sb.Story, tokenKind string, batchWorkers, slugWorkers, cacheMax int, cache *HydrationCache, progress func(HydrationProgress)) HydrationStats {
 	if cache == nil {
 		cache = NewHydrationCache(cacheMax)
 	}
@@ -222,7 +246,29 @@ func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []Pre
 		}
 	}
 
-	stats := HydrationStats{}
+	// Determine totals for progress: preview => all selected stories; public => only published stories among selected
+	selectedPublished := 0
+	if tokenKind == "public" {
+		// Build quick map from slug to published flag
+		pub := make(map[string]bool, len(allSource))
+		for _, s := range allSource {
+			pub[s.FullSlug] = s.Published
+		}
+		for slug := range selectedStories {
+			if pub[slug] {
+				selectedPublished++
+			}
+		}
+	}
+	progressTotal := len(selectedStories)
+	if tokenKind == "public" {
+		progressTotal = selectedPublished
+	}
+
+	stats := HydrationStats{Total: len(selectedStories)}
+	if progress != nil {
+		progress(HydrationProgress{Total: progressTotal})
+	}
 	// Batch stage: iterate roots concurrently
 	if len(fullRoots) > 0 {
 		var wg sync.WaitGroup
@@ -238,6 +284,9 @@ func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []Pre
 							if id, raw, ok := storyIDAndContent(m); ok {
 								cache.PutDraft(id, raw)
 								add(&stats.Drafts, 1)
+								if progress != nil {
+									progress(HydrationProgress{IncrDrafts: 1})
+								}
 							}
 							return nil
 						})
@@ -245,6 +294,9 @@ func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []Pre
 							if id, raw, ok := storyIDAndContent(m); ok {
 								cache.PutPublished(id, raw)
 								add(&stats.Published, 1)
+								if progress != nil {
+									progress(HydrationProgress{IncrPublished: 1})
+								}
 							}
 							return nil
 						})
@@ -253,6 +305,9 @@ func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []Pre
 							if id, raw, ok := storyIDAndContent(m); ok {
 								cache.PutPublished(id, raw)
 								add(&stats.Published, 1)
+								if progress != nil {
+									progress(HydrationProgress{IncrPublished: 1})
+								}
 							}
 							return nil
 						})
@@ -276,14 +331,10 @@ func HydrateBatched(ctx context.Context, cda CDAAPI, srcSpaceID int, items []Pre
 	// Per-slug fallback stage
 	if len(perSlug) > 0 {
 		// reuse existing Hydrate logic with a filtered item list
-		part := Hydrate(ctx, cda, srcSpaceID, perSlug, tokenKind, slugWorkers, cache)
+		part := Hydrate(ctx, cda, srcSpaceID, perSlug, tokenKind, slugWorkers, cache, progress)
 		stats.Drafts += part.Drafts
 		stats.Published += part.Published
-		stats.Total += part.Total
 		stats.Misses += part.Misses
-	} else {
-		// count total as number of selected stories covered by roots
-		stats.Total = len(selectedStories)
 	}
 
 	// Compute misses for all selected stories

@@ -90,6 +90,26 @@ func (m Model) renderSyncFooter() string {
 func (m *Model) updateSyncViewport() {
 	var content strings.Builder
 
+	// If hydration is in progress, show hydration progress bar at top
+	if m.hydrationInProgress {
+		// Compute processed units based on token kind assumptions:
+		// For preview tokens, drafts roughly track total selection; for public tokens, published count does.
+		processed := m.hydrationDrafts
+		if m.sourceCDATokenKind == "public" {
+			processed = m.hydrationPublished
+		}
+		// Avoid division by zero
+		total := m.hydrationTotal
+		if total <= 0 {
+			total = 1
+		}
+		// Render a compact progress bar
+		bar := m.renderProgressBar(processed, 0, total)
+		content.WriteString("Hydration: ")
+		content.WriteString(bar)
+		content.WriteString("\n\n")
+	}
+
 	// Show sync progress
 	total := len(m.preflight.items)
 	completed := 0

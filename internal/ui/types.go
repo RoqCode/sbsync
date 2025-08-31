@@ -147,4 +147,10 @@ type Model struct {
 
 	// Hydration cache (Phase 3)
 	hydrationCache *sync.HydrationCache
+	// Hydration progress (Phase 3+ batching)
+	hydrationInProgress bool
+	hydrationTotal      int
+	hydrationDrafts     int
+	hydrationPublished  int
+	hydrationProgressCh chan hydrateProgressMsg
 }

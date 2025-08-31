@@ -36,7 +36,7 @@ func TestHydrateBatched_TopMostFolderOnly(t *testing.T) {
 
 	f := &fakeCDAWalk{}
 	cache := NewHydrationCache(100)
-	stats := HydrateBatched(context.Background(), f, 1, items, all, "preview", 2, 2, 100, cache)
+	stats := HydrateBatched(context.Background(), f, 1, items, all, "preview", 2, 2, 100, cache, nil)
 
 	// Expect only one prefix call for top-most root ("root") with both versions
 	var prefixDraft, prefixPub bool

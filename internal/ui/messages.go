@@ -35,6 +35,13 @@ type hydrateMsg struct {
 	cache     *sync.HydrationCache
 }
 
+// hydrateProgressMsg carries incremental hydration updates
+type hydrateProgressMsg struct {
+	total        int // if >0 sets/updates the total work units
+	addDrafts    int
+	addPublished int
+}
+
 func (m Model) validateTokenCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -93,7 +100,6 @@ func (m Model) hydrateContentCmd() tea.Cmd {
 	if m.sourceSpace != nil {
 		srcID = m.sourceSpace.ID
 	}
-	token := m.sourceCDAToken
 	kind := m.sourceCDATokenKind
 
 	// Build list of items (include folders for batching detection)
@@ -104,13 +110,60 @@ func (m Model) hydrateContentCmd() tea.Cmd {
 		if !m.hasSourceCDAToken || srcID == 0 || len(items) == 0 {
 			return hydrateMsg{total: len(items), hydrated: 0, drafts: 0, published: 0, err: nil, cache: nil}
 		}
+
+		// Create progress channel and return a start signal; listener must be scheduled by caller
+		ch := make(chan hydrateProgressMsg, 256)
+
+		// Return a start message carrying the channel so Update can store it and begin listening
+		return hydrateStartMsg{ch: ch, srcID: srcID, kind: kind}
+	}
+}
+
+// hydrateStartMsg initiates listening to progress updates
+type hydrateStartMsg struct {
+	ch    chan hydrateProgressMsg
+	srcID int
+	kind  string
+}
+
+// listenHydrateProgress reads one progress update from the channel and returns it as a message
+func listenHydrateProgress(ch chan hydrateProgressMsg) tea.Cmd {
+	return func() tea.Msg {
+		if ch == nil {
+			return nil
+		}
+		msg, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return msg
+	}
+}
+
+// runHydrationCmd performs hydration and returns the final hydrateMsg
+func (m Model) runHydrationCmd(ch chan hydrateProgressMsg) tea.Cmd {
+	srcID := 0
+	if m.sourceSpace != nil {
+		srcID = m.sourceSpace.ID
+	}
+	token := m.sourceCDAToken
+	kind := m.sourceCDATokenKind
+	items := append([]sync.PreflightItem(nil), m.preflight.items...)
+
+	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-
 		cda := sb.NewCDA(token)
 		cache := sync.NewHydrationCache(1000)
-		// Use batched hydration with top-most fully selected folders
-		stats := sync.HydrateBatched(ctx, cda, srcID, items, m.storiesSource, kind, 4, 12, 1000, cache)
+		stats := sync.HydrateBatched(ctx, cda, srcID, items, m.storiesSource, kind, 4, 12, 1000, cache, func(p sync.HydrationProgress) {
+			// Push incremental updates in a non-blocking way
+			select {
+			case ch <- hydrateProgressMsg{total: p.Total, addDrafts: p.IncrDrafts, addPublished: p.IncrPublished}:
+			default:
+			}
+		})
+		// Close progress stream and return final hydrate message
+		close(ch)
 		return hydrateMsg{total: stats.Total, hydrated: stats.Drafts + stats.Published, drafts: stats.Drafts, published: stats.Published, err: nil, cache: cache}
 	}
 }
