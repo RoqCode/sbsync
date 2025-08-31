@@ -21,10 +21,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// global shortcuts
 		if key == "ctrl+c" {
-			// If we're syncing, cancel the sync operations but don't quit
-			if m.syncing && m.syncCancel != nil {
-				m.syncCancel()
-				m.statusMsg = "Sync cancelled by user (Ctrl+C) – press 'r' to resume"
+			// In sync state, treat Ctrl+C as pause: cancel context if present and prevent new scheduling
+			if m.state == stateSync {
+				if m.syncCancel != nil {
+					m.syncCancel()
+					// Keep syncContext set to the cancelled context so in-flight commands see it
+				}
+				m.paused = true
+				m.statusMsg = "Sync cancelled by user (Ctrl+C) – press 'r' to resume or 'q' to quit"
 				return m, nil
 			}
 			// If not syncing, quit the application
@@ -235,7 +239,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if hasPendingFolders {
 			allowed = 1
 		}
-		if pending > 0 {
+		if pending > 0 && !m.paused {
 			toStart := allowed - running
 			if toStart > pending {
 				toStart = pending
@@ -248,13 +252,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 		}
-		// If no pending but still running workers, wait for them to finish
+		// If paused or no pending but still running workers, wait for them to finish
 		if running > 0 {
+			return m, nil
+		}
+
+		// If paused and nothing running, do not auto-finish into report; stay in sync state
+		if m.paused {
+			m.syncing = false
+			m.statusMsg = "Sync paused – press 'r' to resume or 'q' to quit"
 			return m, nil
 		}
 
 		// All work done
 		m.syncing = false
+		m.paused = false
 		m.state = stateReport
 		if cancelled > 0 {
 			m.statusMsg = fmt.Sprintf("Sync cancelled - %d completed, %d cancelled", done, cancelled)

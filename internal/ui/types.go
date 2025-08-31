@@ -107,6 +107,7 @@ type Model struct {
 	syncIndex   int
 	syncCancel  context.CancelFunc // for cancelling sync operations
 	syncContext context.Context    // cancellable context for sync
+	paused      bool               // pause flag to stop scheduling new work
 	api         *sb.Client
 	report      Report
 

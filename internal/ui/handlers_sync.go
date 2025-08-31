@@ -40,6 +40,7 @@ func (m Model) handleSyncKey(key string) (tea.Model, tea.Cmd) {
 			if next >= 0 {
 				log.Printf("RESUME(SYNC): next pending index=%d (prev syncIndex=%d)", next, m.syncIndex)
 				m.syncing = true
+				m.paused = false
 				m.syncIndex = next
 				// New context for resumed run
 				if m.api == nil {

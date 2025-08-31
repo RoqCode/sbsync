@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"storyblok-sync/internal/sb"
 )
 
@@ -391,6 +392,47 @@ func TestUpdateContinuesWhilePending(t *testing.T) {
 	}
 	if mm.syncIndex != 1 {
 		t.Fatalf("expected syncIndex moved to next pending (1), got %d", mm.syncIndex)
+	}
+}
+
+func TestCtrlC_PausesSchedulingAndAllowsResume(t *testing.T) {
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+	m.syncing = true
+	// One running, one pending
+	m.preflight.items = []PreflightItem{
+		{Run: RunRunning, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunPending, Story: sb.Story{ID: 2, FullSlug: "b"}},
+	}
+
+	// Send Ctrl+C globally via Update
+	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	mm := model.(Model)
+	if !mm.paused {
+		t.Fatalf("expected paused=true after Ctrl+C")
+	}
+
+	// A running worker finishes; should not schedule new work while paused
+	model, cmd := mm.Update(syncResultMsg{Index: 0, Duration: 1})
+	mm = model.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no new scheduling while paused")
+	}
+	if mm.syncing {
+		t.Fatalf("expected syncing=false when paused and nothing running")
+	}
+
+	// Resume with 'r' should clear pause and schedule next pending
+	model, cmd = mm.handleSyncKey("r")
+	mm = model.(Model)
+	if !mm.syncing || mm.paused {
+		t.Fatalf("expected syncing=true and paused=false after resume")
+	}
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned on resume")
 	}
 }
 

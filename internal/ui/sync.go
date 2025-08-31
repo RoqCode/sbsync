@@ -156,6 +156,10 @@ func (m *Model) runNextItem() tea.Cmd {
 	if len(m.preflight.items) == 0 {
 		return nil
 	}
+	// Do not schedule new work while paused (after Ctrl+C)
+	if m.paused {
+		return nil
+	}
 	// Phase barrier: if any folder is not yet done (pending or running),
 	// do not start stories. Folders must complete fully before stories run.
 	hasActiveFolders := false
