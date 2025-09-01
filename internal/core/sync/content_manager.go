@@ -38,6 +38,8 @@ func (cm *ContentManager) EnsureContent(ctx context.Context, story sb.Story) (sb
 		return story, nil
 	}
 
+	// No pre-hydration cache: always prefer API + small cache
+
 	// Check cache first
 	if cached, exists := cm.cache[story.ID]; exists && len(cached.Content) > 0 {
 		cm.hitCount++
@@ -87,6 +89,4 @@ func (cm *ContentManager) CacheStats() (size, maxSize int) {
 }
 
 // ClearCache clears the entire cache
-func (cm *ContentManager) ClearCache() {
-	cm.cache = make(map[int]sb.Story)
-}
+func (cm *ContentManager) ClearCache() { cm.cache = make(map[int]sb.Story) }

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -61,13 +62,16 @@ func (m Model) renderSyncHeader() string {
 	}
 
 	b.WriteString("\n")
+	// Stats panel: requests/sec and workers + rolling graph
+	b.WriteString(m.renderStatsPanel())
 	return b.String()
 }
 
 func (m Model) renderSyncFooter() string {
-	statusLine := ""
+	// Build a single-line footer combining status and help
+	left := ""
 	if m.syncing {
-		statusLine = m.spinner.View() + " Synchronisiere..."
+		left = m.spinner.View() + " Synchronisiere..."
 	}
 
 	help := "ctrl+c: Abbrechen"
@@ -84,7 +88,11 @@ func (m Model) renderSyncFooter() string {
 			help = "r: Fortsetzen  |  ctrl+c: Abbrechen"
 		}
 	}
-	return renderFooter(statusLine, help)
+	line := help
+	if left != "" {
+		line = subtleStyle.Render(left) + "  |  " + help
+	}
+	return renderFooter("", line)
 }
 
 func (m *Model) updateSyncViewport() {
@@ -181,6 +189,151 @@ func (m *Model) updateSyncViewport() {
 	}
 
 	m.viewport.SetContent(content.String())
+}
+
+func (m Model) renderStatsPanel() string {
+	// Requests/sec from sampled window
+	rps := m.rpsCurrent
+	// Active workers: count running
+	running := 0
+	for _, it := range m.preflight.items {
+		if it.Run == RunRunning {
+			running++
+		}
+	}
+	maxW := m.maxWorkers
+	if maxW <= 0 {
+		maxW = 1
+	}
+	// Compact worker bar
+	barWidth := m.workerBarWidth
+	if barWidth <= 0 {
+		barWidth = 8
+	}
+	filled := int(float64(barWidth) * float64(running) / float64(maxW))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	var barB strings.Builder
+	barB.WriteString("[")
+	for i := 0; i < barWidth; i++ {
+		if i < filled {
+			barB.WriteString(workersBarStyle.Render("█"))
+		} else {
+			barB.WriteString(subtleStyle.Render("·"))
+		}
+	}
+	barB.WriteString("]")
+	bar := barB.String()
+
+	// First line
+	var out strings.Builder
+	// Left text white, bars colored, with trend arrows
+	out.WriteString(whiteTextStyle.Render(fmt.Sprintf("Req/s: %.1f ", rps)))
+	out.WriteString(renderTrendArrow(rps, m.prevRPS, false))
+	out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Read: %.1f ", m.rpsReadCurrent)))
+	out.WriteString(renderTrendArrow(m.rpsReadCurrent, m.prevReadRPS, false))
+	out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Write: %.1f ", m.rpsWriteCurrent)))
+	out.WriteString(renderTrendArrow(m.rpsWriteCurrent, m.prevWriteRPS, false))
+	out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Succ/s: %.1f ", m.spsSuccess)))
+	out.WriteString(renderTrendArrow(m.spsSuccess, m.prevSuccS, false))
+	out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Warn: %.1f%% ", m.warningRate)))
+	out.WriteString(renderTrendArrow(m.warningRate, m.prevWarnPct, true))
+	out.WriteString(whiteTextStyle.Render(fmt.Sprintf("  Err: %.1f%% ", m.errorRate)))
+	out.WriteString(renderTrendArrow(m.errorRate, m.prevErrPct, true))
+	out.WriteString(whiteTextStyle.Render("  |  Workers: "))
+	out.WriteString(bar)
+	out.WriteString(whiteTextStyle.Render(fmt.Sprintf(" %d/%d\n", running, maxW)))
+	// Multi-row bar graph for RPS
+	if m.showRpsGraph {
+		graph := m.renderRpsBarGraph()
+		if graph != "" {
+			out.WriteString(graph)
+		}
+	}
+	return out.String()
+}
+
+func (m Model) renderRpsBarGraph() string {
+	if len(m.reqSamples) == 0 {
+		return ""
+	}
+	width := m.rpsGraphWidth
+	if width <= 0 {
+		width = 24
+	}
+	height := m.rpsGraphHeight
+	if height <= 1 {
+		height = 1
+	}
+	start := 0
+	if len(m.reqSamples) > width {
+		start = len(m.reqSamples) - width
+	}
+	samples := m.reqSamples[start:]
+	// Find max for scaling
+	maxv := 0.0
+	for _, v := range samples {
+		if v > maxv {
+			maxv = v
+		}
+	}
+	if maxv <= 0 {
+		maxv = 1
+	}
+	// Build rows from top (height) to bottom (1), styling each line separately
+	var b strings.Builder
+	for row := height; row >= 1; row-- {
+		threshold := float64(row-1) / float64(height)
+		var line strings.Builder
+		for _, v := range samples {
+			frac := v / maxv
+			if frac >= threshold {
+				// Use full block for filled cell; add minimal spacing for readability
+				line.WriteRune('█')
+			} else {
+				line.WriteRune(' ')
+			}
+		}
+		b.WriteString(rpsBarStyle.Render(line.String()))
+		if row > 1 {
+			b.WriteRune('\n')
+		}
+	}
+	// Optional baseline marker using min value (simple)
+	_ = math.Abs(0) // silence unused import if math becomes unused later
+	return b.String()
+}
+
+// renderTrendArrow renders ▲/▼ arrows with color and a neutral → within tolerance.
+// invert=true means lower is better (e.g., errors), so colors are reversed.
+func renderTrendArrow(curr, prev float64, invert bool) string {
+	// Choose tolerance based on magnitude: more relaxed on percentages.
+	tol := 0.05
+	if curr <= 3 && prev <= 3 {
+		tol = 0.02
+	}
+	// Percentages: smaller tolerance to avoid jitter
+	if curr <= 100 && prev <= 100 && (curr >= 0 && prev >= 0) {
+		tol = 0.1
+	}
+	diff := curr - prev
+	if diff > tol {
+		if invert {
+			return errorStyle.Render("▲") // up is bad
+		}
+		return okStyle.Render("▲")
+	}
+	if diff < -tol {
+		if invert {
+			return okStyle.Render("▼") // down is good
+		}
+		return errorStyle.Render("▼")
+	}
+	return subtleStyle.Render("→")
 }
 
 func (m Model) getItemStatusDisplay(runState string) (string, lipgloss.Style) {

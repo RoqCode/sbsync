@@ -11,6 +11,35 @@ import (
 
 func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 	switch key {
+	// Scrolling in report view (like other lists)
+	case "j", "down":
+		m.viewport.SetYOffset(m.viewport.YOffset + 1)
+		return m, nil
+	case "k", "up":
+		off := m.viewport.YOffset - 1
+		if off < 0 {
+			off = 0
+		}
+		m.viewport.SetYOffset(off)
+		return m, nil
+	case "ctrl+d", "pgdown":
+		jump := m.viewport.Height
+		if jump <= 0 {
+			jump = 10
+		}
+		m.viewport.SetYOffset(m.viewport.YOffset + jump)
+		return m, nil
+	case "ctrl+u", "pgup":
+		jump := m.viewport.Height
+		if jump <= 0 {
+			jump = 10
+		}
+		off := m.viewport.YOffset - jump
+		if off < 0 {
+			off = 0
+		}
+		m.viewport.SetYOffset(off)
+		return m, nil
 	case "enter", "b":
 		// Go back to scan screen to allow starting a new sync
 		m.state = stateScanning

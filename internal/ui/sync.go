@@ -156,6 +156,19 @@ func (m *Model) runNextItem() tea.Cmd {
 	if len(m.preflight.items) == 0 {
 		return nil
 	}
+	// Do not schedule new work while paused (after Ctrl+C)
+	if m.paused {
+		return nil
+	}
+	// Phase barrier: if any folder is not yet done (pending or running),
+	// do not start stories. Folders must complete fully before stories run.
+	hasActiveFolders := false
+	for i := range m.preflight.items {
+		if m.preflight.items[i].Story.IsFolder && m.preflight.items[i].Run != RunDone {
+			hasActiveFolders = true
+			break
+		}
+	}
 	idx := -1
 	// First pass: from current index to end
 	start := m.syncIndex
@@ -164,6 +177,9 @@ func (m *Model) runNextItem() tea.Cmd {
 	}
 	for i := start; i < len(m.preflight.items); i++ {
 		if m.preflight.items[i].Run == RunPending {
+			if hasActiveFolders && !m.preflight.items[i].Story.IsFolder {
+				continue // defer stories until all folders are handled
+			}
 			idx = i
 			break
 		}
@@ -172,27 +188,49 @@ func (m *Model) runNextItem() tea.Cmd {
 	if idx == -1 {
 		for i := 0; i < start; i++ {
 			if m.preflight.items[i].Run == RunPending {
+				if hasActiveFolders && !m.preflight.items[i].Story.IsFolder {
+					continue // still in folder phase
+				}
 				idx = i
 				break
 			}
 		}
 	}
 	if idx == -1 {
-		// No pending items — nothing to run
+		// Either no pending items or only stories pending while folders still running.
+		// In both cases, do not schedule anything new.
 		return nil
 	}
 	m.syncIndex = idx
 	m.preflight.items[idx].Run = RunRunning
 
-	// Create orchestrator for this operation
-	reportAdapter := &reportAdapter{report: &m.report}
-	orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace)
+	// Capture metrics snapshot to compute per-item retry deltas later
+	if m.api != nil {
+		m.syncStartMetrics[idx] = m.api.MetricsSnapshot()
+	}
 
-	// Create a sync item adapter
+	// Lazily create orchestrator inside the returned command to avoid panics
+	// when spaces/API are not initialized in tests.
+	// Build a lightweight adapter to capture current index and item.
 	item := &preflightItemAdapter{item: m.preflight.items[idx]}
 
-	// Use orchestrator to run the sync operation
-	return orchestrator.RunSyncItem(m.syncContext, idx, item)
+	return func() tea.Msg {
+		// If essential dependencies are missing, fail fast with a result message.
+		if m.api == nil || m.sourceSpace == nil || m.targetSpace == nil {
+			return syncResultMsg{Index: idx, Err: fmt.Errorf("sync prerequisites not initialized")}
+		}
+
+		// Rebuild report adapter and target index at execution time.
+		reportAdapter := &reportAdapter{report: &m.report}
+		tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+		for _, s := range m.storiesTarget {
+			tgtIndex[s.FullSlug] = s
+		}
+		orchestrator := sync.NewSyncOrchestrator(m.api, reportAdapter, m.sourceSpace, m.targetSpace, tgtIndex)
+		// Delegate to orchestrator command
+		cmd := orchestrator.RunSyncItem(m.syncContext, idx, item)
+		return cmd()
+	}
 }
 
 // preflightItemAdapter adapts PreflightItem to sync.SyncItem interface
@@ -528,7 +566,12 @@ func (m *Model) syncFolder(sourceFolder sb.Story) error {
 
 // syncFolderDetailed handles folder synchronization and returns detailed results
 func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, error) {
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID)
+	// Build a minimal target index
+	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+	for _, s := range m.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
 	return syncer.SyncFolderDetailed(sourceFolder, m.shouldPublish())
 }
 
@@ -633,7 +676,11 @@ func (m *Model) syncStoryContent(sourceStory sb.Story) error {
 // syncStoryContentDetailed handles story synchronization and returns detailed results
 // Note: Folder structure is now pre-planned in optimizePreflight(), so no need to ensure folder path here
 func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult, error) {
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID)
+	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+	for _, s := range m.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
 	return syncer.SyncStoryDetailed(sourceStory, m.shouldPublish())
 }
 

@@ -11,21 +11,86 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 const base = "https://mapi.storyblok.com/v1"
 
 type Client struct {
-	http  *http.Client
-	token string
+	http    *http.Client
+	token   string
+	metrics *Metrics
 }
 
 func New(token string) *Client {
+	// Default transport with MA/CDA limits and retry/backoff
+	opts := DefaultTransportOptionsFromEnv()
+	rt := NewRetryingLimiterTransport(opts)
 	return &Client{
-		http:  &http.Client{Timeout: 10 * time.Second},
-		token: token,
+		http:    &http.Client{Transport: rt, Timeout: 0}, // rely on per-request contexts
+		token:   token,
+		metrics: opts.Metrics,
 	}
+}
+
+// NewWithOptions allows tests or callers to override transport options.
+func NewWithOptions(token string, opts TransportOptions) *Client {
+	rt := NewRetryingLimiterTransport(opts)
+	return &Client{
+		http:    &http.Client{Transport: rt, Timeout: 0},
+		token:   token,
+		metrics: opts.Metrics,
+	}
+}
+
+// MetricsSnapshot returns a copy of the HTTP metrics collected by the client.
+// Useful for attributing retry counts to individual sync items.
+func (c *Client) MetricsSnapshot() MetricsSnapshot {
+	if c == nil || c.metrics == nil {
+		return MetricsSnapshot{}
+	}
+	return c.metrics.Snapshot()
+}
+
+// ---------- Access Tokens (CDA) ----------
+
+// APIKey represents an access token for CDA (public or private/preview).
+type APIKey struct {
+	ID      int64   `json:"id"`
+	Access  string  `json:"access"` // "public" or "private" (preview)
+	Name    *string `json:"name,omitempty"`
+	SpaceID int     `json:"space_id"`
+	Token   string  `json:"token"`
+}
+
+type apiKeysResp struct {
+	APIKeys []APIKey `json:"api_keys"`
+}
+
+// ListSpaceAPIKeys lists CDA access tokens for a space via Management API.
+func (c *Client) ListSpaceAPIKeys(ctx context.Context, spaceID int) ([]APIKey, error) {
+	if c.token == "" {
+		return nil, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/api_keys", spaceID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("api_keys.list status %s", res.Status)
+	}
+	var payload apiKeysResp
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	return payload.APIKeys, nil
 }
 
 // ---------- Spaces ----------
@@ -37,6 +102,51 @@ type Space struct {
 
 type spacesResp struct {
 	Spaces []Space `json:"spaces"`
+}
+
+// ---------- Space Details ----------
+type SpaceDetails struct {
+	ID      int          `json:"id"`
+	Name    string       `json:"name"`
+	Options SpaceOptions `json:"options"`
+}
+
+type SpaceOptions struct {
+	Languages []Language `json:"languages"`
+}
+
+type Language struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// GetSpaceDetails fetches a space including options (languages list)
+func (c *Client) GetSpaceDetails(ctx context.Context, spaceID int) (SpaceDetails, error) {
+	if c.token == "" {
+		return SpaceDetails{}, errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d", spaceID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return SpaceDetails{}, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return SpaceDetails{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return SpaceDetails{}, fmt.Errorf("space.get status %s", res.Status)
+	}
+	var payload struct {
+		Space SpaceDetails `json:"space"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return SpaceDetails{}, err
+	}
+	return payload.Space, nil
 }
 
 func (c *Client) ListSpaces(ctx context.Context) ([]Space, error) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"storyblok-sync/internal/sb"
 )
 
@@ -327,6 +328,43 @@ func TestRunNextItemReturnsNilWhenNoPending(t *testing.T) {
 	}
 }
 
+func TestRunNextItemRespectsFolderPhase(t *testing.T) {
+	m := InitialModel()
+	// One folder and one story, both pending; set syncIndex near the story
+	folder := sb.Story{ID: 1, FullSlug: "app", Slug: "app", IsFolder: true}
+	story := sb.Story{ID: 2, FullSlug: "app/page", Slug: "page"}
+	m.preflight.items = []PreflightItem{
+		{Run: RunPending, Story: folder},
+		{Run: RunPending, Story: story},
+	}
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+
+	// Put syncIndex at 1 so naive scan would pick the story first
+	m.syncIndex = 1
+	cmd := m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned")
+	}
+	if m.preflight.items[0].Run != RunRunning {
+		t.Fatalf("expected folder scheduled first, got %v", m.preflight.items[0].Run)
+	}
+	if m.preflight.items[1].Run == RunRunning {
+		t.Fatalf("did not expect story scheduled while folders pending")
+	}
+
+	// Mark folder done; next call should schedule the story
+	m.preflight.items[0].Run = RunDone
+	cmd = m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to schedule story after folders done")
+	}
+	if m.preflight.items[1].Run != RunRunning {
+		t.Fatalf("expected story scheduled after folder phase, got %v", m.preflight.items[1].Run)
+	}
+}
+
 func TestUpdateContinuesWhilePending(t *testing.T) {
 	m := InitialModel()
 	m.state = stateSync
@@ -354,5 +392,95 @@ func TestUpdateContinuesWhilePending(t *testing.T) {
 	}
 	if mm.syncIndex != 1 {
 		t.Fatalf("expected syncIndex moved to next pending (1), got %d", mm.syncIndex)
+	}
+}
+
+func TestCtrlC_PausesSchedulingAndAllowsResume(t *testing.T) {
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+	m.syncing = true
+	// One running, one pending
+	m.preflight.items = []PreflightItem{
+		{Run: RunRunning, Story: sb.Story{ID: 1, FullSlug: "a"}},
+		{Run: RunPending, Story: sb.Story{ID: 2, FullSlug: "b"}},
+	}
+
+	// Send Ctrl+C globally via Update
+	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	mm := model.(Model)
+	if !mm.paused {
+		t.Fatalf("expected paused=true after Ctrl+C")
+	}
+
+	// A running worker finishes; should not schedule new work while paused
+	model, cmd := mm.Update(syncResultMsg{Index: 0, Duration: 1})
+	mm = model.(Model)
+	if cmd != nil {
+		t.Fatalf("expected no new scheduling while paused")
+	}
+	if mm.syncing {
+		t.Fatalf("expected syncing=false when paused and nothing running")
+	}
+
+	// Resume with 'r' should clear pause and schedule next pending
+	model, cmd = mm.handleSyncKey("r")
+	mm = model.(Model)
+	if !mm.syncing || mm.paused {
+		t.Fatalf("expected syncing=true and paused=false after resume")
+	}
+	if cmd == nil {
+		t.Fatalf("expected a command to be returned on resume")
+	}
+}
+
+func TestUIPhasedSyncAndIndexUpdate_PreventsRootPlacement(t *testing.T) {
+	// Setup model with a folder and a child story, both pending
+	folder := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	story := sb.Story{ID: 2, Name: "p", Slug: "p", FullSlug: "app/p"}
+
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("")
+	m.preflight.items = []PreflightItem{
+		{Story: folder, Selected: true, Run: RunPending},
+		{Story: story, Selected: true, Run: RunPending},
+	}
+
+	// Initially, with folder pending, only one worker should start and it must be the folder
+	cmd := m.runNextItem()
+	if cmd == nil {
+		t.Fatalf("expected a command to start folder phase")
+	}
+	if m.preflight.items[0].Run != RunRunning || m.preflight.items[1].Run == RunRunning {
+		t.Fatalf("expected folder running first and story not scheduled yet")
+	}
+
+	// Simulate folder completion with a resulting folder returned; UI should refresh target index
+	folderResult := syncItemResult{Operation: "create", TargetStory: &sb.Story{ID: 55, FullSlug: "app", IsFolder: true}}
+	modelAny, cont := m.Update(syncResultMsg{Index: 0, Result: &folderResult})
+	mm := modelAny.(Model)
+	// Update should immediately schedule the next pending story
+	if cont == nil {
+		t.Fatalf("expected Update to return continuation command after folder completion")
+	}
+
+	// Now, a new run should schedule the story (folder phase complete)
+	// The story should already be marked running by the continuation
+	if mm.preflight.items[1].Run != RunRunning {
+		t.Fatalf("expected story to be scheduled after folder done")
+	}
+
+	// Build a syncer with the UI's target index to validate parent resolution will find the folder (no API call)
+	tgtIndex := make(map[string]sb.Story)
+	for _, s := range mm.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	if _, ok := tgtIndex["app"]; !ok {
+		t.Fatalf("expected target index to include created folder 'app'")
 	}
 }

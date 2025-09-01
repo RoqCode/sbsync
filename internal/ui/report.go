@@ -22,6 +22,8 @@ type ReportEntry struct {
 	Duration    int64     `json:"duration_ms,omitempty"`  // Duration in milliseconds
 	Story       *sb.Story `json:"source_story,omitempty"` // Complete source story for errors/warnings
 	TargetStory *sb.Story `json:"target_story,omitempty"` // Target story if created/updated
+	// Rate limit related counters (deltas captured per item)
+	RateLimit429 int `json:"rate_limit_429,omitempty"`
 }
 
 // Report collects all entries and provides comprehensive sync reporting.

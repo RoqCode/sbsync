@@ -22,17 +22,16 @@ Each phase specifies scope, acceptance criteria, and tests.
 
 Scope
 
-- Create CDA client
-- Add shared retrying transport used by both MA and CDA clients.
-- Add per‑host rate limiters (MA and CDA) and simple counters.
+- Add a shared retrying HTTP transport used by the Management API client.
+- Add per‑host rate limiter and simple counters.
 
 Details
 
 - Retries: trigger on 429/502/503/504 and transient I/O.
 - Retry‑After: parse seconds and HTTP‑date formats; cap total attempt time.
 - Backoff: exponential with jitter (base 250ms, cap 5s, attempts 3–5); respect context cancel.
-- Limiters: MA default 5 rps, burst 6; CDA default 10 rps.
-- Instrumentation: counters for requests by client, status buckets, retries, backoff sleeps.
+- Limiter: default 5 rps, burst 6 for MA.
+- Instrumentation: counters for requests, status buckets, retries, backoff sleeps.
 
 Acceptance
 
@@ -43,61 +42,26 @@ Tests
 
 - Deterministic transport tests for header parsing, jitter bounds, limiter pacing, cancellation.
 
-### Phase 2: CDA Token Resolution During Scanning (per selected space)
+### Phase 2: On‑Demand Reads, No Pre‑Hydration
 
 Scope
 
-- Resolve CDA tokens up front and store per run; fall back cleanly.
-
-Details (single source of truth)
-
-- Discover the CDA public/preview token for the selected source space via Management API (if permissions allow).
-- If discovery fails or is not permitted, mark as “no CDA token” and use MA reads for hydration as needed.
-
-Security
-
-- Never log tokens; redact in any error messages; keep in memory only; clear on exit.
-
-Acceptance
-
-- Token resolution follows precedence; failures fall back to MA reads without breaking sync.
-
-Tests
-
-- discovery > fallback flows; discovery denied; logs redacted.
-
-### Phase 3: Pre‑Hydration Stage via CDA (before writes)
-
-Scope
-
-- Perform a dedicated “hydration” stage for all selected stories before starting per‑item writes. Continue to list by MA (authoritative); use CDA for content.
+- Fetch content on demand via MA for each item during sync; remove pre‑hydration logic.
 
 Details
 
-- Build a hydration queue from the finalized preflight plan (stories only; skip folders).
-- Batch hydration: group slugs/UUIDs (e.g., 50–100 per request) to maximize CDA efficiency and bound memory.
-- Draft/unpublished: use preview token + `version=draft`.
-- Published & Changes handling:
-  - For stories that are published but have unpublished changes (“Published & Changes”), fetch BOTH published and draft versions during hydration.
-  - Detection strategies (pick one, based on API capabilities):
-    - Prefer API metadata that flags this state (if available in list/get responses).
-    - Or, when preview token is available: fetch both versions and compare canonicalized `content`; if they differ, mark as “has unpublished changes”.
-- Hydration cache records may carry up to two content blobs per story when needed: `publishedContent` and `draftContent` (to minimize memory, store only present variants).
-- Hydration cache: store `content` blobs keyed by story ID/slug; wire ContentManager to read from this cache first.
-- Fallback: for items missing in the cache (hydration miss/failure), let ContentManager fall back to MA `GetStoryWithContent` during the sync step for that item only.
-- Memory guards: cap concurrent batches; store only `content` (not full payloads); progressively clear cache once items are processed.
-- UI: show a brief “Hydrating content …” progress step (hydrated/total) before writes begin.
+- ContentManager calls `GetStoryWithContent` only when needed; maintains a small in‑memory cache.
+- Keep write flow unchanged (raw create/update, UUID alignment); use on‑demand reads for correctness.
 
 Acceptance
 
-- Pre‑hydration runs before writes; hydration cache hits for most items; MA fallback used only for unhydrated items.
-- Significant reduction in MA reads; correctness preserved for draft/published.
+- Sync reads exactly what it needs; no separate hydration step; correctness equivalent to MAPI payloads.
 
 Tests
 
-- Batch reduces call count; ContentManager uses hydration cache; fallback to MA correct; memory caps honored.
+- Ensure `EnsureContent` uses MA and cache; verify sync flow remains correct.
 
-### Phase 4: Write Worker Pool, De‑dup/Idempotency (folders pre‑created)
+### Phase 3: Write Worker Pool, De‑dup/Idempotency (folders pre‑created)
 
 Scope
 
@@ -134,52 +98,81 @@ Tests
 - Concurrency: parallel items target same path → exactly one create chain; coalescing verified.
 - Published & Changes: verifies dual‑write order; published‑only and draft‑only paths verified; raw invariants preserved.
 
-### Phase 5: TUI Performance Panel (Throughput & Workers)
+### Phase 4: TUI Performance Panel (Throughput & Workers)
 
 Scope
 
-- Add a stats panel to the Sync view with live throughput and worker utilization.
+- Add a non‑blocking stats panel to the Sync view with live throughput (items/sec) and worker utilization (active/total).
 
-Details
+Design Overview
 
-- Items/sec: maintain a rolling window via a small ring buffer; update ~500ms.
-- Workers: display active vs total workers as compact bars.
-- Non‑blocking: rendering must be inexpensive and must not block sync.
+- Sampling model: record item completion timestamps in a fixed‑size ring buffer; compute moving throughput over a short window (e.g., last 15–30s).
+- Update cadence: recompute display at most every 500ms via a Tea tick; no tight loops, no per‑frame heavy work.
+- Worker utilization: maintain counters of active/running workers vs configured max; show as a compact bar and numeric fraction.
+- Thread‑safety: stats updates are done only inside Bubble Tea’s Update loop, driven by messages (no background goroutines modifying model state).
 
-Acceptance
+Implementation Plan
 
-- Panel updates periodically during sync; no visible UI jitter or slowdown.
+1) Model additions (internal/ui/types.go)
+   - Add `stats` struct to `Model`:
+     - `completedTimes []time.Time` (ring buffer with capacity, e.g., 512)
+     - `head int` (ring index)
+     - `window time.Duration` (e.g., 15s)
+     - `lastSample time.Time` (to throttle updates)
+     - `itemsPerSec float64`
+     - `activeWorkers int` and `maxWorkers int` (live view of current worker pool)
+   - Keep fields small to avoid increasing copy costs of the model.
 
-Tests
+2) Sync integration (internal/ui/update_main.go)
+   - On each `syncResultMsg`, append `time.Now()` to the ring buffer.
+   - Maintain `activeWorkers` by:
+     - Increment when scheduling a worker (`RunRunning` set) and decrement when a worker produces a `syncResultMsg`.
+     - Set `maxWorkers` from the current pool policy (Phase 3 fixed value, Phase 5 will adapt).
 
-- Sampling logic bounded; panel updates without blocking; works under idle and loaded runs.
+3) Sampling command (internal/ui/update_main.go)
+   - Introduce a `statsTickMsg` driven by `tea.Tick(500 * time.Millisecond, ...)` while in `stateSync`.
+   - On `statsTickMsg`, prune timestamps older than `now - window`, compute `itemsPerSec = float64(len(windowEvents)) / window.Seconds()`.
+   - Re‑enqueue the next tick only while `state == stateSync`.
 
-### Phase 6: Target Hydration + Diff / No‑op Detection (Optional)
+4) View (internal/ui/view_sync.go)
+   - Render a single‑line or two‑line panel under the progress header, e.g.:
+     - `Throughput: 3.2 it/s  |  Workers: [◼◼◼◻◻◻] 3/6`
+   - Use existing lipgloss styles; keep to a fixed width budget and truncate gracefully.
+   - Only compute derived strings from already‑stored `itemsPerSec`, `activeWorkers`, `maxWorkers` in the view function (no scanning data here).
 
-Scope
+5) Ring buffer helper (internal/ui/utils.go or dedicated file)
+   - Provide small helpers: `statsInit(capacity)`, `statsAppend(ts time.Time)`, `statsPruneBefore(cutoff time.Time)`.
+   - Avoid allocations: reuse the fixed slice and wrap around via modulo.
 
-- Avoid updates when target payload would be identical to source by comparing pre‑hydrated source content against target content hydrated in bulk.
+6) Non‑blocking guarantees
+   - No logging inside the tick handler; O(n) prune cost bounded by ring capacity (≤512).
+   - Cap window to 30s; cap tick at ≥250ms if the UI becomes tight on small terminals.
 
-Details
+7) Feature flag (optional)
+   - `SB_TUI_STATS=0/1` env var to enable/disable the panel quickly if needed.
 
-- After Phase 3 pre‑hydrates source content, perform a matching “target hydration” stage:
-  - Enumerate target stories in scope (by slug set from the preflight plan).
-  - Hydrate target content in CDA batches (or MA if CDA not available), using the same batching/memory guards.
-- Canonicalize both source and target content: sort keys; strip read‑only/transient fields; for arrays, match by `_uid`.
-- Compare canonical forms; if equal, mark the item as no‑op and drop it from the final write plan.
-- Safety: still keep raw‑payload invariants for remaining updates; do not change existing write ordering (e.g., Published & Changes sequence).
+Acceptance Criteria
 
-Acceptance
+- The stats panel appears in `stateSync` and updates roughly twice per second.
+- Under sustained load, no visible UI slowdown or input lag; CPU overhead remains negligible.
+- Items/sec stabilizes to a reasonable value; worker bar reflects active workers.
 
-- No‑op updates are skipped; collision and publish logic unaffected.
-- Hydration cache usage verified for both source and target; memory caps respected.
+Testing Strategy
 
-Tests
+- Unit tests for ring buffer prune/append behavior and items/sec calculation boundaries (empty window, full window, rolling).
+- Update loop tests: feed synthetic `syncResultMsg` at known intervals; assert computed `itemsPerSec` within tolerance.
+- View tests: ensure rendering uses precomputed fields and does not panic on small widths.
+- Concurrency: verify counters update only via messages; no data races in tests with `-race`.
 
-- Canonicalization correctness (maps/arrays); skip logic avoids false positives.
-- Target hydration reduces per‑item reads; memory bounded; end‑to‑end write plan excludes no‑ops.
+Rollout Steps
 
-### Phase 7: Dynamic Concurrency & Circuit Breakers
+1) Land ring buffer and sampling without rendering (behind a no‑op view).
+2) Add simple one‑line panel; verify correctness in tests and manual runs.
+3) Iterate on styling and spacing; keep truncation to fit common terminal widths.
+4) Optional: gate via `SB_TUI_STATS` if any regressions appear.
+
+
+### Phase 5: Dynamic Concurrency & Circuit Breakers
 
 Scope
 
@@ -198,11 +191,31 @@ Tests
 
 - Ramp‑up/down behavior; breaker trips and recovers; throughput preserved.
 
+### Phase 6: Sync Robustness & UX
+
+Scope
+
+- Improve pause/resume behavior, error surfacing, and reporting ergonomics. Optional persistence of run state.
+
+Details
+
+- Pause/cancel smoothing; ensure idempotent resume from the next pending item.
+- Clearer per‑item errors in the Report view; grouped summaries.
+- Optional: persist run state (preflight selection + per‑item status) to allow resume after program restart.
+
+Acceptance
+
+- Users can pause/cancel/resume smoothly; errors are easy to find and act on.
+- (If enabled) A program restart can resume the run with the same preflight selection.
+
+Tests
+
+- Resume picks up the correct next item; idempotency preserved.
+- Report formatting remains stable; summaries reflect actual outcomes.
+
 ## Configuration
 
 - `SB_MA_RPS`, `SB_MA_BURST`, `SB_MA_RETRY_MAX`, `SB_MA_RETRY_BASE_MS`.
-- `SB_CDA_RPS`, `SB_CDA_RETRY_MAX`, `SB_CDA_PER_PAGE`, `SB_CDA_VERSION`.
-- CDA tokens are discovered per selected space (Phase 2). Avoid pre‑configuring tokens in env/config to prevent mismatch with selected spaces.
 - Security: never log tokens; redact sensitive values.
 
 ## Observability
@@ -213,16 +226,15 @@ Tests
 
 ## Edge Cases & Consistency
 
-- Mid‑run source changes: consider snapshotting space `cv`/timestamp and passing to CDA.
-- Locales: ensure hydration covers required locales; merge correctly in payloads.
-- Relations/assets: avoid CDA options that resolve references if writer expects raw JSON.
+- Mid‑run source changes: consider snapshotting MA `cv`/timestamp where relevant.
+- Locales: ensure MA reads cover required locales; raw invariants remain.
+- Relations/assets: avoid resolving references if writer expects raw JSON.
 
 ## Test Matrix (Per Phase)
 
 - Phase 1: retry/backoff/limiting; Retry‑After parsing; context cancel.
-- Phase 2: token precedence; MA discovery allowed/denied; fallback path; redaction.
-- Phase 3: batch hydration; draft vs published; fallback correctness; memory caps.
-- Phase 4: concurrent folder creation; per‑path locking; coalescing; idempotency.
-- Phase 5: stats sampling bounded; non‑blocking updates.
-- Phase 6: canonicalization and skip; no false positives.
-- Phase 7: dynamic concurrency adjustments; breaker behavior and recovery.
+- Phase 2: on‑demand MA reads; cache behavior; correctness retained.
+- Phase 3: concurrent folder creation; per‑path locking; coalescing; idempotency.
+- Phase 4: stats sampling bounded; non‑blocking updates.
+- Phase 5: dynamic concurrency adjustments; breaker behavior and recovery.
+- Phase 6: resume behavior; report formatting and correctness.

@@ -83,27 +83,19 @@ func (m Model) viewReport() string {
 			b.WriteString("\n")
 		}
 
-		// Show recent successes (limit to avoid clutter)
+		// Show all successes; rely on viewport for scrolling
 		if len(successes) > 0 {
-			b.WriteString(successStyle.Render("✓ SUCCESSES") + " ")
-			if len(successes) > 10 {
-				b.WriteString(subtleStyle.Render(fmt.Sprintf("(showing last 10 of %d)", len(successes))))
-			}
-			b.WriteString("\n")
-
-			start := len(successes) - 10
-			if start < 0 {
-				start = 0
-			}
-			for i := start; i < len(successes); i++ {
+			b.WriteString(successStyle.Render("✓ SUCCESSES") + "\n")
+			for i := 0; i < len(successes); i++ {
 				entry := successes[i]
 				duration := fmt.Sprintf("%dms", entry.Duration)
 				symbol := symbolStory
 				if entry.TargetStory != nil && entry.TargetStory.IsFolder {
 					symbol = symbolFolder
 				}
-				b.WriteString(fmt.Sprintf("  %s %s (%s) %s\n",
-					symbol, entry.Slug, entry.Operation, duration))
+				extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
+				b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
+					symbol, entry.Slug, entry.Operation, duration, extra))
 			}
 		}
 	}
@@ -155,6 +147,12 @@ func (m Model) renderReportContent() string {
 		m.report.Summary.Created, m.report.Summary.Updated, m.report.Summary.Skipped))
 
 	b.WriteString(statsBox.Render(stats.String()))
+	// Average stats panel for the whole sync run
+	avg := m.renderReportAverages()
+	if avg != "" {
+		b.WriteString("\n")
+		b.WriteString(avg)
+	}
 	b.WriteString("\n\n")
 
 	if len(m.report.Entries) == 0 {
@@ -195,27 +193,19 @@ func (m Model) renderReportContent() string {
 			b.WriteString("\n")
 		}
 
-		// Show recent successes (limit to avoid clutter)
+		// Show all successes; rely on viewport for scrolling
 		if len(successes) > 0 {
-			b.WriteString(successStyle.Render("✓ SUCCESSES") + " ")
-			if len(successes) > 10 {
-				b.WriteString(subtleStyle.Render(fmt.Sprintf("(showing last 10 of %d)", len(successes))))
-			}
-			b.WriteString("\n")
-
-			start := len(successes) - 10
-			if start < 0 {
-				start = 0
-			}
-			for i := start; i < len(successes); i++ {
+			b.WriteString(successStyle.Render("✓ SUCCESSES") + "\n")
+			for i := 0; i < len(successes); i++ {
 				entry := successes[i]
 				duration := fmt.Sprintf("%dms", entry.Duration)
 				symbol := symbolStory
 				if entry.TargetStory != nil && entry.TargetStory.IsFolder {
 					symbol = symbolFolder
 				}
-				b.WriteString(fmt.Sprintf("  %s %s (%s) %s\n",
-					symbol, entry.Slug, entry.Operation, duration))
+				extra := fmt.Sprintf("  · rl:%d", entry.RateLimit429)
+				b.WriteString(fmt.Sprintf("  %s %s (%s) %s%s\n",
+					symbol, entry.Slug, entry.Operation, duration, extra))
 			}
 		}
 	}
@@ -226,9 +216,50 @@ func (m Model) renderReportContent() string {
 func (m Model) renderReportFooter() string {
 	var helpText string
 	if m.report.Summary.Failure > 0 {
-		helpText = "r retry failures  |  enter/b back to scan  |  q exit"
+		helpText = "j/k scroll  |  pgup/pgdown blättern  |  r retry failures  |  enter/b back to scan  |  q exit"
 	} else {
-		helpText = "enter/b back to scan  |  q exit"
+		helpText = "j/k scroll  |  pgup/pgdown blättern  |  enter/b back to scan  |  q exit"
 	}
 	return renderFooter("", helpText)
+}
+
+// renderReportAverages shows average Req/s, Read/s, Write/s, Succ/s, Warn%, Err% for the whole sync run
+func (m Model) renderReportAverages() string {
+	// Need non-zero duration
+	durMs := m.report.Duration
+	if durMs <= 0 {
+		return ""
+	}
+	durSec := float64(durMs) / 1000.0
+
+	// Successes per second: count successes and warnings (non-failures)
+	succCount := float64(m.report.Summary.Success + m.report.Summary.Warning)
+	succPerS := 0.0
+	if durSec > 0 {
+		succPerS = succCount / durSec
+	}
+
+	// Transport metrics (requests, read/write, status buckets)
+	var reqPerS, readPerS, writePerS, warnPct, errPct float64
+	if m.api != nil {
+		snap := m.api.MetricsSnapshot()
+		total := float64(snap.TotalRequests)
+		if durSec > 0 {
+			reqPerS = total / durSec
+			readPerS = float64(snap.ReadRequests) / durSec
+			writePerS = float64(snap.WriteRequests) / durSec
+		}
+		if total > 0 {
+			warnPct = float64(snap.Status429) / total * 100.0
+			errPct = float64(snap.Status5xx) / total * 100.0
+		}
+	}
+
+	line := whiteTextStyle.Render(
+		fmt.Sprintf(
+			"Durchschnitt – Req/s: %.1f  Read/s: %.1f  Write/s: %.1f  Succ/s: %.1f  Warn: %.1f%%  Err: %.1f%%",
+			reqPerS, readPerS, writePerS, succPerS, warnPct, errPct,
+		),
+	)
+	return line
 }

@@ -5,6 +5,7 @@ import (
 	"storyblok-sync/internal/config"
 	sync "storyblok-sync/internal/core/sync"
 	"storyblok-sync/internal/sb"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -107,8 +108,11 @@ type Model struct {
 	syncIndex   int
 	syncCancel  context.CancelFunc // for cancelling sync operations
 	syncContext context.Context    // cancellable context for sync
+	paused      bool               // pause flag to stop scheduling new work
 	api         *sb.Client
 	report      Report
+	// Per-item metrics snapshots to compute rate-limit retry deltas
+	syncStartMetrics map[int]sb.MetricsSnapshot
 
 	// token input
 	ti textinput.Model
@@ -139,4 +143,43 @@ type Model struct {
 
 	// preserve browse collapse state when entering preflight
 	collapsedBeforePreflight map[int]bool
+
+	// (no pre-hydration; on-demand MA reads during sync)
+
+	// --- Stats (Phase 4: TUI Performance Panel) ---
+	// Requests/sec sampling via transport metrics snapshots
+	rpsCurrent   float64
+	reqTimes     []time.Time
+	reqSamples   []float64
+	reqTotals    []int64
+	reqWindow    time.Duration
+	lastSnapTime time.Time
+	lastSnap     sb.MetricsSnapshot
+	// Reads/writes per second and success per second
+	rpsReadCurrent  float64
+	rpsWriteCurrent float64
+	spsSuccess      float64
+	readTotals      []int64
+	writeTotals     []int64
+	successTotals   []int64
+	successTimes    []time.Time
+	successTotal    int64
+	// Warning/error rates over window (HTTP level)
+	warningRate     float64 // 429 / total * 100
+	errorRate       float64 // 5xx / total * 100
+	status429Totals []int64
+	status5xxTotals []int64
+	// Previous values for trend arrows
+	prevRPS      float64
+	prevReadRPS  float64
+	prevWriteRPS float64
+	prevSuccS    float64
+	prevWarnPct  float64
+	prevErrPct   float64
+	// Worker utilization
+	maxWorkers     int
+	workerBarWidth int
+	rpsGraphWidth  int
+	rpsGraphHeight int
+	showRpsGraph   bool
 }

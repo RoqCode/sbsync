@@ -50,12 +50,13 @@ func (m Model) scanStoriesCmd() tea.Cmd {
 		defer cancel()
 		c := sb.New(token)
 
-		// Parallel wäre nice-to-have, hier sequentiell für Klarheit
+		// Sequentiell für Klarheit
 		src, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: srcID, PerPage: 50})
 		if err != nil {
 			return scanMsg{err: fmt.Errorf("source scan: %w", err)}
 		}
 		sortStories(src)
+
 		tgt, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: tgtID, PerPage: 50})
 		if err != nil {
 			return scanMsg{err: fmt.Errorf("target scan: %w", err)}

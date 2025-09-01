@@ -17,6 +17,7 @@ type SyncOrchestrator struct {
 	report      ReportInterface
 	sourceSpace *sb.Space
 	targetSpace *sb.Space
+	targetIndex map[string]sb.Story
 }
 
 // SyncAPI defines the interface for sync API operations
@@ -43,13 +44,14 @@ type SyncItem interface {
 }
 
 // NewSyncOrchestrator creates a new sync orchestrator
-func NewSyncOrchestrator(api SyncAPI, report ReportInterface, sourceSpace, targetSpace *sb.Space) *SyncOrchestrator {
+func NewSyncOrchestrator(api SyncAPI, report ReportInterface, sourceSpace, targetSpace *sb.Space, targetIndex map[string]sb.Story) *SyncOrchestrator {
 	return &SyncOrchestrator{
 		api:         api,
 		contentMgr:  NewContentManager(api, sourceSpace.ID),
 		report:      report,
 		sourceSpace: sourceSpace,
 		targetSpace: targetSpace,
+		targetIndex: targetIndex,
 	}
 }
 
@@ -97,10 +99,8 @@ func (so *SyncOrchestrator) RunSyncItem(ctx context.Context, idx int, item SyncI
 			} else {
 				LogSuccess(result.Operation, story.FullSlug, duration, result.TargetStory)
 			}
-			time.Sleep(50 * time.Millisecond) // Brief pause between operations
 		} else {
 			log.Printf("Sync completed for %s (no detailed result)", story.FullSlug)
-			time.Sleep(50 * time.Millisecond)
 		}
 
 		return SyncResultMsg{Index: idx, Err: err, Result: result, Duration: duration}
@@ -109,47 +109,9 @@ func (so *SyncOrchestrator) RunSyncItem(ctx context.Context, idx int, item SyncI
 
 // SyncWithRetry executes an operation with retry logic for rate limiting and transient errors
 func (so *SyncOrchestrator) SyncWithRetry(operation func() error) error {
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		err := operation()
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-		log.Printf("Sync attempt %d failed: %v", attempt+1, err)
-
-		// Log additional context for retries
-		if attempt < 2 {
-			retryDelay := so.calculateRetryDelay(err, attempt)
-			log.Printf("  Will retry in %v (attempt %d/3)", retryDelay, attempt+2)
-			time.Sleep(retryDelay)
-		} else {
-			log.Printf("  Max retries (3) exceeded, giving up")
-		}
-
-		// Check if it's a rate limiting error
-		if IsRateLimited(err) {
-			sleepDuration := time.Second * time.Duration(attempt+1)
-			log.Printf("Rate limited, sleeping for %v", sleepDuration)
-			time.Sleep(sleepDuration)
-			continue
-		}
-
-		// For other errors, use shorter delay
-		if attempt < 2 {
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
-	return lastErr
-}
-
-// calculateRetryDelay calculates the delay before retrying based on error type
-func (so *SyncOrchestrator) calculateRetryDelay(err error, attempt int) time.Duration {
-	if IsRateLimited(err) {
-		return time.Second * time.Duration(attempt+1)
-	}
-	return time.Millisecond * 500
+	// Transport-level retries, backoff and rate limiting are now centralized
+	// in the HTTP client. Execute the operation once here.
+	return operation()
 }
 
 // ShouldPublish determines if stories should be published based on space plan
@@ -164,7 +126,7 @@ func (so *SyncOrchestrator) ShouldPublish() bool {
 
 // SyncFolderDetailed synchronizes a folder using StorySyncer
 func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult, error) {
-	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
+	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex)
 	// Publish folders: never; for completeness compute publish flag but it will be ignored for folders
 	publish := so.ShouldPublish() && story.Published
 	return syncer.SyncFolderDetailed(story, publish)
@@ -172,15 +134,10 @@ func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult,
 
 // SyncStoryDetailed synchronizes a story using StorySyncer
 func (so *SyncOrchestrator) SyncStoryDetailed(story sb.Story) (*SyncItemResult, error) {
-	// Ensure parent folder chain exists before syncing the story (no-op for root-only)
-	adapter := newFolderReportAdapter(so.report)
-	// SyncAPI now includes raw methods; pass directly as FolderAPI
-	_, _ = EnsureFolderPathStatic(so.api, adapter, nil, so.sourceSpace.ID, so.targetSpace.ID, story.FullSlug, false)
-
 	// Compute publish flag from source item and target dev mode
 	publish := so.ShouldPublish() && story.Published
 
-	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID)
+	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex)
 	return syncer.SyncStoryDetailed(story, publish)
 }
 

@@ -240,6 +240,54 @@ func TestGetStoryWithContentAndGetStory(t *testing.T) {
 	}
 }
 
+func TestGetSpaceDetailsLanguages(t *testing.T) {
+	c := New("token")
+	c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != "GET" {
+			t.Fatalf("expected GET, got %s", req.Method)
+		}
+		if !strings.HasSuffix(req.URL.Path, "/v1/spaces/123") {
+			t.Fatalf("unexpected path: %s", req.URL.Path)
+		}
+		body := `{"space":{"id":123,"name":"Test","options":{"languages":[{"code":"en","name":"English"},{"code":"de","name":"German"}]}}}`
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+	det, err := c.GetSpaceDetails(context.Background(), 123)
+	if err != nil {
+		t.Fatalf("GetSpaceDetails error: %v", err)
+	}
+	if det.ID != 123 || det.Name != "Test" {
+		t.Fatalf("unexpected details: %+v", det)
+	}
+	if len(det.Options.Languages) != 2 || det.Options.Languages[0].Code != "en" {
+		t.Fatalf("unexpected langs: %+v", det.Options.Languages)
+	}
+}
+
+func TestListSpaceAPIKeys(t *testing.T) {
+	c := New("token")
+	payload := `{"api_keys":[{"id":1,"access":"public","token":"pub"},{"id":2,"access":"private","token":"prev"}]}`
+	c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != "GET" {
+			t.Fatalf("expected GET, got %s", req.Method)
+		}
+		if !strings.HasSuffix(req.URL.Path, "/api_keys") {
+			t.Fatalf("unexpected path: %s", req.URL.Path)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(payload)), Header: make(http.Header)}, nil
+	})}
+	keys, err := c.ListSpaceAPIKeys(context.Background(), 123)
+	if err != nil {
+		t.Fatalf("ListSpaceAPIKeys error: %v", err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("want 2 keys, got %d", len(keys))
+	}
+	if keys[0].Access != "public" || keys[1].Access != "private" {
+		t.Fatalf("unexpected keys: %+v", keys)
+	}
+}
+
 func TestGetStoryWithContentNoToken(t *testing.T) {
 	c := New("")
 	if _, err := c.GetStoryWithContent(context.Background(), 1, 2); err == nil {
