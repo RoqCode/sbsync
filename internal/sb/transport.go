@@ -48,10 +48,10 @@ type TransportOptions struct {
 
 // DefaultTransportOptionsFromEnv returns defaults suitable for Storyblok MA/CDA.
 func DefaultTransportOptionsFromEnv() TransportOptions {
-    // Defaults: host-level safety should not bottleneck per-space read/write buckets.
-    // Set combined host ceiling high enough to accommodate ~7 read + ~7 write.
-    maLimit := Limit{RPS: 14, Burst: 14}
-    cdaLimit := Limit{RPS: 20, Burst: 20}
+	// Defaults: host-level safety should not bottleneck per-space read/write buckets.
+	// Set combined host ceiling high enough to accommodate ~7 read + ~7 write.
+	maLimit := Limit{RPS: 14, Burst: 14}
+	cdaLimit := Limit{RPS: 20, Burst: 20}
 
 	// Environment overrides for MA
 	if v := strings.TrimSpace(os.Getenv("SB_MA_RPS")); v != "" {
