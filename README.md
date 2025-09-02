@@ -35,11 +35,7 @@ Interrupts: `r` to rescan, `q` to abort.
 
 ## TODO (Next Steps)
 
-1. [Robust rate limiting & retries](./docs/PLANNING.md)
-
-   - Detect HTTP 429 and parse `Retry-After` in `sb.Client`.
-   - Centralize exponential backoff with jitter; honor context cancel.
-   - Add tests for backoff, header parsing, and transient errors.
+1. Robust rate limiting & retries — completed
 
 2. Interactive Diff & Merge View (Preflight)
 
