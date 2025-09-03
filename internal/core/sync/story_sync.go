@@ -191,6 +191,19 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			delete(raw, "id")
 			delete(raw, "created_at")
 			delete(raw, "updated_at")
+			// For copy-as-new or slug changes, enforce slug/full_slug from typed story
+			if fullStory.Slug != "" {
+				raw["slug"] = fullStory.Slug
+			}
+			if fullStory.FullSlug != "" {
+				raw["full_slug"] = fullStory.FullSlug
+			}
+			// Ensure name matches the (possibly suffixed) typed story name
+			if fullStory.Name != "" {
+				raw["name"] = fullStory.Name
+			}
+			// Avoid UUID collisions when creating copies
+			delete(raw, "uuid")
 
 			// Set parent_id from resolved target parent
 			if fullStory.FolderID != nil {
@@ -205,6 +218,14 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 				for _, item := range ts {
 					if m, ok := item.(map[string]interface{}); ok {
 						delete(m, "id")
+						// If path present, replace last segment with fullStory.Slug
+						if p, ok2 := m["path"].(string); ok2 && p != "" && fullStory.Slug != "" {
+							parts := strings.Split(p, "/")
+							if len(parts) > 0 {
+								parts[len(parts)-1] = fullStory.Slug
+								m["path"] = strings.Join(parts, "/")
+							}
+						}
 						attrs = append(attrs, m)
 					}
 				}

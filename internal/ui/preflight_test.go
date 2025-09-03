@@ -231,3 +231,87 @@ func TestEnterStartsSequentialWhenFoldersPresent(t *testing.T) {
 		t.Fatalf("expected exactly 1 item running at start when folders present, got %d", running)
 	}
 }
+
+func TestCopyAsNewFlowStoryAddsForkBadge(t *testing.T) {
+	// Set up a single collision story
+	st := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
+	tgt := sb.Story{ID: 9, Name: "one", Slug: "one", FullSlug: "one"}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st}
+	m.storiesTarget = []sb.Story{tgt}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[st.FullSlug] = true
+	m.startPreflight()
+
+	// Open copy-as-new view with 'f'
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if m.state != stateCopyAsNew {
+		t.Fatalf("expected copy-as-new state after f")
+	}
+	// Toggle name suffix and confirm
+	m, _ = m.handleCopyAsNewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m, _ = m.handleCopyAsNewKey(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.state != statePreflight {
+		t.Fatalf("expected return to preflight after confirm")
+	}
+	if !m.preflight.items[0].CopyAsNew {
+		t.Fatalf("expected item marked CopyAsNew")
+	}
+	if m.preflight.items[0].Story.Published {
+		t.Fatalf("expected fork to be draft")
+	}
+	if m.preflight.items[0].Story.UUID != "" {
+		t.Fatalf("expected fork to clear UUID")
+	}
+	if !strings.HasSuffix(m.preflight.items[0].Story.Name, " (copy)") {
+		t.Fatalf("expected name to include (copy)")
+	}
+	// Render and check badge
+	m.updatePreflightViewport()
+	out := m.renderPreflightHeader() + "\n" + m.renderViewportContent()
+	if !strings.Contains(out, "[Fork]") {
+		t.Fatalf("expected Fork badge in preflight render")
+	}
+}
+
+func TestQuickForkMovesCursorAndMutatesItem(t *testing.T) {
+	// Two collision stories
+	st1 := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one"}
+	st2 := sb.Story{ID: 2, Name: "two", Slug: "two", FullSlug: "two"}
+	tgt1 := sb.Story{ID: 9, Name: "one", Slug: "one", FullSlug: "one"}
+	tgt2 := sb.Story{ID: 10, Name: "two", Slug: "two", FullSlug: "two"}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st1, st2}
+	m.storiesTarget = []sb.Story{tgt1, tgt2}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[st1.FullSlug] = true
+	m.selection.selected[st2.FullSlug] = true
+	m.startPreflight()
+
+	// Quick fork first item with 'F'
+	m.preflight.listIndex = 0
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	if !m.preflight.items[0].CopyAsNew {
+		t.Fatalf("expected first item CopyAsNew after quick fork")
+	}
+	if !strings.HasSuffix(m.preflight.items[0].Story.Slug, "-copy") {
+		t.Fatalf("expected slug to have -copy suffix, got %s", m.preflight.items[0].Story.Slug)
+	}
+	if !strings.HasSuffix(m.preflight.items[0].Story.Name, " (copy)") {
+		t.Fatalf("expected name to include (copy)")
+	}
+	if m.preflight.items[0].Story.Published {
+		t.Fatalf("expected draft after quick fork")
+	}
+	// Cursor moved down by one
+	if m.preflight.listIndex != 1 {
+		t.Fatalf("expected cursor to move down by one, got %d", m.preflight.listIndex)
+	}
+}

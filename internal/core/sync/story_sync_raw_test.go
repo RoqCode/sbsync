@@ -140,6 +140,37 @@ func TestSyncStory_Create_UsesRawPayload(t *testing.T) {
 	}
 }
 
+func TestSyncStory_Create_ForkHonorsSuffixedNameAndSlug(t *testing.T) {
+	api := newMockStoryRawSyncAPI()
+	// Source story typed + raw
+	sourceID := 11
+	api.sourceTypedByID[sourceID] = sb.Story{ID: sourceID, Slug: "page", FullSlug: "folder/page", Content: json.RawMessage(`{"component":"page"}`)}
+	api.sourceRawByID[sourceID] = map[string]interface{}{
+		"uuid":      "uuid-z",
+		"name":      "Page",
+		"slug":      "page",
+		"full_slug": "folder/page",
+		"content":   map[string]interface{}{"component": "page"},
+		"is_folder": false,
+	}
+
+	syncer := NewStorySyncer(api, 10, 20, map[string]sb.Story{})
+	// Simulate UI-mutated fork: new slug/name applied in typed story
+	st := sb.Story{ID: sourceID, Name: "Page (copy)", Slug: "page-copy", FullSlug: "folder/page-copy", Content: json.RawMessage(`{"component":"page"}`)}
+	if _, err := syncer.SyncStory(context.Background(), st, false); err != nil {
+		t.Fatalf("sync fork create failed: %v", err)
+	}
+	if len(api.rawCreates) != 1 {
+		t.Fatalf("expected one raw create, got %d", len(api.rawCreates))
+	}
+	if api.rawCreates[0]["name"] != "Page (copy)" {
+		t.Fatalf("expected name 'Page (copy)', got %v", api.rawCreates[0]["name"])
+	}
+	if api.rawCreates[0]["slug"] != "page-copy" || api.rawCreates[0]["full_slug"] != "folder/page-copy" {
+		t.Fatalf("expected slug/full_slug overridden, got %v / %v", api.rawCreates[0]["slug"], api.rawCreates[0]["full_slug"])
+	}
+}
+
 func TestSyncStory_Update_UsesRawPayload(t *testing.T) {
 	api := newMockStoryRawSyncAPI()
 	// Existing in target

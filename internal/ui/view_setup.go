@@ -149,3 +149,72 @@ func (m Model) viewScanning() string {
 
 	return header + "\n\n" + paddedContent + "\n" + footer
 }
+
+// viewCopyAsNew renders a full-screen step to choose a new slug and options.
+func (m Model) viewCopyAsNew() string {
+	// Current item context
+	var item PreflightItem
+	if m.copy.itemIdx >= 0 && m.copy.itemIdx < len(m.preflight.items) {
+		item = m.preflight.items[m.copy.itemIdx]
+	}
+
+	title := titleStyle.Render("🍴 Kopie als neu anlegen")
+	subtitle := subtitleStyle.Render("Kollision lösen: wähle neuen Slug und Optionen")
+
+	var lines []string
+	// Preview lines
+	// Name: label gray, original name green, optional suffix in white
+	baseName := item.Story.Name
+	if baseName == "" {
+		baseName = item.Story.Slug
+	}
+	nameLine := subtleStyle.Render("Name: ") + okStyle.Render(baseName)
+	if m.copy.appendCopyToName && baseName != "" && !strings.HasSuffix(baseName, " (copy)") {
+		nameLine += whiteTextStyle.Render(" (copy)")
+	}
+	lines = append(lines, nameLine)
+
+	// Slug preview (parent + selected slug)
+	selected := strings.TrimSpace(m.copy.input.Value())
+	var fullSelected string
+	if m.copy.parent != "" {
+		fullSelected = m.copy.parent + "/" + selected
+	} else {
+		fullSelected = selected
+	}
+	// Slug: label gray, original source slug green, appended preview (final full slug) in white
+	slugLine := subtleStyle.Render("Slug: ") + okStyle.Render(item.Story.Slug)
+	if selected != "" {
+		slugLine += whiteTextStyle.Render(" → " + fullSelected)
+	}
+	lines = append(lines, slugLine)
+	lines = append(lines, "")
+	lines = append(lines, "Vorschläge:")
+	// Presets list
+	for i, p := range m.copy.presets {
+		marker := "  "
+		if i == m.copy.selectedPreset {
+			marker = "> "
+		}
+		lines = append(lines, spaceItemStyle.Render(marker+p))
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Neuer Slug:")
+	lines = append(lines, m.copy.input.View())
+	lines = append(lines, "")
+	// Checkbox: append (copy) to name
+	chk := checkboxOff
+	if m.copy.appendCopyToName {
+		chk = checkboxOn
+	}
+	lines = append(lines, chk+" "+"Namen um \" (copy)\" ergänzen")
+	if m.copy.errorMsg != "" {
+		lines = append(lines, "")
+		lines = append(lines, errorStyle.Render("❌ "+m.copy.errorMsg))
+	}
+
+	content := title + "\n" + subtitle + "\n\n" + strings.Join(lines, "\n")
+	box := welcomeBoxStyle.Render(content)
+	help := renderFooter("", "⌨️  ↑↓: Preset wählen  •  Tab: Feld wechseln  •  Space: Checkbox  •  Enter: übernehmen  •  Esc: zurück")
+	return centeredStyle.Width(m.width).Render(box) + "\n\n" + centeredStyle.Width(m.width).Render(help)
+}

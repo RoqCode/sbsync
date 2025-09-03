@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	sync "storyblok-sync/internal/core/sync"
 	"storyblok-sync/internal/sb"
 )
 
@@ -116,6 +118,100 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.ensurePreflightCursorVisible()
 		m.updateViewportContent()
+	case "c":
+		// Global clear skips remains the same
+		removed := false
+		for _, it := range m.preflight.items {
+			if it.Skip {
+				delete(m.selection.selected, it.Story.FullSlug)
+				removed = true
+			}
+		}
+		if removed {
+			m.startPreflight()
+		}
+	case "f":
+		// Open full-screen Copy-as-new view for the current collision item (stories only)
+		if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
+			idx := m.preflight.visibleIdx[m.preflight.listIndex]
+			it := m.preflight.items[idx]
+			if !it.Story.IsFolder && it.Collision {
+				// Prepare state: base slug is last segment of source slug
+				parent := parentSlug(it.Story.FullSlug)
+				base := it.Story.Slug
+				// Use core helpers for normalization and presets
+				base = sync.NormalizeSlug(base)
+				m.copy.itemIdx = idx
+				m.copy.parent = parent
+				m.copy.baseSlug = base
+				m.copy.presets = sync.BuildSlugPresets(base, time.Now())
+				m.copy.selectedPreset = 0
+				// Pre-fill input with first preset made unique
+				unique := sync.EnsureUniqueSlugInFolder(parent, m.copy.presets[0], m.storiesTarget)
+				m.copy.input.SetValue(unique)
+				m.copy.input.CursorEnd()
+				m.copy.appendCopyToName = false
+				m.copy.errorMsg = ""
+				m.state = stateCopyAsNew
+				return m, nil
+			}
+		}
+	case "F":
+		// Quick fork: immediately mark as copy-as-new with "-copy" and name suffix
+		if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
+			idx := m.preflight.visibleIdx[m.preflight.listIndex]
+			it := &m.preflight.items[idx]
+			if !it.Story.IsFolder && it.Collision {
+				parent := parentSlug(it.Story.FullSlug)
+				base := sync.NormalizeSlug(it.Story.Slug)
+				candidate := base + "-copy"
+				unique := sync.EnsureUniqueSlugInFolder(parent, candidate, m.storiesTarget)
+
+				// Mark item as fork with fields
+				it.CopyAsNew = true
+				it.NewSlug = unique
+				it.NewTranslatedPaths = sync.BuildTranslatedPathsForNewSlug(it.Story, unique)
+				it.AppendCopySuffixToName = true
+
+				// Mutate embedded story for create path
+				if parent == "" {
+					it.Story.FullSlug = unique
+				} else {
+					it.Story.FullSlug = parent + "/" + unique
+				}
+				it.Story.Slug = unique
+				if it.Story.Name != "" && !strings.HasSuffix(it.Story.Name, " (copy)") {
+					it.Story.Name = it.Story.Name + " (copy)"
+				}
+				it.Story.Published = false
+				it.Story.UUID = ""
+				if len(it.Story.TranslatedSlugs) > 0 {
+					for i := range it.Story.TranslatedSlugs {
+						p := it.Story.TranslatedSlugs[i].Path
+						if p != "" {
+							segs := strings.Split(p, "/")
+							if len(segs) > 0 {
+								segs[len(segs)-1] = unique
+								it.Story.TranslatedSlugs[i].Path = strings.Join(segs, "/")
+							}
+						}
+						it.Story.TranslatedSlugs[i].ID = nil
+					}
+				}
+				recalcState(it)
+
+				// Move cursor down by one (visible list)
+				maxIdx := len(m.preflight.visibleIdx)
+				if maxIdx == 0 {
+					maxIdx = len(m.preflight.items)
+				}
+				if m.preflight.listIndex < maxIdx-1 {
+					m.preflight.listIndex++
+				}
+				m.ensurePreflightCursorVisible()
+				m.updateViewportContent()
+			}
+		}
 	case "x":
 		if len(m.preflight.items) > 0 {
 			it := &m.preflight.items[m.preflight.listIndex]
@@ -133,17 +229,6 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 		m.updateViewportContent()
-	case "c":
-		removed := false
-		for _, it := range m.preflight.items {
-			if it.Skip {
-				delete(m.selection.selected, it.Story.FullSlug)
-				removed = true
-			}
-		}
-		if removed {
-			m.startPreflight()
-		}
 	case "esc", "q":
 		// restore browse collapse state
 		if m.collapsedBeforePreflight != nil {

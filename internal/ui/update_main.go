@@ -19,6 +19,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == statePreflight {
 			return m.handlePreflightKey(msg)
 		}
+		if m.state == stateCopyAsNew {
+			return m.handleCopyAsNewKey(msg)
+		}
 
 		// global shortcuts
 		if key == "ctrl+c" {
