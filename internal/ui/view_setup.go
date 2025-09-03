@@ -162,13 +162,26 @@ func (m Model) viewCopyAsNew() string {
 	subtitle := subtitleStyle.Render("Kollision lösen: wähle neuen Slug und Optionen")
 
 	var lines []string
-	// Context line
-	lines = append(lines, subtleStyle.Render("Quelle: ")+okStyle.Render(item.Story.FullSlug))
-	if m.copy.parent != "" {
-		lines = append(lines, subtleStyle.Render("Ordner: ")+okStyle.Render(m.copy.parent))
-	} else {
-		lines = append(lines, subtleStyle.Render("Ordner: ")+okStyle.Render("(root)"))
+	// Preview lines
+	// Name preview (append (copy) if chosen)
+	displayName := item.Story.Name
+	if displayName == "" {
+		displayName = item.Story.Slug
 	}
+	if m.copy.appendCopyToName && displayName != "" && !strings.HasSuffix(displayName, " (copy)") {
+		displayName += " (copy)"
+	}
+	lines = append(lines, "Name: "+okStyle.Render(displayName))
+
+	// Slug preview (parent + selected slug)
+	selected := strings.TrimSpace(m.copy.input.Value())
+	var fullSelected string
+	if m.copy.parent != "" {
+		fullSelected = m.copy.parent + "/" + selected
+	} else {
+		fullSelected = selected
+	}
+	lines = append(lines, "Slug: "+okStyle.Render(fullSelected))
 	lines = append(lines, "")
 	lines = append(lines, "Vorschläge:")
 	// Presets list
