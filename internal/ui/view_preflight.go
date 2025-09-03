@@ -115,7 +115,7 @@ func (m Model) renderPreflightFooter() string {
 	if m.syncing {
 		helpText = "Syncing... | Ctrl+C to cancel"
 	} else {
-		helpText = "j/k bewegen  |  f Fork (Copy as new)  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
+        helpText = "j/k bewegen  |  f Fork  |  F Quick-Fork  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
 	}
 
 	return renderFooter(statusLine, helpText)

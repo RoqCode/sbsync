@@ -156,6 +156,62 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+	case "F":
+		// Quick fork: immediately mark as copy-as-new with "-copy" and name suffix
+		if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
+			idx := m.preflight.visibleIdx[m.preflight.listIndex]
+			it := &m.preflight.items[idx]
+			if !it.Story.IsFolder && it.Collision {
+				parent := parentSlug(it.Story.FullSlug)
+				base := sync.NormalizeSlug(it.Story.Slug)
+				candidate := base + "-copy"
+				unique := sync.EnsureUniqueSlugInFolder(parent, candidate, m.storiesTarget)
+
+				// Mark item as fork with fields
+				it.CopyAsNew = true
+				it.NewSlug = unique
+				it.NewTranslatedPaths = sync.BuildTranslatedPathsForNewSlug(it.Story, unique)
+				it.AppendCopySuffixToName = true
+
+				// Mutate embedded story for create path
+				if parent == "" {
+					it.Story.FullSlug = unique
+				} else {
+					it.Story.FullSlug = parent + "/" + unique
+				}
+				it.Story.Slug = unique
+				if it.Story.Name != "" && !strings.HasSuffix(it.Story.Name, " (copy)") {
+					it.Story.Name = it.Story.Name + " (copy)"
+				}
+				it.Story.Published = false
+				it.Story.UUID = ""
+				if len(it.Story.TranslatedSlugs) > 0 {
+					for i := range it.Story.TranslatedSlugs {
+						p := it.Story.TranslatedSlugs[i].Path
+						if p != "" {
+							segs := strings.Split(p, "/")
+							if len(segs) > 0 {
+								segs[len(segs)-1] = unique
+								it.Story.TranslatedSlugs[i].Path = strings.Join(segs, "/")
+							}
+						}
+						it.Story.TranslatedSlugs[i].ID = nil
+					}
+				}
+				recalcState(it)
+
+				// Move cursor down by one (visible list)
+				maxIdx := len(m.preflight.visibleIdx)
+				if maxIdx == 0 {
+					maxIdx = len(m.preflight.items)
+				}
+				if m.preflight.listIndex < maxIdx-1 {
+					m.preflight.listIndex++
+				}
+				m.ensurePreflightCursorVisible()
+				m.updateViewportContent()
+			}
+		}
 	case "x":
 		if len(m.preflight.items) > 0 {
 			it := &m.preflight.items[m.preflight.listIndex]
