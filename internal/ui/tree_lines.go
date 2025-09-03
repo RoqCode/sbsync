@@ -28,9 +28,13 @@ func generateTreeLinesLabeled(stories []sb.Story, labelFn func(i int, st sb.Stor
 	for _, st := range stories {
 		node := nodes[st.ID]
 		if st.FolderID != nil {
-			if parent, ok := nodes[*st.FolderID]; ok {
-				parent.Child(node)
-				continue
+			pid := *st.FolderID
+			// Treat parent_id == 0 as root
+			if pid != 0 {
+				if parent, ok := nodes[pid]; ok {
+					parent.Child(node)
+					continue
+				}
 			}
 		}
 		tr.Child(node)

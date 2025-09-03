@@ -28,6 +28,10 @@ func (m Model) handleBrowseTreeNavigation(key string) (Model, tea.Cmd) {
 			m.updateBrowseViewport()
 		} else if st.FolderID != nil {
 			pid := *st.FolderID
+			if pid == 0 {
+				// already at root
+				return m, nil
+			}
 			m.folderCollapsed[pid] = true
 			m.refreshVisible()
 			if vis := m.visibleIndexByID(pid); vis >= 0 {

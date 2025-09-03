@@ -51,13 +51,13 @@ func (m Model) scanStoriesCmd() tea.Cmd {
 		c := sb.New(token)
 
 		// Sequentiell für Klarheit
-		src, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: srcID, PerPage: 50})
+		src, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: srcID, PerPage: 1000})
 		if err != nil {
 			return scanMsg{err: fmt.Errorf("source scan: %w", err)}
 		}
 		sortStories(src)
 
-		tgt, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: tgtID, PerPage: 50})
+		tgt, err := c.ListStories(ctx, sb.ListStoriesOpts{SpaceID: tgtID, PerPage: 1000})
 		if err != nil {
 			return scanMsg{err: fmt.Errorf("target scan: %w", err)}
 		}

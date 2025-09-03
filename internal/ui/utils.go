@@ -34,7 +34,8 @@ func (m *Model) includeAncestors(idx int, inc map[int]bool) {
 		}
 		inc[idx] = true
 		st := m.storiesSource[idx]
-		if st.FolderID == nil {
+		// Treat parent_id == 0 as root (no parent)
+		if st.FolderID == nil || (st.FolderID != nil && *st.FolderID == 0) {
 			return
 		}
 		pIdx, ok := m.storyIdx[*st.FolderID]
@@ -43,6 +44,15 @@ func (m *Model) includeAncestors(idx int, inc map[int]bool) {
 		}
 		idx = pIdx
 	}
+}
+
+// isRootStory returns true when the story is at root level.
+// Storyblok MA may encode root as parent_id = 0 instead of null.
+func isRootStory(st sb.Story) bool {
+	if st.FolderID == nil {
+		return true
+	}
+	return *st.FolderID == 0
 }
 
 func (m *Model) rebuildStoryIndex() {

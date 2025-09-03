@@ -461,7 +461,7 @@ func (m *Model) refreshPreflightVisible() {
 	}
 
 	for i, it := range m.preflight.items {
-		if it.Story.FolderID == nil {
+		if isRootStory(it.Story) {
 			addVisible(i)
 		}
 	}
