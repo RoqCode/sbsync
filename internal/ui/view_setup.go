@@ -163,15 +163,16 @@ func (m Model) viewCopyAsNew() string {
 
 	var lines []string
 	// Preview lines
-	// Name preview (append (copy) if chosen)
-	displayName := item.Story.Name
-	if displayName == "" {
-		displayName = item.Story.Slug
+	// Name: label gray, original name green, optional suffix in white
+	baseName := item.Story.Name
+	if baseName == "" {
+		baseName = item.Story.Slug
 	}
-	if m.copy.appendCopyToName && displayName != "" && !strings.HasSuffix(displayName, " (copy)") {
-		displayName += " (copy)"
+	nameLine := subtleStyle.Render("Name: ") + okStyle.Render(baseName)
+	if m.copy.appendCopyToName && baseName != "" && !strings.HasSuffix(baseName, " (copy)") {
+		nameLine += whiteTextStyle.Render(" (copy)")
 	}
-	lines = append(lines, "Name: "+okStyle.Render(displayName))
+	lines = append(lines, nameLine)
 
 	// Slug preview (parent + selected slug)
 	selected := strings.TrimSpace(m.copy.input.Value())
@@ -181,7 +182,12 @@ func (m Model) viewCopyAsNew() string {
 	} else {
 		fullSelected = selected
 	}
-	lines = append(lines, "Slug: "+okStyle.Render(fullSelected))
+	// Slug: label gray, original source slug green, appended preview (final full slug) in white
+	slugLine := subtleStyle.Render("Slug: ") + okStyle.Render(item.Story.Slug)
+	if selected != "" {
+		slugLine += whiteTextStyle.Render(" → " + fullSelected)
+	}
+	lines = append(lines, slugLine)
 	lines = append(lines, "")
 	lines = append(lines, "Vorschläge:")
 	// Presets list
