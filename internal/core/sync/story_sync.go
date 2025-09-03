@@ -198,6 +198,10 @@ func (ss *StorySyncer) SyncStory(ctx context.Context, story sb.Story, shouldPubl
 			if fullStory.FullSlug != "" {
 				raw["full_slug"] = fullStory.FullSlug
 			}
+			// Ensure name matches the (possibly suffixed) typed story name
+			if fullStory.Name != "" {
+				raw["name"] = fullStory.Name
+			}
 			// Avoid UUID collisions when creating copies
 			delete(raw, "uuid")
 
