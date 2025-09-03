@@ -14,8 +14,9 @@ func (m Model) handleCopyAsNewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 	switch key {
 	case "esc", "q":
-		// Back to preflight without changes
+		// Back to preflight without changes; refresh viewport to update any badges
 		m.state = statePreflight
+		m.updateViewportContent()
 		return m, nil
 	case "up", "k":
 		if m.copy.selectedPreset > 0 {
@@ -100,6 +101,8 @@ func (m Model) handleCopyAsNewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 		// Back to preflight
 		m.state = statePreflight
+		// Refresh viewport so the Fork badge appears immediately
+		m.updateViewportContent()
 		return m, nil
 	}
 	// Default: pass input message to textinput for editing
