@@ -125,3 +125,89 @@ Integration (core):
 2. UI (Preflight): add `f` action and modal; implement slug generator and validator; store results.
 3. Writer: in story sync code, if `CopyAsNew`, force create path and override slug/translated paths before sending.
 4. Tests: add unit tests for slug generation and translated mapping; UI integration test for flow; core integration test for create path override.
+
+---
+
+## Phase 2 – Folder Forks (fork a folder subtree under new slug)
+
+### Goals
+
+- Fork a selected folder under a new slug.
+- Recreate all marked descendants (stories and required subfolders) under the new folder path as copies.
+- Keep UX consistent with story copy-as-new (full-screen flow and quick action).
+
+### UX
+
+- In Preflight when a folder is selected:
+  - `f` Folder Fork (full-screen): welcome-style screen to choose the new folder slug and options.
+    - Presets: `{slug}-copy`, `{slug}-v2`, `{slug}-new`, timestamp.
+    - Options:
+      - Append " (copy)" to folder name (default ON).
+      - Optional: also append " (copy)" to child story names (default OFF).
+    - Live preview:
+      - Name: original [+ (copy) when toggled]
+      - Slug: `old/folder` → `parent/new-folder`
+      - Summary: "Will fork: X stories, Y folders"
+    - Enter applies; Esc cancels.
+  - `F` Quick Folder Fork: instantly fork with `{slug}-copy`, append " (copy)" to folder name, do not alter child story names, move cursor down by one.
+
+### Data Model & Integration
+
+- Reuse `sync.PreflightItem` fields:
+  - Top folder item: `CopyAsNew=true`, `NewSlug=<new folder slug>`, `AppendCopySuffixToName` per option.
+  - Descendant items (selected, not skipped): `CopyAsNew=true`, `NewSlug=<leaf slug>` after rebasing.
+- No new core types required; UI computes and writes the re-based paths into the embedded `Story` for each affected item.
+- After applying, run existing preflight optimization (folders-first, dedupe).
+
+### Rebase Algorithm
+
+Given `oldRoot = folder.FullSlug` and `newRoot = Parent(oldRoot)/<newFolderSlug>`:
+
+1. Compute subtree: all preflight items whose `FullSlug` starts with `oldRoot/`, with `Selected && !Skip`.
+2. Materialize required folders under `newRoot`:
+   - For each descendant folder that is an ancestor of any selected item, create or transform a preflight folder item at its re-based `FullSlug` under `newRoot`.
+   - Mark `CopyAsNew`, set `Story.Slug`/`FullSlug` and optional name suffix; set `Published=false`, `UUID=""`.
+3. Rebase stories:
+   - For each selected descendant story, compute `rel = strings.TrimPrefix(full, oldRoot+"/")` and new full slug `newRoot/rel`.
+   - Ensure leaf slug uniqueness within the new parent via the existing helper; set `CopyAsNew=true`, update `Story.Slug`/`FullSlug`, `Published=false`, `UUID=""`, optional name suffix.
+   - Translated slugs: replace last segment of each `path` with the new leaf slug and drop IDs.
+4. Top folder: set `CopyAsNew=true`, update `Story.Slug`/`FullSlug`, apply name suffix, `Published=false`, `UUID=""`.
+
+### Uniqueness
+
+- New top folder slug must be unique among its siblings (`EnsureUniqueSlugInFolder(Parent, newSlug, target)`).
+- For each re-based child (folder or story), ensure leaf slug uniqueness under its new parent; suffix with `-1`, `-2`, … as needed.
+
+### Writer Behavior (unchanged)
+
+- All re-based items have new `FullSlug`s; writer takes the create path.
+- Raw create path already enforces `slug/full_slug`, drops `uuid`, and converts translated slugs.
+- Preflight optimization ensures folders are created before their stories.
+
+### Translated Slugs – Phase 1 Handling
+
+- Replace only the last segment per locale. If this causes validation issues for some spaces, fallback option is to clear translated slugs for forked children to let the API compute defaults (documented trade-off).
+
+### Testing Strategy
+
+- Unit:
+  - Rebase helper coverage for various depths and roots.
+  - Uniqueness resolver across siblings with collisions.
+- UI integration:
+  - Folder quick-fork (`F`) creates a new folder and re-based selected descendants; badges shown; cursor moves down.
+  - Folder full-screen fork (`f`) applies chosen slug and options; previews accurate.
+- Core integration:
+  - Sync creates folder tree first and then children; stories are drafts; names/slugs reflect suffix rules.
+
+### Acceptance Criteria
+
+- Pressing `F` on a folder collision forks the folder to `{slug}-copy`, recreates all selected descendants under the new path, and sync succeeds.
+- Leaf collisions under the new tree are resolved with numeric suffixes.
+- Created items remain drafts; UUID is not updated.
+
+### Implementation Steps (Phase 2)
+
+1. UI: Add folder-aware `f`/`F` handlers; full-screen folder fork view with previews and options.
+2. UI: Implement subtree rebase, uniqueness checks, and explicit folder item materialization under `newRoot`.
+3. Re-run preflight optimization after applying; ensure badges and states update live.
+4. Tests: unit (rebase/uniqueness), UI integration (f/F), core integration (create path ordering).
