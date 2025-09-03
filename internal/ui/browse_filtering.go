@@ -65,6 +65,10 @@ func (m *Model) refreshVisible() {
 	for i, story := range m.storiesSource {
 		if story.FolderID != nil {
 			pid := *story.FolderID
+			// Normalize root encoded as 0
+			if pid == 0 {
+				continue
+			}
 			children[pid] = append(children[pid], i)
 		}
 	}
@@ -100,7 +104,7 @@ func (m *Model) refreshVisible() {
 
 	// Add root level items and their visible children
 	for i, story := range m.storiesSource {
-		if story.FolderID == nil {
+		if isRootStory(story) {
 			addVisible(i)
 		}
 	}

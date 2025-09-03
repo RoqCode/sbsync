@@ -262,10 +262,23 @@ func (c *Client) ListStories(ctx context.Context, opt ListStoriesOpts) ([]Story,
 			return nil, err
 		}
 
+		// Accumulate stories from this page
 		all = append(all, payload.Stories...)
 
-		// Einfacher Abbruch: wenn weniger als PerPage kam, sind wir durch
-		if len(payload.Stories) < opt.PerPage {
+		// Robust termination:
+		// - Prefer API-provided total when available (handles API per_page caps)
+		// - Fallback to classic sentinel when total is missing
+		// - Always break on empty page to avoid infinite loops
+		if payload.Total > 0 {
+			if len(all) >= payload.Total {
+				break
+			}
+		} else {
+			if len(payload.Stories) < opt.PerPage {
+				break
+			}
+		}
+		if len(payload.Stories) == 0 {
 			break
 		}
 		page++
