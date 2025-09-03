@@ -19,8 +19,13 @@ func displayPreflightItem(it PreflightItem) string {
 		name = subtleStyle.Render(name)
 		slug = subtleStyle.Render(slug)
 	}
+	// Add a small badge for copy-as-new
+	badge := ""
+	if it.CopyAsNew {
+		badge = " " + helpStyle.Render("[Fork]")
+	}
 	sym := storyTypeSymbol(it.Story)
-	return fmt.Sprintf("%s %s  %s", sym, name, slug)
+	return fmt.Sprintf("%s %s%s  %s", sym, name, badge, slug)
 }
 
 func (m *Model) updatePreflightViewport() {
@@ -69,6 +74,9 @@ func (m Model) renderPreflightContent() string {
 		if strings.ToLower(it.State) == StateSkip {
 			lineStyle = lineStyle.Faint(true)
 		}
+		if it.CopyAsNew {
+			content += " " + helpStyle.Render("[Fork]")
+		}
 		content = lineStyle.Render(content)
 		cursorCell := " "
 		if visPos == m.preflight.listIndex {
@@ -107,7 +115,7 @@ func (m Model) renderPreflightFooter() string {
 	if m.syncing {
 		helpText = "Syncing... | Ctrl+C to cancel"
 	} else {
-		helpText = "j/k bewegen  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
+		helpText = "j/k bewegen  |  f Fork (Copy as new)  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
 	}
 
 	return renderFooter(statusLine, helpText)

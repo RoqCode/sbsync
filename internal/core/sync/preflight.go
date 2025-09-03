@@ -18,6 +18,13 @@ type PreflightItem struct {
 	Run       string // RunPending, RunRunning, etc.
 	// Optional UI-only field for inline messages
 	Issue string
+
+	// Copy-as-new (Phase 1) – set by UI when the user chooses to fork a story
+	// into a new slug in the target space to resolve a collision.
+	CopyAsNew              bool
+	NewSlug                string            // normalized final slug for default locale
+	NewTranslatedPaths     map[string]string // lang → new full path (for translated slugs)
+	AppendCopySuffixToName bool              // if true, append " (copy)" to Name
 }
 
 // State constants for preflight items

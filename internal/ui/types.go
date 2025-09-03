@@ -23,6 +23,7 @@ const (
 	stateScanning
 	stateBrowseList
 	statePreflight
+	stateCopyAsNew
 	stateSync
 	stateReport
 	stateQuit
@@ -66,11 +67,13 @@ const (
 // Use core PreflightItem directly (includes optional Issue field)
 type PreflightItem = sync.PreflightItem
 
-// recalcState updates the textual state based on Skip/Collision
+// recalcState updates the textual state based on Skip/CopyAsNew/Collision
 func recalcState(it *PreflightItem) {
 	switch {
 	case it.Skip:
 		it.State = StateSkip
+	case it.CopyAsNew:
+		it.State = StateCreate
 	case it.Collision:
 		it.State = StateUpdate
 	default:
@@ -143,6 +146,18 @@ type Model struct {
 
 	// preserve browse collapse state when entering preflight
 	collapsedBeforePreflight map[int]bool
+
+	// Copy-as-new full-screen state
+	copy struct {
+		itemIdx          int
+		parent           string
+		baseSlug         string
+		presets          []string
+		selectedPreset   int
+		input            textinput.Model
+		appendCopyToName bool
+		errorMsg         string
+	}
 
 	// (no pre-hydration; on-demand MA reads during sync)
 

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	sync "storyblok-sync/internal/core/sync"
 	"storyblok-sync/internal/sb"
 )
 
@@ -116,6 +118,44 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.ensurePreflightCursorVisible()
 		m.updateViewportContent()
+	case "c":
+		// Global clear skips remains the same
+		removed := false
+		for _, it := range m.preflight.items {
+			if it.Skip {
+				delete(m.selection.selected, it.Story.FullSlug)
+				removed = true
+			}
+		}
+		if removed {
+			m.startPreflight()
+		}
+	case "f":
+		// Open full-screen Copy-as-new view for the current collision item (stories only)
+		if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
+			idx := m.preflight.visibleIdx[m.preflight.listIndex]
+			it := m.preflight.items[idx]
+			if !it.Story.IsFolder && it.Collision {
+				// Prepare state: base slug is last segment of source slug
+				parent := parentSlug(it.Story.FullSlug)
+				base := it.Story.Slug
+				// Use core helpers for normalization and presets
+				base = sync.NormalizeSlug(base)
+				m.copy.itemIdx = idx
+				m.copy.parent = parent
+				m.copy.baseSlug = base
+				m.copy.presets = sync.BuildSlugPresets(base, time.Now())
+				m.copy.selectedPreset = 0
+				// Pre-fill input with first preset made unique
+				unique := sync.EnsureUniqueSlugInFolder(parent, m.copy.presets[0], m.storiesTarget)
+				m.copy.input.SetValue(unique)
+				m.copy.input.CursorEnd()
+				m.copy.appendCopyToName = false
+				m.copy.errorMsg = ""
+				m.state = stateCopyAsNew
+				return m, nil
+			}
+		}
 	case "x":
 		if len(m.preflight.items) > 0 {
 			it := &m.preflight.items[m.preflight.listIndex]
@@ -133,17 +173,6 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 		m.updateViewportContent()
-	case "c":
-		removed := false
-		for _, it := range m.preflight.items {
-			if it.Skip {
-				delete(m.selection.selected, it.Story.FullSlug)
-				removed = true
-			}
-		}
-		if removed {
-			m.startPreflight()
-		}
 	case "esc", "q":
 		// restore browse collapse state
 		if m.collapsedBeforePreflight != nil {

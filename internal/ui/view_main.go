@@ -34,6 +34,8 @@ func (m Model) View() string {
 			b.WriteString(m.viewSpaceSelect())
 		case stateScanning:
 			b.WriteString(m.viewScanning())
+		case stateCopyAsNew:
+			b.WriteString(m.viewCopyAsNew())
 		}
 		return lipgloss.JoinVertical(lipgloss.Left, header, b.String(), footer)
 	}
@@ -73,6 +75,8 @@ func (m Model) renderStateHeader() string {
 		return m.renderSyncHeader()
 	case stateReport:
 		return m.renderReportHeader()
+	case stateCopyAsNew:
+		return listHeaderStyle.Render("🍴 Copy as new – Kollision lösen")
 	default:
 		return ""
 	}

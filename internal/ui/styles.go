@@ -45,6 +45,10 @@ var (
 	stateSkipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	stateDoneStyle   = lipgloss.NewStyle().Background(lipgloss.Color("10")).Foreground(lipgloss.Color("0")).Bold(true)
 
+	// Checkbox styles (used in copy-as-new screen)
+	checkboxOn  = okStyle.Render("[x]")
+	checkboxOff = subtleStyle.Render("[ ]")
+
 	// Accent styles for performance panel
 	rpsBarStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#3AC4BA")) // teal
 	workersBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8942E1")) // purple

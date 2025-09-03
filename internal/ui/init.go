@@ -65,6 +65,13 @@ func InitialModel() Model {
 	m.filter.prefixInput = pi
 	m.filter.prefix = ""
 
+	// copy-as-new input (full-screen view)
+	ci := textinput.New()
+	ci.Placeholder = "Neuer Slug (z.B. artikel-copy)"
+	ci.CharLimit = 200
+	ci.Width = 40
+	m.copy.input = ci
+
 	// spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Line
