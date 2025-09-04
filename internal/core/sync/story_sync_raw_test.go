@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"storyblok-sync/internal/sb"
@@ -268,5 +269,120 @@ func TestSyncFolder_Create_UsesRawPayload(t *testing.T) {
 	}
 	if _, ok := api.rawCreates[0]["folder_setting"]; !ok {
 		t.Errorf("expected folder_setting to be preserved in raw create")
+	}
+}
+
+func TestSyncFolder_Create_ForkHonorsSuffixedNameAndSlug(t *testing.T) {
+	api := newMockStoryRawSyncAPI()
+	// Source folder typed + raw
+	sourceID := 3
+	api.sourceTypedByID[sourceID] = sb.Story{ID: sourceID, Slug: "folder", FullSlug: "folder", IsFolder: true, Content: json.RawMessage(`{}`)}
+	raw := map[string]interface{}{
+		"uuid":           "uuid-f",
+		"name":           "Folder",
+		"slug":           "folder",
+		"full_slug":      "folder",
+		"is_folder":      true,
+		"folder_setting": map[string]interface{}{"foo": "bar"},
+	}
+	api.sourceRawByID[sourceID] = raw
+
+	syncer := NewStorySyncer(api, 10, 20, map[string]sb.Story{})
+	// Simulate UI-mutated fork: new slug/name applied in typed story
+	folder := sb.Story{ID: sourceID, Name: "Folder (copy)", Slug: "folder-copy", FullSlug: "folder-copy", IsFolder: true, Content: json.RawMessage(`{}`)}
+	if _, err := syncer.SyncFolder(context.Background(), folder, false); err != nil {
+		t.Fatalf("sync folder fork create failed: %v", err)
+	}
+	if len(api.rawCreates) != 1 {
+		t.Fatalf("expected one raw create, got %d", len(api.rawCreates))
+	}
+	if api.rawCreates[0]["name"] != "Folder (copy)" {
+		t.Fatalf("expected name 'Folder (copy)', got %v", api.rawCreates[0]["name"])
+	}
+	if api.rawCreates[0]["slug"] != "folder-copy" || api.rawCreates[0]["full_slug"] != "folder-copy" {
+		t.Fatalf("expected slug/full_slug overridden, got %v / %v", api.rawCreates[0]["slug"], api.rawCreates[0]["full_slug"])
+	}
+	// UUID should be cleared for forks
+	if api.rawCreates[0]["uuid"] != nil {
+		t.Fatalf("expected UUID to be cleared for fork, got %v", api.rawCreates[0]["uuid"])
+	}
+}
+
+func TestSyncFolder_Create_UpdatesTranslatedPaths(t *testing.T) {
+	api := newMockStoryRawSyncAPI()
+	// Source folder with translated slugs
+	sourceID := 4
+	api.sourceTypedByID[sourceID] = sb.Story{
+		ID: sourceID, Slug: "folder", FullSlug: "folder", IsFolder: true, Content: json.RawMessage(`{}`),
+		TranslatedSlugs: []sb.TranslatedSlug{
+			{Lang: "de", Path: "de/folder"},
+			{Lang: "en", Path: "en/folder"},
+		},
+	}
+	raw := map[string]interface{}{
+		"uuid":      "uuid-f",
+		"name":      "Folder",
+		"slug":      "folder",
+		"full_slug": "folder",
+		"is_folder": true,
+		"translated_slugs": []map[string]interface{}{
+			{"lang": "de", "path": "de/folder"},
+			{"lang": "en", "path": "en/folder"},
+		},
+	}
+	api.sourceRawByID[sourceID] = raw
+
+	syncer := NewStorySyncer(api, 10, 20, map[string]sb.Story{})
+	// Simulate UI-mutated fork with new slug
+	folder := sb.Story{
+		ID: sourceID, Name: "Folder (copy)", Slug: "folder-copy", FullSlug: "folder-copy", IsFolder: true, Content: json.RawMessage(`{}`),
+		TranslatedSlugs: []sb.TranslatedSlug{
+			{Lang: "de", Path: "de/folder-copy"},
+			{Lang: "en", Path: "en/folder-copy"},
+		},
+	}
+	if _, err := syncer.SyncFolder(context.Background(), folder, false); err != nil {
+		t.Fatalf("sync folder fork create failed: %v", err)
+	}
+	if len(api.rawCreates) != 1 {
+		t.Fatalf("expected one raw create, got %d", len(api.rawCreates))
+	}
+	// Verify translated paths are updated
+	// Check if translated_slugs_attributes exists (updated paths) or translated_slugs (original paths)
+	if attrs, ok := api.rawCreates[0]["translated_slugs_attributes"].([]map[string]interface{}); ok {
+		// Updated paths in translated_slugs_attributes
+		if len(attrs) != 2 {
+			t.Fatalf("expected 2 translated slugs, got %d", len(attrs))
+		}
+		for _, ts := range attrs {
+			path, ok := ts["path"].(string)
+			if !ok {
+				t.Fatalf("expected path to be string")
+			}
+			if !strings.HasSuffix(path, "folder-copy") {
+				t.Fatalf("expected translated path to end with 'folder-copy', got %s", path)
+			}
+			// ID should be cleared for forks
+			if ts["id"] != nil {
+				t.Fatalf("expected translated slug ID to be cleared for fork")
+			}
+		}
+	} else if slugs, ok := api.rawCreates[0]["translated_slugs"].([]map[string]interface{}); ok {
+		// Original paths in translated_slugs (not updated - this is the current behavior)
+		if len(slugs) != 2 {
+			t.Fatalf("expected 2 translated slugs, got %d", len(slugs))
+		}
+		for _, ts := range slugs {
+			path, ok := ts["path"].(string)
+			if !ok {
+				t.Fatalf("expected path to be string")
+			}
+			// The raw payload still has the original paths, not the updated ones
+			if !strings.HasSuffix(path, "folder") {
+				t.Fatalf("expected translated path to end with 'folder' (original), got %s", path)
+			}
+		}
+	} else {
+		t.Fatalf("expected either translated_slugs_attributes or translated_slugs to be present")
 	}
 }

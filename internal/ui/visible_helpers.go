@@ -25,37 +25,37 @@ func (m *Model) visibleOrderPreflight() ([]sb.Story, []int) {
 	if n == 0 {
 		return []sb.Story{}, []int{}
 	}
-    order := m.preflight.visibleIdx
-    if len(order) == 0 {
-        // Rebuild visible map if empty
-        m.refreshPreflightVisible()
-        order = m.preflight.visibleIdx
-    }
-    // Defensive: if still empty or out-of-sync, fall back to linear order
-    if len(order) == 0 {
-        order = make([]int, n)
-        for i := 0; i < n; i++ {
-            order[i] = i
-        }
-    } else {
-        // Copy and sanitize indices to avoid stale/out-of-range values
-        dup := make([]int, 0, len(order))
-        for _, idx := range order {
-            if idx >= 0 && idx < n {
-                dup = append(dup, idx)
-            }
-        }
-        if len(dup) == 0 {
-            dup = make([]int, n)
-            for i := 0; i < n; i++ {
-                dup[i] = i
-            }
-        }
-        order = dup
-    }
+	order := m.preflight.visibleIdx
+	if len(order) == 0 {
+		// Rebuild visible map if empty
+		m.refreshPreflightVisible()
+		order = m.preflight.visibleIdx
+	}
+	// Defensive: if still empty or out-of-sync, fall back to linear order
+	if len(order) == 0 {
+		order = make([]int, n)
+		for i := 0; i < n; i++ {
+			order[i] = i
+		}
+	} else {
+		// Copy and sanitize indices to avoid stale/out-of-range values
+		dup := make([]int, 0, len(order))
+		for _, idx := range order {
+			if idx >= 0 && idx < n {
+				dup = append(dup, idx)
+			}
+		}
+		if len(dup) == 0 {
+			dup = make([]int, n)
+			for i := 0; i < n; i++ {
+				dup[i] = i
+			}
+		}
+		order = dup
+	}
 	stories := make([]sb.Story, len(order))
 	for i, idx := range order {
-        stories[i] = m.preflight.items[idx].Story
+		stories[i] = m.preflight.items[idx].Story
 	}
 	return stories, order
 }

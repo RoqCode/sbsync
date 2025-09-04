@@ -148,7 +148,7 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				unique := sync.EnsureUniqueSlugInFolder(parent, m.folder.presets[0], m.storiesTarget)
 				m.folder.input.SetValue(unique)
 				m.folder.input.CursorEnd()
-				m.folder.appendCopyToFolderName = true  // default ON
+				m.folder.appendCopyToFolderName = true       // default ON
 				m.folder.appendCopyToChildStoryNames = false // default OFF
 				m.folder.errorMsg = ""
 				m.state = stateFolderFork
@@ -352,7 +352,7 @@ func (m *Model) startPreflight() {
 		m.statusMsg = "Keine Stories markiert."
 		return
 	}
-    children := make(map[int][]int)
+	children := make(map[int][]int)
 	roots := make([]int, 0)
 	for i, st := range m.storiesSource {
 		if !included[i] {
@@ -485,7 +485,7 @@ func (m *Model) refreshPreflightVisible() {
 		}
 	}
 
-    m.preflight.visibleIdx = m.preflight.visibleIdx[:0]
+	m.preflight.visibleIdx = m.preflight.visibleIdx[:0]
 
 	var addVisible func(int)
 	addVisible = func(idx int) {
