@@ -72,6 +72,13 @@ func InitialModel() Model {
 	ci.Width = 40
 	m.copy.input = ci
 
+	// folder-fork input (full-screen view)
+	fi := textinput.New()
+	fi.Placeholder = "Neuer Ordner-Slug (z.B. app-copy)"
+	fi.CharLimit = 200
+	fi.Width = 40
+	m.folder.input = fi
+
 	// spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Line

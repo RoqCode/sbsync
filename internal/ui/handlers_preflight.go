@@ -131,10 +131,29 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.startPreflight()
 		}
 	case "f":
-		// Open full-screen Copy-as-new view for the current collision item (stories only)
+		// Open fork view: story copy-as-new or folder fork depending on item
 		if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
 			idx := m.preflight.visibleIdx[m.preflight.listIndex]
 			it := m.preflight.items[idx]
+			if it.Story.IsFolder && it.Selected && !it.Skip {
+				// Folder full-screen fork
+				parent := parentSlug(it.Story.FullSlug)
+				base := sync.NormalizeSlug(it.Story.Slug)
+				m.folder.itemIdx = idx
+				m.folder.parent = parent
+				m.folder.baseSlug = base
+				m.folder.presets = sync.BuildSlugPresets(base, time.Now())
+				m.folder.selectedPreset = 0
+				// Pre-fill input with first preset made unique
+				unique := sync.EnsureUniqueSlugInFolder(parent, m.folder.presets[0], m.storiesTarget)
+				m.folder.input.SetValue(unique)
+				m.folder.input.CursorEnd()
+				m.folder.appendCopyToFolderName = true  // default ON
+				m.folder.appendCopyToChildStoryNames = false // default OFF
+				m.folder.errorMsg = ""
+				m.state = stateFolderFork
+				return m, nil
+			}
 			if !it.Story.IsFolder && it.Collision {
 				// Prepare state: base slug is last segment of source slug
 				parent := parentSlug(it.Story.FullSlug)
@@ -157,10 +176,29 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 	case "F":
-		// Quick fork: immediately mark as copy-as-new with "-copy" and name suffix
+		// Quick fork: story quick-fork or folder quick-fork
 		if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
 			idx := m.preflight.visibleIdx[m.preflight.listIndex]
 			it := &m.preflight.items[idx]
+			if it.Story.IsFolder && it.Selected && !it.Skip {
+				// Folder quick-fork: new folder slug = base-copy, apply subtree rebase
+				parent := parentSlug(it.Story.FullSlug)
+				base := sync.NormalizeSlug(it.Story.Slug)
+				candidate := base + "-copy"
+				unique := sync.EnsureUniqueSlugInFolder(parent, candidate, m.storiesTarget)
+				m.applyFolderFork(idx, unique, true /*append folder name*/, false /*append child story names*/)
+				// Move cursor down by one (visible list)
+				maxIdx := len(m.preflight.visibleIdx)
+				if maxIdx == 0 {
+					maxIdx = len(m.preflight.items)
+				}
+				if m.preflight.listIndex < maxIdx-1 {
+					m.preflight.listIndex++
+				}
+				m.ensurePreflightCursorVisible()
+				m.updateViewportContent()
+				return m, nil
+			}
 			if !it.Story.IsFolder && it.Collision {
 				parent := parentSlug(it.Story.FullSlug)
 				base := sync.NormalizeSlug(it.Story.Slug)
@@ -314,7 +352,7 @@ func (m *Model) startPreflight() {
 		m.statusMsg = "Keine Stories markiert."
 		return
 	}
-	children := make(map[int][]int)
+    children := make(map[int][]int)
 	roots := make([]int, 0)
 	for i, st := range m.storiesSource {
 		if !included[i] {
@@ -447,7 +485,7 @@ func (m *Model) refreshPreflightVisible() {
 		}
 	}
 
-	m.preflight.visibleIdx = m.preflight.visibleIdx[:0]
+    m.preflight.visibleIdx = m.preflight.visibleIdx[:0]
 
 	var addVisible func(int)
 	addVisible = func(idx int) {

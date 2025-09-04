@@ -36,6 +36,8 @@ func (m Model) View() string {
 			b.WriteString(m.viewScanning())
 		case stateCopyAsNew:
 			b.WriteString(m.viewCopyAsNew())
+		case stateFolderFork:
+			b.WriteString(m.viewFolderFork())
 		}
 		return lipgloss.JoinVertical(lipgloss.Left, header, b.String(), footer)
 	}
@@ -77,6 +79,8 @@ func (m Model) renderStateHeader() string {
 		return m.renderReportHeader()
 	case stateCopyAsNew:
 		return listHeaderStyle.Render("🍴 Copy as new – Kollision lösen")
+	case stateFolderFork:
+		return listHeaderStyle.Render("🍴 Ordner-Fork – Ordnerbaum kopieren")
 	default:
 		return ""
 	}

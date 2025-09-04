@@ -218,3 +218,5 @@ func (m Model) viewCopyAsNew() string {
 	help := renderFooter("", "⌨️  ↑↓: Preset wählen  •  Tab: Feld wechseln  •  Space: Checkbox  •  Enter: übernehmen  •  Esc: zurück")
 	return centeredStyle.Width(m.width).Render(box) + "\n\n" + centeredStyle.Width(m.width).Render(help)
 }
+
+// viewFolderFork is declared in view_preflight.go to keep related views together.

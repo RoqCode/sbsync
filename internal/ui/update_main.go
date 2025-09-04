@@ -22,6 +22,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == stateCopyAsNew {
 			return m.handleCopyAsNewKey(msg)
 		}
+		if m.state == stateFolderFork {
+			return m.handleFolderForkKey(msg)
+		}
 
 		// global shortcuts
 		if key == "ctrl+c" {
