@@ -315,3 +315,654 @@ func TestQuickForkMovesCursorAndMutatesItem(t *testing.T) {
 		t.Fatalf("expected cursor to move down by one, got %d", m.preflight.listIndex)
 	}
 }
+
+func TestApplyFolderForkRebasesSubtree(t *testing.T) {
+	// Set up a folder with children
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child1 := sb.Story{ID: 2, Name: "page1", Slug: "page1", FullSlug: "app/page1", FolderID: &parent.ID}
+	child2 := sb.Story{ID: 3, Name: "page2", Slug: "page2", FullSlug: "app/page2", FolderID: &parent.ID}
+	subfolder := sb.Story{ID: 4, Name: "nested", Slug: "nested", FullSlug: "app/nested", IsFolder: true, FolderID: &parent.ID}
+	subchild := sb.Story{ID: 5, Name: "deep", Slug: "deep", FullSlug: "app/nested/deep", FolderID: &subfolder.ID}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child1, child2, subfolder, subchild}
+	m.storiesTarget = []sb.Story{} // No existing stories
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	// Select all items
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child1.FullSlug] = true
+	m.selection.selected[child2.FullSlug] = true
+	m.selection.selected[subfolder.FullSlug] = true
+	m.selection.selected[subchild.FullSlug] = true
+	m.startPreflight()
+
+	// Find the parent folder index
+	var folderIdx int
+	for i, item := range m.preflight.items {
+		if item.Story.ID == parent.ID {
+			folderIdx = i
+			break
+		}
+	}
+
+	// Apply folder fork
+	m.applyFolderFork(folderIdx, "app-copy", true, false)
+
+	// Verify all items are marked as CopyAsNew
+	for _, item := range m.preflight.items {
+		if !item.CopyAsNew {
+			t.Fatalf("expected all items to be marked CopyAsNew")
+		}
+	}
+
+	// Verify folder structure is preserved with new root
+	expectedPaths := map[int]string{
+		parent.ID:    "app-copy",
+		child1.ID:    "app-copy/page1",
+		child2.ID:    "app-copy/page2",
+		subfolder.ID: "app-copy/nested",
+		subchild.ID:  "app-copy/nested/deep",
+	}
+
+	for _, item := range m.preflight.items {
+		expected, exists := expectedPaths[item.Story.ID]
+		if !exists {
+			continue
+		}
+		if item.Story.FullSlug != expected {
+			t.Fatalf("expected %s to have FullSlug %s, got %s", item.Story.Name, expected, item.Story.FullSlug)
+		}
+		if item.Story.Published {
+			t.Fatalf("expected %s to be draft after fork", item.Story.Name)
+		}
+		if item.Story.UUID != "" {
+			t.Fatalf("expected %s to have empty UUID after fork", item.Story.Name)
+		}
+	}
+
+	// Verify folder names have (copy) suffix
+	for _, item := range m.preflight.items {
+		if item.Story.IsFolder && !strings.HasSuffix(item.Story.Name, " (copy)") {
+			t.Fatalf("expected folder %s to have (copy) suffix", item.Story.Name)
+		}
+	}
+}
+
+func TestApplyFolderForkEnforcesUniqueness(t *testing.T) {
+	// Set up folder with existing target story
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child := sb.Story{ID: 2, Name: "page", Slug: "page", FullSlug: "app/page", FolderID: &parent.ID}
+	existing := sb.Story{ID: 3, Name: "app-copy", Slug: "app-copy", FullSlug: "app-copy"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child}
+	m.storiesTarget = []sb.Story{existing}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child.FullSlug] = true
+	m.startPreflight()
+
+	// Find the parent folder index
+	var folderIdx int
+	for i, item := range m.preflight.items {
+		if item.Story.ID == parent.ID {
+			folderIdx = i
+			break
+		}
+	}
+
+	// Apply folder fork with conflicting slug
+	m.applyFolderFork(folderIdx, "app-copy", false, false)
+
+	// Verify uniqueness is enforced
+	for _, item := range m.preflight.items {
+		if item.Story.ID == parent.ID {
+			if item.Story.Slug == "app-copy" {
+				t.Fatalf("expected slug to be made unique, got %s", item.Story.Slug)
+			}
+			if !strings.HasPrefix(item.Story.Slug, "app-copy") {
+				t.Fatalf("expected slug to start with app-copy, got %s", item.Story.Slug)
+			}
+			break
+		}
+	}
+}
+
+func TestFolderForkKeyHandlerOpensFullScreenView(t *testing.T) {
+	// Set up a folder
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child := sb.Story{ID: 2, Name: "page", Slug: "page", FullSlug: "app/page", FolderID: &parent.ID}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child.FullSlug] = true
+	m.startPreflight()
+
+	// Find the parent folder index in visible list
+	var folderListIdx int
+	for i, visibleIdx := range m.preflight.visibleIdx {
+		if m.preflight.items[visibleIdx].Story.ID == parent.ID {
+			folderListIdx = i
+			break
+		}
+	}
+	m.preflight.listIndex = folderListIdx
+
+	// Press 'f' to open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	if m.state != stateFolderFork {
+		t.Fatalf("expected stateFolderFork after f key, got %v", m.state)
+	}
+	if m.folder.itemIdx < 0 {
+		t.Fatalf("expected folder itemIdx to be set")
+	}
+	if m.folder.baseSlug != "app" {
+		t.Fatalf("expected baseSlug to be 'app', got %s", m.folder.baseSlug)
+	}
+	if !m.folder.appendCopyToFolderName {
+		t.Fatalf("expected appendCopyToFolderName to be true by default")
+	}
+	if m.folder.appendCopyToChildStoryNames {
+		t.Fatalf("expected appendCopyToChildStoryNames to be false by default")
+	}
+}
+
+func TestFolderQuickForkAppliesImmediately(t *testing.T) {
+	// Set up a folder with children
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child := sb.Story{ID: 2, Name: "page", Slug: "page", FullSlug: "app/page", FolderID: &parent.ID}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child.FullSlug] = true
+	m.startPreflight()
+
+	// Find the parent folder index in visible list
+	var folderListIdx int
+	for i, visibleIdx := range m.preflight.visibleIdx {
+		if m.preflight.items[visibleIdx].Story.ID == parent.ID {
+			folderListIdx = i
+			break
+		}
+	}
+	m.preflight.listIndex = folderListIdx
+
+	// Press 'F' for quick fork
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+
+	if m.state != statePreflight {
+		t.Fatalf("expected return to statePreflight after quick fork, got %v", m.state)
+	}
+
+	// Verify folder fork was applied
+	found := false
+	for _, item := range m.preflight.items {
+		if item.Story.ID == parent.ID {
+			if !item.CopyAsNew {
+				t.Fatalf("expected folder to be marked CopyAsNew after quick fork")
+			}
+			if !strings.HasSuffix(item.Story.Slug, "-copy") {
+				t.Fatalf("expected folder slug to have -copy suffix, got %s", item.Story.Slug)
+			}
+			if !strings.HasSuffix(item.Story.Name, " (copy)") {
+				t.Fatalf("expected folder name to have (copy) suffix")
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("folder not found in preflight items")
+	}
+
+	// Verify cursor moved down
+	if m.preflight.listIndex != folderListIdx+1 {
+		t.Fatalf("expected cursor to move down by one, got %d", m.preflight.listIndex)
+	}
+}
+
+func TestFolderForkKeyHandlerIgnoresNonFolders(t *testing.T) {
+	// Set up a story (not folder)
+	story := sb.Story{ID: 1, Name: "page", Slug: "page", FullSlug: "page"}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{story}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[story.FullSlug] = true
+	m.startPreflight()
+
+	// Press 'f' on story
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Should not open folder fork view for stories
+	if m.state == stateFolderFork {
+		t.Fatalf("expected not to open folder fork view for story")
+	}
+}
+
+func TestFolderForkKeyHandlerIgnoresUnselectedItems(t *testing.T) {
+	// Set up a folder but don't select it
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child := sb.Story{ID: 2, Name: "page", Slug: "page", FullSlug: "app/page", FolderID: &parent.ID}
+
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	// Only select child, not parent
+	m.selection.selected[child.FullSlug] = true
+	m.startPreflight()
+
+	// Find the parent folder index in visible list (should be skipped)
+	var folderListIdx int
+	for i, visibleIdx := range m.preflight.visibleIdx {
+		if m.preflight.items[visibleIdx].Story.ID == parent.ID {
+			folderListIdx = i
+			break
+		}
+	}
+	m.preflight.listIndex = folderListIdx
+
+	// Press 'f' on unselected folder
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Should not open folder fork view for unselected folders
+	if m.state == stateFolderFork {
+		t.Fatalf("expected not to open folder fork view for unselected folder")
+	}
+}
+
+func TestFolderForkKeyHandlerNavigation(t *testing.T) {
+	// Set up folder fork state
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	if m.state != stateFolderFork {
+		t.Fatalf("expected stateFolderFork")
+	}
+
+	// Test preset navigation
+	initialPreset := m.folder.selectedPreset
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyDown})
+	if m.folder.selectedPreset != initialPreset+1 {
+		t.Fatalf("expected preset to increment on down arrow")
+	}
+
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyUp})
+	if m.folder.selectedPreset != initialPreset {
+		t.Fatalf("expected preset to decrement on up arrow")
+	}
+}
+
+func TestFolderForkKeyHandlerCheckboxToggle(t *testing.T) {
+	// Set up folder fork state
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Test checkbox cycling with space
+	// Initial state: folder copy ON, child copy OFF
+	if !m.folder.appendCopyToFolderName || m.folder.appendCopyToChildStoryNames {
+		t.Fatalf("unexpected initial checkbox state")
+	}
+
+	// First space: both ON
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeySpace})
+	if !m.folder.appendCopyToFolderName || !m.folder.appendCopyToChildStoryNames {
+		t.Fatalf("expected both checkboxes ON after first space")
+	}
+
+	// Second space: both OFF
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeySpace})
+	if m.folder.appendCopyToFolderName || m.folder.appendCopyToChildStoryNames {
+		t.Fatalf("expected both checkboxes OFF after second space")
+	}
+
+	// Third space: folder copy ON, child copy OFF (cycle back)
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeySpace})
+	if !m.folder.appendCopyToFolderName || m.folder.appendCopyToChildStoryNames {
+		t.Fatalf("expected folder copy ON, child copy OFF after third space")
+	}
+}
+
+func TestFolderForkKeyHandlerInputValidation(t *testing.T) {
+	// Set up folder fork state
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Test empty input validation - empty input gets normalized to "copy" and applied
+	m.folder.input.SetValue("")
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.state != statePreflight {
+		t.Fatalf("expected return to preflight state after empty input (normalized to 'copy')")
+	}
+
+	// Test whitespace-only input - whitespace gets normalized to "copy" and applied
+	m.folder.input.SetValue("   ")
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.state != statePreflight {
+		t.Fatalf("expected return to preflight state after whitespace input (normalized to 'copy')")
+	}
+}
+
+func TestFolderForkKeyHandlerUniquenessCheck(t *testing.T) {
+	// Set up folder fork state with existing target
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	existing := sb.Story{ID: 2, Name: "app-copy", Slug: "app-copy", FullSlug: "app-copy"}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent}
+	m.storiesTarget = []sb.Story{existing}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Test conflicting slug
+	m.folder.input.SetValue("app-copy")
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.state != stateFolderFork {
+		t.Fatalf("expected to stay in folder fork state with conflicting slug")
+	}
+	if m.folder.errorMsg == "" {
+		t.Fatalf("expected error message for conflicting slug")
+	}
+	// Input should be updated with unique suggestion
+	if m.folder.input.Value() == "app-copy" {
+		t.Fatalf("expected input to be updated with unique suggestion")
+	}
+}
+
+func TestFolderForkKeyHandlerSuccessfulApply(t *testing.T) {
+	// Set up folder fork state
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child := sb.Story{ID: 2, Name: "page", Slug: "page", FullSlug: "app/page", FolderID: &parent.ID}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Apply with valid input
+	m.folder.input.SetValue("app-new")
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.state != statePreflight {
+		t.Fatalf("expected return to preflight state after successful apply")
+	}
+
+	// Verify folder fork was applied
+	found := false
+	for _, item := range m.preflight.items {
+		if item.Story.ID == parent.ID {
+			if !item.CopyAsNew {
+				t.Fatalf("expected folder to be marked CopyAsNew")
+			}
+			if item.Story.Slug != "app-new" {
+				t.Fatalf("expected folder slug to be 'app-new', got %s", item.Story.Slug)
+			}
+			if item.Story.FullSlug != "app-new" {
+				t.Fatalf("expected folder FullSlug to be 'app-new', got %s", item.Story.FullSlug)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("folder not found in preflight items")
+	}
+}
+
+func TestFolderForkKeyHandlerEscape(t *testing.T) {
+	// Set up folder fork state
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Test escape key
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.state != statePreflight {
+		t.Fatalf("expected return to preflight state on escape")
+	}
+
+	// Test 'q' key
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	m, _ = m.handleFolderForkKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if m.state != statePreflight {
+		t.Fatalf("expected return to preflight state on 'q'")
+	}
+}
+
+func TestViewFolderForkRendersCorrectly(t *testing.T) {
+	// Set up folder fork state
+	parent := sb.Story{ID: 1, Name: "My App", Slug: "app", FullSlug: "app", IsFolder: true}
+	child1 := sb.Story{ID: 2, Name: "Page 1", Slug: "page1", FullSlug: "app/page1", FolderID: &parent.ID}
+	child2 := sb.Story{ID: 3, Name: "Page 2", Slug: "page2", FullSlug: "app/page2", FolderID: &parent.ID}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child1, child2}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child1.FullSlug] = true
+	m.selection.selected[child2.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Set some test values
+	m.folder.input.SetValue("app-copy")
+	m.folder.appendCopyToFolderName = true
+	m.folder.appendCopyToChildStoryNames = false
+
+	// Render the view
+	view := m.viewFolderFork()
+
+	// Check for key elements in the rendered view
+	if !strings.Contains(view, "🍴 Ordner-Fork vorbereiten") {
+		t.Fatalf("expected title in folder fork view")
+	}
+	if !strings.Contains(view, "Ordnerbaum unter neuem Slug kopieren") {
+		t.Fatalf("expected subtitle in folder fork view")
+	}
+	if !strings.Contains(view, "My App") {
+		t.Fatalf("expected folder name in view")
+	}
+	if !strings.Contains(view, "app-copy") {
+		t.Fatalf("expected new slug in view")
+	}
+	if !strings.Contains(view, "My App (copy)") {
+		t.Fatalf("expected folder name with copy suffix in view")
+	}
+}
+
+func TestViewFolderForkShowsSubtreeCounts(t *testing.T) {
+	// Set up folder fork state with mixed content
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	story1 := sb.Story{ID: 2, Name: "page1", Slug: "page1", FullSlug: "app/page1", FolderID: &parent.ID}
+	story2 := sb.Story{ID: 3, Name: "page2", Slug: "page2", FullSlug: "app/page2", FolderID: &parent.ID}
+	subfolder := sb.Story{ID: 4, Name: "nested", Slug: "nested", FullSlug: "app/nested", IsFolder: true, FolderID: &parent.ID}
+	substory := sb.Story{ID: 5, Name: "deep", Slug: "deep", FullSlug: "app/nested/deep", FolderID: &subfolder.ID}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, story1, story2, subfolder, substory}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	// Select all items
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[story1.FullSlug] = true
+	m.selection.selected[story2.FullSlug] = true
+	m.selection.selected[subfolder.FullSlug] = true
+	m.selection.selected[substory.FullSlug] = true
+	m.startPreflight()
+
+	// Open folder fork view
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+
+	// Render the view
+	view := m.viewFolderFork()
+
+	// Check for subtree counts (3 stories, 2 folders including parent)
+	if !strings.Contains(view, "3 Stories") {
+		t.Fatalf("expected '3 Stories' in view, got: %s", view)
+	}
+	if !strings.Contains(view, "2 Ordner") {
+		t.Fatalf("expected '2 Ordner' in view, got: %s", view)
+	}
+}
+
+func TestFolderForkWithTranslatedSlugs(t *testing.T) {
+	// Set up folder with translated slugs
+	parent := sb.Story{
+		ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true,
+		TranslatedSlugs: []sb.TranslatedSlug{
+			{Lang: "de", Path: "de/app"},
+			{Lang: "en", Path: "en/app"},
+		},
+	}
+	child := sb.Story{
+		ID: 2, Name: "page", Slug: "page", FullSlug: "app/page", FolderID: &parent.ID,
+		TranslatedSlugs: []sb.TranslatedSlug{
+			{Lang: "de", Path: "de/app/page"},
+			{Lang: "en", Path: "en/app/page"},
+		},
+	}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child}
+	m.storiesTarget = []sb.Story{}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[parent.FullSlug] = true
+	m.selection.selected[child.FullSlug] = true
+	m.startPreflight()
+
+	// Find the parent folder index
+	var folderIdx int
+	for i, item := range m.preflight.items {
+		if item.Story.ID == parent.ID {
+			folderIdx = i
+			break
+		}
+	}
+
+	// Apply folder fork
+	m.applyFolderFork(folderIdx, "app-copy", false, false)
+
+	// Verify translated slugs are updated
+	for _, item := range m.preflight.items {
+		if item.Story.ID == parent.ID {
+			if len(item.Story.TranslatedSlugs) != 2 {
+				t.Fatalf("expected 2 translated slugs for parent")
+			}
+			for _, ts := range item.Story.TranslatedSlugs {
+				if !strings.HasSuffix(ts.Path, "app-copy") {
+					t.Fatalf("expected translated path to end with 'app-copy', got %s", ts.Path)
+				}
+				if ts.ID != nil {
+					t.Fatalf("expected translated slug ID to be cleared")
+				}
+			}
+		}
+		if item.Story.ID == child.ID {
+			if len(item.Story.TranslatedSlugs) != 2 {
+				t.Fatalf("expected 2 translated slugs for child")
+			}
+			for _, ts := range item.Story.TranslatedSlugs {
+				// The child's translated path should have the new slug (last segment only)
+				// The child slug should be "page" (unchanged) after fork
+				if !strings.HasSuffix(ts.Path, "page") {
+					t.Fatalf("expected translated path to end with 'page', got %s (child slug: %s)", ts.Path, item.Story.Slug)
+				}
+				if ts.ID != nil {
+					t.Fatalf("expected translated slug ID to be cleared")
+				}
+			}
+		}
+	}
+}

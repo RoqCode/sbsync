@@ -121,6 +121,96 @@ func (m Model) renderPreflightFooter() string {
 	return renderFooter(statusLine, helpText)
 }
 
+// viewFolderFork renders the full-screen folder fork UI
+func (m Model) viewFolderFork() string {
+	var item PreflightItem
+	if m.folder.itemIdx >= 0 && m.folder.itemIdx < len(m.preflight.items) {
+		item = m.preflight.items[m.folder.itemIdx]
+	}
+
+	title := titleStyle.Render("🍴 Ordner-Fork vorbereiten")
+	subtitle := subtitleStyle.Render("Ordnerbaum unter neuem Slug kopieren")
+
+	// Live preview values
+	baseName := item.Story.Name
+	if baseName == "" {
+		baseName = item.Story.Slug
+	}
+	nameLine := subtleStyle.Render("Name: ") + okStyle.Render(baseName)
+	if m.folder.appendCopyToFolderName && baseName != "" && !strings.HasSuffix(baseName, " (copy)") {
+		nameLine += whiteTextStyle.Render(" (copy)")
+	}
+
+	selected := strings.TrimSpace(m.folder.input.Value())
+	var fullSelected string
+	if m.folder.parent != "" {
+		fullSelected = m.folder.parent + "/" + selected
+	} else {
+		fullSelected = selected
+	}
+	slugLine := subtleStyle.Render("Slug: ") + okStyle.Render(item.Story.Slug)
+	if selected != "" {
+		slugLine += whiteTextStyle.Render(" → " + fullSelected)
+	}
+
+	// Compute subtree counts for preview (selected, not skipped, under this folder)
+	storiesCount := 0
+	foldersCount := 0
+	oldRoot := item.Story.FullSlug
+	for _, it := range m.preflight.items {
+		if !it.Selected || it.Skip {
+			continue
+		}
+		if strings.HasPrefix(it.Story.FullSlug+"/", oldRoot+"/") || it.Story.FullSlug == oldRoot {
+			if it.Story.IsFolder {
+				foldersCount++
+			} else {
+				storiesCount++
+			}
+		}
+	}
+	sumLine := subtleStyle.Render("Zusammenfassung: ") + whiteTextStyle.Render(
+		fmt.Sprintf("Forkt %d Stories, %d Ordner", storiesCount, foldersCount),
+	)
+
+	var lines []string
+	lines = append(lines, nameLine)
+	lines = append(lines, slugLine)
+	lines = append(lines, "")
+	lines = append(lines, "Vorschläge:")
+	for i, p := range m.folder.presets {
+		marker := "  "
+		if i == m.folder.selectedPreset {
+			marker = "> "
+		}
+		lines = append(lines, spaceItemStyle.Render(marker+p))
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Neuer Ordner-Slug:")
+	lines = append(lines, m.folder.input.View())
+	lines = append(lines, "")
+	// Checkboxes
+	chk1 := checkboxOff
+	if m.folder.appendCopyToFolderName {
+		chk1 = checkboxOn
+	}
+	lines = append(lines, chk1+" "+"Ordnernamen um \" (copy)\" ergänzen")
+	chk2 := checkboxOff
+	if m.folder.appendCopyToChildStoryNames {
+		chk2 = checkboxOn
+	}
+	lines = append(lines, chk2+" "+"Story-Namen der Kinder um \" (copy)\" ergänzen")
+	if m.folder.errorMsg != "" {
+		lines = append(lines, "")
+		lines = append(lines, errorStyle.Render("❌ "+m.folder.errorMsg))
+	}
+
+	content := title + "\n" + subtitle + "\n\n" + strings.Join(lines, "\n") + "\n\n" + sumLine
+	box := welcomeBoxStyle.Render(content)
+	help := renderFooter("", "⌨️  ↑↓: Preset  •  Tab: Feld  •  Space: Checkboxen  •  Enter: übernehmen  •  Esc: zurück")
+	return centeredStyle.Width(m.width).Render(box) + "\n\n" + centeredStyle.Width(m.width).Render(help)
+}
+
 func renderProgress(done, total, width int) string {
 	if total <= 0 {
 		return ""

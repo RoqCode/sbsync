@@ -433,6 +433,17 @@ func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPu
 			delete(raw, "id")
 			delete(raw, "created_at")
 			delete(raw, "updated_at")
+			// For folder forks, enforce slug/full_slug/name from typed story and avoid UUID collisions
+			if fullFolder.Slug != "" {
+				raw["slug"] = fullFolder.Slug
+			}
+			if fullFolder.FullSlug != "" {
+				raw["full_slug"] = fullFolder.FullSlug
+			}
+			if fullFolder.Name != "" {
+				raw["name"] = fullFolder.Name
+			}
+			delete(raw, "uuid")
 
 			// Ensure is_folder true
 			raw["is_folder"] = true
@@ -450,6 +461,14 @@ func (ss *StorySyncer) SyncFolder(ctx context.Context, folder sb.Story, shouldPu
 				for _, item := range ts {
 					if m, ok := item.(map[string]interface{}); ok {
 						delete(m, "id")
+						// Ensure last path segment matches the new slug if present
+						if p, ok2 := m["path"].(string); ok2 && p != "" && fullFolder.Slug != "" {
+							parts := strings.Split(p, "/")
+							if len(parts) > 0 {
+								parts[len(parts)-1] = fullFolder.Slug
+								m["path"] = strings.Join(parts, "/")
+							}
+						}
 						attrs = append(attrs, m)
 					}
 				}

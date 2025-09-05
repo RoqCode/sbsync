@@ -24,6 +24,7 @@ const (
 	stateBrowseList
 	statePreflight
 	stateCopyAsNew
+	stateFolderFork
 	stateSync
 	stateReport
 	stateQuit
@@ -157,6 +158,19 @@ type Model struct {
 		input            textinput.Model
 		appendCopyToName bool
 		errorMsg         string
+	}
+
+	// Folder-fork full-screen state
+	folder struct {
+		itemIdx                     int
+		parent                      string
+		baseSlug                    string
+		presets                     []string
+		selectedPreset              int
+		input                       textinput.Model
+		appendCopyToFolderName      bool // default ON
+		appendCopyToChildStoryNames bool // default OFF
+		errorMsg                    string
 	}
 
 	// (no pre-hydration; on-demand MA reads during sync)

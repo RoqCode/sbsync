@@ -27,13 +27,30 @@ func (m *Model) visibleOrderPreflight() ([]sb.Story, []int) {
 	}
 	order := m.preflight.visibleIdx
 	if len(order) == 0 {
+		// Rebuild visible map if empty
+		m.refreshPreflightVisible()
+		order = m.preflight.visibleIdx
+	}
+	// Defensive: if still empty or out-of-sync, fall back to linear order
+	if len(order) == 0 {
 		order = make([]int, n)
 		for i := 0; i < n; i++ {
 			order[i] = i
 		}
 	} else {
-		dup := make([]int, len(order))
-		copy(dup, order)
+		// Copy and sanitize indices to avoid stale/out-of-range values
+		dup := make([]int, 0, len(order))
+		for _, idx := range order {
+			if idx >= 0 && idx < n {
+				dup = append(dup, idx)
+			}
+		}
+		if len(dup) == 0 {
+			dup = make([]int, n)
+			for i := 0; i < n; i++ {
+				dup[i] = i
+			}
+		}
 		order = dup
 	}
 	stories := make([]sb.Story, len(order))
