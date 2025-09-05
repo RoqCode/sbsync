@@ -1,213 +1,213 @@
-# Copy-as-new under different slug (Collision handling)
+# Publish Toggle Plan (Publish, Draft, Publish&Changes)
 
-This plan adds a lean alternative to overwrite/skip when Preflight detects a collision: create a new story in the target space using the source content but under a unique slug.
+This plan specifies UX, data flow, and sync semantics for a three‑state publish toggle per story: Publish, Draft, and Publish&Changes. Focus is on predictable behavior and clear constraints for Storyblok’s dual‑version “publish with pending changes” mode.
 
 ## Goals
 
-- Let users resolve collisions by creating a copy of the source story in target.
-- Keep UI simple: no interactive diffing; few predictable choices.
-- Ensure generated slugs are valid and unique (including translated slugs).
-- Integrate with existing Preflight → Sync flow and writer invariants.
+- Allow users to choose, per story, one of: Publish, Draft, Publish&Changes.
+- Default choices sensibly from source state and target space plan.
+- Prevent invalid combinations (e.g., Publish&Changes when target isn’t published or on creates).
+- Keep UI simple and consistent across Browse, Preflight, and Sync views.
 
-## Scope (Phase 1)
+## State Definitions
 
-- Stories only (not folders).
-- Copy content from Source → Target with adjusted slug(s) and paths.
-- Only create copy as draft (prevent unintentional duplicates)
-- Do not handle UUID. UUID is going to be blocked by original. Let the user resolve internal links by hand.
+- **Draft**: sync content to target without publishing. Target’s published version (if any) remains unchanged; target stays draft if it didn’t exist.
+- **Publish**: sync content and publish it (subject to plan limits and dev‑mode constraints).
+- **Publish&Changes**: sync content without publishing it, but keep target’s existing published version live. This implies the target already has a published version; the new content becomes the draft version. Equivalent API behavior: perform update with `publish=false` while the target story is in “published” state. UI badge: `[Pub+∆]`.
 
----
+## Constraints & Rules
 
-## UX Flow
+- **Folders**: no publish state; the toggle applies to stories only.
+- **Creates**: Publish&Changes is invalid; there is no prior published version. Disable or automatically fall back to Draft.
+- **Target not published**: Publish&Changes is invalid; fall back to Draft and show a hint.
+- **Dev mode target space**: Publish requests may be blocked/limited; we still allow selecting Publish but visually hint “[Dev]”. Runtime errors are surfaced per item.
+- **Copy‑as‑new (fork)**: always Draft initially; Publish/Publish&Changes disabled by default. User may switch to Publish explicitly; Publish&Changes stays disabled.
 
-1. Preflight marks collision items as usual (state: update). For collisions, provide a new action: "Fork as new" (key: `f`).
-2. Pressing `f` opens a small modal:
-   - Preset patterns:
-     - `{slug}-copy`
-     - `{slug}-{hhmmss-ddmmyyyy}` (local time)
-   - Manual edit field for final slug (pre‑filled by chosen preset).
-   - Optional checkbox: append " (copy)" to Name (default: off).
-3. On confirm:
-   - The item is marked with an action badge "Fork" in the Preflight list.
-   - The computed new slug and per‑locale paths are stored with the item.
-4. Sync uses the create path to make a new story in target under the chosen slug.
+## Defaulting Policy
 
-Keyboard:
+On preflight build, for each story item (not folder):
 
-- `c` Copy as new
-- `enter` confirm in modal; `esc` cancel
+1. Determine `existsInTarget` and `targetPublished`.
+2. If `source.Published == true` and `shouldPublish() == true`:
+   - Default to Publish (overwrite) regardless of whether the target is published.
+3. If `source.Published == false`: default to Draft.
+4. If target space is in dev mode: retain default but display a `[Dev]` badge; actual publish may be limited by API.
 
----
+Rationale: conservative when target is already live; otherwise mirror source intent.
 
-## Data Model & Integration
+## UX Design
 
-- Extend `internal/core/sync.PreflightItem`:
-  - `CopyAsNew bool`
-  - `NewSlug string` // normalized final slug for default locale
-  - `NewTranslatedPaths map[string]string` // lang → new full path (for translated slugs)
-  - `AppendCopySuffixToName bool`
-- UI sets these fields. Planner continues to optimize ordering (folders first). Item uses `State=create` for UI clarity; a label shows "Fork" or "F" to avoid confusion with "C" (Create).
-- Sync layer checks `CopyAsNew` and forces the create path
+Preflight view (primary surface):
 
----
+- Per‑item toggle cycling order: Draft → Publish → Publish&Changes → Draft.
+- Keybinds:
+  - `p`: cycle publish state for current story item.
+  - `P`: apply current item’s state broadly:
+    - If cursor is on a folder: apply to all children in that folder (direct descendants) and their subtrees (stories only; skip folders).
+    - If cursor is on a story: apply to all siblings within the same folder and their subtrees where applicable (i.e., for any sibling that is a folder, apply to its descendant stories).
+- Badges on list items:
+  - `[Draft]`, `[Pub]`, `[Pub+∆]` for stories.
+  - Add `[Dev]` badge when target space is dev mode.
+  - For forked items, keep `[Fork]`; combine compactly e.g., `[Fork][Draft]`.
+- Disabled states: when a state is invalid (e.g., Publish&Changes on create), the cycle skips it; footer notes why (“Publish&Changes requires published target”).
 
-## Slug & Path Generation
+Browse view (secondary):
 
-- Base slug is the last path segment of the source story (`source.Story.Slug`). Normalize to kebab‑case ASCII and lowercase.
-- Presets:
-  - {alter-slug}-copy
-  - {slug}-v2
-  - {slug}-new
-  - {slug}-{yyyyMMdd-HHmm}
-- Uniqueness:
-  - If `${parent}/${newSlug}` already exists in target (including folders), append `-1`, `-2`, … until unique.
-  - Same logic applies per locale paths derived below.
-- Translated slugs:
-  - For each `translated_slugs` entry, compute new `path` by replacing the last segment of the existing `path` with `newSlug` (same suffix across locales).
-  - Drop IDs (writer will map to `translated_slugs_attributes`).
-- Parent folder:
-  - Keep the same parent folder path as source (planner already ensures folders exist or adds them).
-- Name:
-  - If `AppendCopySuffixToName`, append ` " (copy)"` to `name`.
+- Show current effective publish badge for source items as a hint, but the toggle is only available in Preflight.
 
----
+Sync view:
 
-## Writer Behavior (unchanged invariants)
+- Display the chosen state next to each story for visibility; color consistent with Preflight styling.
 
-- Treat as create:
-  - Use source payload; override `slug` and per‑locale `translated_slugs` paths derived above.
-  - Resolve `parent_id` from folder path as today.
-  - Strip read‑only fields; convert `translated_slugs` → `translated_slugs_attributes` without IDs.
-- Publish policy: follow current plan/policy (published/draft handling).
-- UUID: after create, don't update UUID to avoid collisions
+Footer help (Preflight):
 
----
+- Add: `p: Publish/Draft/Publish&Changes`. If dev mode: append “Ziel im Dev‑Modus: Publish kann ignoriert werden”.
 
-## Error Handling
+## Data Model
 
-- Validation in modal: ensure slug not empty and unique in folder, valid chars, fits Storyblok rules.
-- If uniqueness resolution fails due to rapid concurrent changes, retry with incremented numeric suffix.
-- On API error, show inline issue on the item and leave it pending/cancelled according to current rules.
+- Introduce an explicit per‑item enum independent of `sb.Story.Published`:
+  - New UI field on preflight item: `PublishMode` with values `draft|publish|publish_changes`.
+  - Continue using `sb.Story.Published` to reflect source state and for display; do not overload it for plan state.
+- Persistence: store `PublishMode` on `ui.PreflightItem` (UI layer) and compute the effective `publish` boolean at execution time based on the mode and context.
+- For copy‑as‑new: set `PublishMode = draft` initially; allow switching to `publish`; keep `publish_changes` disabled.
 
----
+Note: Core sync orchestrator currently uses `story.Published` to decide publishing. UI will map `PublishMode` → `publish bool` and call the syncer with that flag (no core changes required).
 
-## Testing Strategy
+## Sync Semantics
 
-Unit:
+For each story item at scheduling time:
 
-- Slug normalization: cases with spaces, umlauts, punctuation → kebab‑case.
-- Uniqueness generator: existing slugs map → choose `-1`, `-2` correctly.
-- Translated slugs mapping: replace last segment; drop IDs.
+- Draft: create/update with `publish=false`.
+- Publish: create/update with `publish=true` (if `shouldPublish() == true`; otherwise `false` but keep UI badge and show `[Dev]`).
+- Publish&Changes: update with `publish=false` (never publish). Only valid if `existsInTarget && targetPublished`. For creates or unpublished target, force `publish=false`, set an inline issue, continue. UI badge `[Pub+∆]`.
 
-Integration (UI):
+Special case (requested behavior):
 
-- Preflight collision → press `f` → choose preset → save → item shows "Copy" badge and holds slug data.
-- Sync consumes `CopyAsNew` and executes create path with overridden slug.
+- If the source story is Published but its `PublishMode` is set to Draft, and the target story is currently published, then:
+  - Overwrite the target’s content (perform an update), and
+  - Afterwards unpublish the story so the final state is Draft.
+  - Implementation requires an explicit Unpublish call; see Implementation Steps.
 
-Integration (core):
+Implementation detail: The UI already constructs a `StorySyncer` and invokes `SyncStoryDetailed`. We will pass the computed `publish` flag derived from `PublishMode` into that call. For the “overwrite then unpublish” case, after a successful update we call `UnpublishStory(spaceID, storyID)`.
 
-- With `CopyAsNew`, writer chooses create path and respects invariants; publish + UUID behavior intact.
+## Edge Cases
 
----
-
-## Phase 1 Acceptance Criteria
-
-- Users can resolve a collision by creating a copy with `{slug}-copy` and sync succeeds.
-- If target already contains `{slug}-copy`, system creates `{slug}-copy-1` (or `-2`, etc.).
-- Translated slugs are updated per locale with new last segment, without IDs.
-- Folders are unaffected; feature disabled for folder items.
-
----
+- Dev mode + Publish selected: API may return dev‑mode publish limit errors; surface as warnings/errors. Keep item completed with issue text; continue flow.
+- Publish&Changes on create: treat as Draft; add Issue: “Publish&Changes benötigt veröffentlichtes Ziel; als Draft synchronisiert”.
+- Publish&Changes on unpublished target: same fallback as above.
+- Folders: ignore toggle keys; no badges.
 
 ## Implementation Steps
 
-1. Model: add fields to `PreflightItem` (or implement UI cache for Phase 1 if preferred).
-2. UI (Preflight): add `f` action and modal; implement slug generator and validator; store results.
-3. Writer: in story sync code, if `CopyAsNew`, force create path and override slug/translated paths before sending.
-4. Tests: add unit tests for slug generation and translated mapping; UI integration test for flow; core integration test for create path override.
+1) Model & Wiring
+- Add `PublishMode string` to `internal/ui/types.go`’s `PreflightItem` (UI alias or wrapper). Allowed: `draft`, `publish`, `publish_changes`.
+- Initialize `PublishMode` in `startPreflight()` per Defaulting Policy (build a map `targetPublishedBySlug`).
+
+2) Key Handling (Preflight)
+- In `handlePreflightKey`: on `p`, cycle `PublishMode` for the current visible story item, skipping invalid states based on existence/targetPublished. Re-render; keep skipped/deselected untouched.
+- `P` propagation as specified above (siblings + subtree).
+
+3) Rendering
+- `view_preflight.go`: append `[Draft]/[Pub]/[Pub+∆]` badges for stories; add `[Dev]` when applicable.
+- `view_browse.go`: show a small `[Pub]/[Draft]` hint for source items (optional).
+- `view_sync.go`: include the selected mode in each story’s line.
+- Update footer help strings accordingly.
+
+4) Execution Mapping
+- In `runNextItem()` command closure (or where `StorySyncer` is called):
+  - Compute `publishFlag` from `PublishMode` and `shouldPublish()`.
+  - For `publish_changes`, enforce update path assumption; if it’s a create, set `publishFlag=false` and set an inline Issue.
+  - For the “Published source + Draft mode + Target published” case: perform update with `publish=false` (or `true` if needed to guarantee overwrite semantics), then call `UnpublishStory` to ensure final draft state.
+  - Pass `publishFlag` into `SyncStoryDetailed` (UI already calls it with a boolean).
+
+New API in `internal/sb`:
+
+- Add `UnpublishStory(ctx context.Context, spaceID, storyID int) error` to client; implement via Storyblok Management API. Use existing retry/transport; add tests.
+
+5) Validation & Issues
+- On invalid mode usage (create/unpublished target with `publish_changes`), set a concise `item.Issue`. Keep it visible in Sync and Report.
+
+6) Tests
+- Unit/UI:
+  - Defaulting from combinations of source/target publish flags (including “both published” → default Publish).
+  - Cycling skips invalid states and wraps correctly.
+  - Publish&Changes falls back to Draft for creates or unpublished targets and sets Issue; badge shows `[Pub+∆]` where applicable.
+  - Dev mode hint rendering.
+- Propagation: `P` on folder applies to all children and their subtrees; `P` on a story applies to siblings and their subtrees.
+- Integration (sync path): stub API and assert publish flag per mode; verify “overwrite then unpublish” sequence occurs when specified.
+
+## Open Questions / Later Improvements
+
+- Global apply: quick actions to set all selected stories to Draft/Publish?
+- Reports: include chosen publish mode in saved report entries.
+- Core API: add a formal publish override to reduce UI coupling (later).
+
+## Acceptance Criteria
+
+- Preflight shows and allows cycling Publish/Draft/Publish&Changes for stories; folders unaffected.
+- Defaulting follows the updated policy (source state mirrored; overwrite when both published); dev‑mode hints appear when applicable.
+- Publish&Changes only applies to updates of already published target stories; otherwise falls back to Draft with an inline issue; badge `[Pub+∆]` used consistently.
+- When a published source is set to Draft and the target is published, the tool overwrites content and unpublishes the target so the final state is Draft.
+- Sync honors the chosen mode and surfaces any API limits/errors.
 
 ---
 
-## Phase 2 – Folder Forks (fork a folder subtree under new slug)
+## Rate‑Limit Budget & Worker Allocation (Final Optimization)
 
-### Goals
+We will optimize concurrency to honor Storyblok limits while maximizing throughput, accounting for added API calls (notably `UnpublishStory`). This is a separate, last step after the publish toggle lands.
 
-- Fork a selected folder under a new slug.
-- Recreate all marked descendants (stories and required subfolders) under the new folder path as copies.
-- Keep UX consistent with story copy-as-new (full-screen flow and quick action).
+### Current State
 
-### UX
+- Per‑host limiter in `internal/sb/transport.go` with adaptive RPS and retries.
+- Per‑space read/write buckets in `internal/core/sync/space_limiter.go` used by `StorySyncer` around MA calls.
+- UI schedules up to `maxWorkers` (currently 1 during folder phase, then up to 6) without explicit knowledge of expected API “cost” per item.
 
-- In Preflight when a folder is selected:
-  - `f` Folder Fork (full-screen): welcome-style screen to choose the new folder slug and options.
-    - Presets: `{slug}-copy`, `{slug}-v2`, `{slug}-new`, timestamp.
-    - Options:
-      - Append " (copy)" to folder name (default ON).
-      - Optional: also append " (copy)" to child story names (default OFF).
-    - Live preview:
-      - Name: original [+ (copy) when toggled]
-      - Slug: `old/folder` → `parent/new-folder`
-      - Summary: "Will fork: X stories, Y folders"
-    - Enter applies; Esc cancels.
-  - `F` Quick Folder Fork: instantly fork with `{slug}-copy`, append " (copy)" to folder name, do not alter child story names, move cursor down by one.
+### Objective
 
-### Data Model & Integration
+- Tune `maxWorkers` dynamically so the expected write pressure does not exceed the per‑space write bucket and avoids 429s, while keeping workers busy.
+- Incorporate different API footprints per publish mode, especially the “overwrite then unpublish” case which costs an extra write.
 
-- Reuse `sync.PreflightItem` fields:
-  - Top folder item: `CopyAsNew=true`, `NewSlug=<new folder slug>`, `AppendCopySuffixToName` per option.
-  - Descendant items (selected, not skipped): `CopyAsNew=true`, `NewSlug=<leaf slug>` after rebasing.
-- No new core types required; UI computes and writes the re-based paths into the embedded `Story` for each affected item.
-- After applying, run existing preflight optimization (folders-first, dedupe).
+### API Cost Model (initial)
 
-### Rebase Algorithm
+- Story Update/Create (Draft/Publish/Publish&Changes): ~1 write, 1–2 reads (raw fetch + existence check fallback).
+- Overwrite then Unpublish (Published source set to Draft on published target): ~2 writes (update + unpublish), 1–2 reads.
+- Folder Create: 1 write (+ small read overhead).
 
-Given `oldRoot = folder.FullSlug` and `newRoot = Parent(oldRoot)/<newFolderSlug>`:
+We will refine these using measured metrics deltas per item.
 
-1. Compute subtree: all preflight items whose `FullSlug` starts with `oldRoot/`, with `Selected && !Skip`.
-2. Materialize required folders under `newRoot`:
-   - For each descendant folder that is an ancestor of any selected item, create or transform a preflight folder item at its re-based `FullSlug` under `newRoot`.
-   - Mark `CopyAsNew`, set `Story.Slug`/`FullSlug` and optional name suffix; set `Published=false`, `UUID=""`.
-3. Rebase stories:
-   - For each selected descendant story, compute `rel = strings.TrimPrefix(full, oldRoot+"/")` and new full slug `newRoot/rel`.
-   - Ensure leaf slug uniqueness within the new parent via the existing helper; set `CopyAsNew=true`, update `Story.Slug`/`FullSlug`, `Published=false`, `UUID=""`, optional name suffix.
-   - Translated slugs: replace last segment of each `path` with the new leaf slug and drop IDs.
-4. Top folder: set `CopyAsNew=true`, update `Story.Slug`/`FullSlug`, apply name suffix, `Published=false`, `UUID=""`.
+### Plan
 
-### Uniqueness
+1) Instrumentation
+- Use existing `sb.MetricsSnapshot` deltas per item (already captured) to compute `writesPerItem` and `readsPerItem` rolling averages by item type/mode.
+- Extend per‑item result to include `WriteDelta`/`ReadDelta` derived from snapshots for faster averaging (UI already tracks `Retry429`).
 
-- New top folder slug must be unique among its siblings (`EnsureUniqueSlugInFolder(Parent, newSlug, target)`).
-- For each re-based child (folder or story), ensure leaf slug uniqueness under its new parent; suffix with `-1`, `-2`, … as needed.
+2) Desired Concurrency Estimation
+- Maintain rolling averages: `avgWritePerItem`, `avgReadPerItem`, and `avgItemDuration` over the recent window.
+- Estimate sustainable concurrent items from current write bucket capacity and host limiter ceiling:
+  - `targetWriteRPS = min(spaceWriteRPS, hostWriteCeiling)` (derive from limiter configs and recent adaptive cap).
+  - `writesPerSecondPerWorker ≈ avgWritePerItem / avgItemDurationSeconds`.
+  - `desiredWorkers = clamp( floor(targetWriteRPS / writesPerSecondPerWorker), 1, 12 )`.
+- Apply smoothing (EMA) to avoid oscillation and only change by ±1 at a time.
 
-### Writer Behavior (unchanged)
+3) Mode‑Aware Budgeting
+- When scheduling next items, sum the expected writes of currently running items plus the candidate’s expected writes (use cost model by mode). Only schedule if the sum over the next `Δt` remains under the write bucket burst. This prevents spikes from multiple “update+unpublish” tasks in parallel.
 
-- All re-based items have new `FullSlug`s; writer takes the create path.
-- Raw create path already enforces `slug/full_slug`, drops `uuid`, and converts translated slugs.
-- Preflight optimization ensures folders are created before their stories.
+4) Adaptive Backoff on 429s
+- On spikes in 429 rate (windowed `warningRate`), immediately reduce `maxWorkers` by 1–2 and increase again slowly after the rate subsides (like TCP congestion control).
 
-### Translated Slugs – Phase 1 Handling
+5) Integration with SpaceLimiter
+- Option A (non‑intrusive): keep SpaceLimiter as is; use it as a guard at API call time, while the scheduler attempts to keep measured pressure under capacity.
+- Option B (later): expose a lightweight `TryReserveWrites(n)` from SpaceLimiter to pre‑reserve budget before scheduling; if reservation fails, delay scheduling.
 
-- Replace only the last segment per locale. If this causes validation issues for some spaces, fallback option is to clear translated slugs for forked children to let the API compute defaults (documented trade-off).
+6) UI Wiring
+- Reuse `statsTick()` to recompute desired workers every 500ms based on the latest averages and warning/error rates; update `m.maxWorkers` accordingly (still honoring folder‑first sequencing).
 
-### Testing Strategy
+7) Tests
+- Simulate higher write cost (e.g., many items needing unpublish) → controller reduces workers.
+- Simulate no 429s and low cost → controller gently increases workers up to ceiling.
+- Ensure the controller never schedules stories during folder phase and never exceeds configured caps.
 
-- Unit:
-  - Rebase helper coverage for various depths and roots.
-  - Uniqueness resolver across siblings with collisions.
-- UI integration:
-  - Folder quick-fork (`F`) creates a new folder and re-based selected descendants; badges shown; cursor moves down.
-  - Folder full-screen fork (`f`) applies chosen slug and options; previews accurate.
-- Core integration:
-  - Sync creates folder tree first and then children; stories are drafts; names/slugs reflect suffix rules.
+### Out of Scope (for now)
 
-### Acceptance Criteria
-
-- Pressing `F` on a folder collision forks the folder to `{slug}-copy`, recreates all selected descendants under the new path, and sync succeeds.
-- Leaf collisions under the new tree are resolved with numeric suffixes.
-- Created items remain drafts; UUID is not updated.
-
-### Implementation Steps (Phase 2)
-
-1. UI: Add folder-aware `f`/`F` handlers; full-screen folder fork view with previews and options.
-2. UI: Implement subtree rebase, uniqueness checks, and explicit folder item materialization under `newRoot`.
-3. Re-run preflight optimization after applying; ensure badges and states update live.
-4. Tests: unit (rebase/uniqueness), UI integration (f/F), core integration (create path ordering).
+- Cross‑space global back‑pressure; we scope per‑run/per‑space only.
+- Fine‑grained per‑endpoint budgets; method‑level read/write split is sufficient.

@@ -38,39 +38,23 @@ Interrupts: `r` to rescan, `q` to abort.
 
 1. Robust rate limiting & retries — completed
 
-2. Copy-as-new under different slug (collision handling)
-
-   - Preflight: add an action for collisions to "Copy as new".
-   - Slug patterns: presets like `{slug}-copy` and `{slug}-{hhmmss-ddmmyyyy}`; allow manual edit.
-   - Uniqueness: if slug exists in target, append numeric suffix until unique.
-   - Translated slugs: generate per‑locale paths; drop IDs; respect existing locale rules.
-   - Parent folder: keep same folder path as source; ensure folders exist (preflight covers this).
-   - Publish policy: treat as create; follow plan/policy for published/draft.
-   - Tests: slug generation, uniqueness fallback, translated slugs behavior, create path.
+2. Copy-as-new under different slug (collision handling) - completed
 
 3. UX improvements
 
    - Publish state UI: show publish/unpublished badge in lists; in Preflight allow per‑item publish toggle (stories only), defaulting from source + plan policy; persist in plan and respect during sync.
    - Per‑item progress, pause/cancel, clearer error surfacing in Sync view.
-   - Persist browse collapse across screens; snapshot tests.
 
-4. Security & logging
+4. Toggle publish state
+
+   - ...
+
+5. Security & logging
 
    - Redact tokens; avoid logging large payloads by default.
    - Structured logs with levels; audit for accidental secrets.
 
-5. CI & releases
-
-   - GitHub Actions: `go fmt/vet/test` + `staticcheck` on PRs.
-   - Goreleaser for multi-arch binaries; release notes template.
-
-6. Dry-run mode (low priority)
-
-   - Core: no-op write layer that still produces full reports.
-   - UI toggle; clear messaging in Report view.
-   - Tests verifying zero write calls and identical plan.
-
-7. Component sync (low priority)
+6. Component sync (low priority)
 
 - Mode toggle: switch between Stories and Components in the UI.
 - API: extend client to list/get/create/update components; handle groups and display names.
@@ -81,6 +65,17 @@ Interrupts: `r` to rescan, `q` to abort.
 - Safety/validation: block breaking changes by default or gate behind confirmation; optional dry‑run validator to check impact on existing stories.
 - Backups: export target component schemas before overwrite; store under `testdata/` or timestamped snapshots.
 - Tests: fixtures for components and dependency graphs; diff and ordering tests.
+
+7. CI & releases
+
+   - GitHub Actions: `go fmt/vet/test` + `staticcheck` on PRs.
+   - Goreleaser for multi-arch binaries; release notes template.
+
+8. Dry-run mode (low priority)
+
+   - Core: no-op write layer that still produces full reports.
+   - UI toggle; clear messaging in Report view.
+   - Tests verifying zero write calls and identical plan.
 
 ## Project Structure
 
