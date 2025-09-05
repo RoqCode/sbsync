@@ -167,9 +167,27 @@ func (m *Model) updateSyncViewport() {
 		}
 
 		// Format: [status] Name | slug (action) [issue]
-		line := fmt.Sprintf("%s %s | %s (%s)",
+		// Badges for publish mode
+		badges := ""
+		if !item.Story.IsFolder {
+			mode := m.getPublishMode(item.Story.FullSlug)
+			switch mode {
+			case PublishModePublish:
+				badges = " [Pub]"
+			case PublishModePublishChanges:
+				badges = " [Pub+∆]"
+			default:
+				badges = " [Draft]"
+			}
+			if m.targetSpace != nil && m.targetSpace.PlanLevel == 999 {
+				badges += "[Dev]"
+			}
+		}
+
+		line := fmt.Sprintf("%s %s%s | %s (%s)",
 			color.Render(status),
 			item.Story.Name,
+			badges,
 			subtleStyle.Render(item.Story.FullSlug),
 			subtleStyle.Render(actionText))
 		if item.Issue != "" {

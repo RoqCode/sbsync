@@ -212,7 +212,38 @@ func (m *Model) runNextItem() tea.Cmd {
 	// Lazily create orchestrator inside the returned command to avoid panics
 	// when spaces/API are not initialized in tests.
 	// Build a lightweight adapter to capture current index and item.
-	item := &preflightItemAdapter{item: m.preflight.items[idx]}
+	// Build adapter and compute publish override for stories
+	it := m.preflight.items[idx]
+	item := &preflightItemAdapter{item: it}
+	if !it.Story.IsFolder {
+		mode := m.getPublishMode(it.Story.FullSlug)
+		exists, tgtPublished := false, false
+		for _, t := range m.storiesTarget {
+			if t.FullSlug == it.Story.FullSlug {
+				exists = true
+				tgtPublished = t.Published
+				break
+			}
+		}
+		publishFlag := false
+		switch mode {
+		case PublishModePublish:
+			publishFlag = true
+		case PublishModePublishChanges:
+			publishFlag = false
+		default:
+			publishFlag = false
+		}
+		if mode == PublishModeDraft && it.Story.Published && exists && tgtPublished {
+			publishFlag = true
+			if m.unpublishAfter == nil {
+				m.unpublishAfter = make(map[string]bool)
+			}
+			m.unpublishAfter[it.Story.FullSlug] = true
+		}
+		item.overridePublish = true
+		item.publishFlag = publishFlag
+	}
 
 	return func() tea.Msg {
 		// If essential dependencies are missing, fail fast with a result message.
@@ -235,11 +266,17 @@ func (m *Model) runNextItem() tea.Cmd {
 
 // preflightItemAdapter adapts PreflightItem to sync.SyncItem interface
 type preflightItemAdapter struct {
-	item PreflightItem
+	item            PreflightItem
+	overridePublish bool
+	publishFlag     bool
 }
 
 func (pia *preflightItemAdapter) GetStory() sb.Story {
-	return pia.item.Story
+	st := pia.item.Story
+	if pia.overridePublish && !st.IsFolder {
+		st.Published = pia.publishFlag
+	}
+	return st
 }
 
 func (pia *preflightItemAdapter) IsFolder() bool {

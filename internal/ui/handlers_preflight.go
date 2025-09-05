@@ -19,6 +19,69 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	key := msg.String()
 	switch key {
+	case "p":
+		// Cycle publish mode for the current visible story item
+		if len(m.preflight.items) > 0 && m.preflight.listIndex >= 0 {
+			if m.preflight.listIndex < len(m.preflight.visibleIdx) {
+				idx := m.preflight.visibleIdx[m.preflight.listIndex]
+				it := m.preflight.items[idx]
+				if !it.Story.IsFolder && it.Selected && !it.Skip {
+					m.cyclePublishModeForSlug(it.Story.FullSlug)
+					m.updateViewportContent()
+					return m, nil
+				}
+			}
+		}
+	case "P":
+		// Apply current item's publish mode to siblings/children as requested
+		if len(m.preflight.items) > 0 && m.preflight.listIndex >= 0 {
+			if m.preflight.listIndex < len(m.preflight.visibleIdx) {
+				idx := m.preflight.visibleIdx[m.preflight.listIndex]
+				it := m.preflight.items[idx]
+				mode := m.getPublishMode(it.Story.FullSlug)
+				if it.Story.IsFolder {
+					// Apply to all descendant stories under this folder
+					root := it.Story.FullSlug
+					for i := range m.preflight.items {
+						st := m.preflight.items[i].Story
+						if st.IsFolder {
+							continue
+						}
+						if m.preflight.items[i].Selected && !m.preflight.items[i].Skip {
+							if st.FullSlug == root || strings.HasPrefix(st.FullSlug+"/", root+"/") {
+								m.setPublishMode(st.FullSlug, mode)
+							}
+						}
+					}
+				} else {
+					// Apply to siblings in same parent folder; if a sibling is a folder, apply to its descendant stories
+					parent := parentSlug(it.Story.FullSlug)
+					for i := range m.preflight.items {
+						st := m.preflight.items[i].Story
+						if m.preflight.items[i].Selected && !m.preflight.items[i].Skip {
+							if parentSlug(st.FullSlug) == parent {
+								if !st.IsFolder {
+									m.setPublishMode(st.FullSlug, mode)
+								} else {
+									// apply to descendant stories of sibling folder
+									root := st.FullSlug
+									for j := range m.preflight.items {
+										sj := m.preflight.items[j].Story
+										if !sj.IsFolder && (sj.FullSlug == root || strings.HasPrefix(sj.FullSlug+"/", root+"/")) {
+											if m.preflight.items[j].Selected && !m.preflight.items[j].Skip {
+												m.setPublishMode(sj.FullSlug, mode)
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				m.updateViewportContent()
+				return m, nil
+			}
+		}
 	case "l":
 		// Expand folder under cursor
 		if len(m.preflight.items) > 0 && m.preflight.listIndex < len(m.preflight.items) {
@@ -394,6 +457,8 @@ func (m *Model) startPreflight() {
 	}
 
 	m.preflight = PreflightState{items: items, listIndex: 0}
+	// Initialize default publish modes for stories
+	m.initDefaultPublishModes()
 	m.refreshPreflightVisible()
 	m.state = statePreflight
 	collisions := 0

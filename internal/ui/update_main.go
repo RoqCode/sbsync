@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -313,6 +314,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.storiesTarget = append(m.storiesTarget, *msg.Result.TargetStory)
 						}
 					}
+					// If we need to unpublish after overwrite, trigger async unpublish
+					if msg.Result != nil && msg.Result.TargetStory != nil {
+						slug := it.Story.FullSlug
+						if m.unpublishAfter != nil && m.unpublishAfter[slug] {
+							// fire off unpublish command
+							cmd := m.unpublishCmd(msg.Index, msg.Result.TargetStory.ID)
+							// clear flag to avoid duplicates
+							delete(m.unpublishAfter, slug)
+							return m, tea.Batch(cmd)
+						}
+					}
 				}
 			} else {
 				// Fallback for unexpected case
@@ -428,6 +440,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update viewport content for report view
 		m.updateViewportContent()
 		return m, nil
+	case unpublishDoneMsg:
+		// Record unpublish result as a follow-up entry
+		if msg.Index < len(m.preflight.items) {
+			it := m.preflight.items[msg.Index]
+			if msg.Err != nil {
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "unpublish", Error: msg.Err.Error(), Duration: msg.Duration, Story: &it.Story})
+				// add inline issue note
+				if it.Issue == "" {
+					m.preflight.items[msg.Index].Issue = "Unpublish failed"
+				}
+			} else {
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success", Operation: "unpublish", Duration: msg.Duration})
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -442,4 +469,25 @@ type statsTickMsg struct{}
 
 func (m Model) statsTick() tea.Cmd {
 	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg { return statsTickMsg{} })
+}
+
+// --- Unpublish helper ---
+type unpublishDoneMsg struct {
+	Index    int
+	Err      error
+	Duration int64
+}
+
+func (m *Model) unpublishCmd(index, storyID int) tea.Cmd {
+	return func() tea.Msg {
+		if m.api == nil || m.targetSpace == nil {
+			return unpublishDoneMsg{Index: index, Err: fmt.Errorf("api not initialized"), Duration: 0}
+		}
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		err := m.api.UnpublishStory(ctx, m.targetSpace.ID, storyID)
+		d := time.Since(start).Milliseconds()
+		return unpublishDoneMsg{Index: index, Err: err, Duration: d}
+	}
 }

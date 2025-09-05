@@ -665,6 +665,30 @@ func (c *Client) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, sto
 	return resp.Story, nil
 }
 
+// UnpublishStory unpublishes a story (removes the published version)
+func (c *Client) UnpublishStory(ctx context.Context, spaceID, storyID int) error {
+	if c.token == "" {
+		return errors.New("token leer")
+	}
+	u := fmt.Sprintf(base+"/spaces/%d/stories/%d/unpublish", spaceID, storyID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", c.token)
+	req.Header.Add("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 && res.StatusCode != 204 {
+		bodyBytes, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("story.unpublish status %s: %s", res.Status, strings.TrimSpace(string(bodyBytes)))
+	}
+	return nil
+}
+
 // getStoryWithVersion fetches story with specific version parameter
 func (c *Client) getStoryWithVersion(ctx context.Context, spaceID, storyID int, version string) (Story, error) {
 	var u string

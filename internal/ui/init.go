@@ -110,6 +110,10 @@ func InitialModel() Model {
 	// metrics tracking for per-item retry deltas
 	m.syncStartMetrics = make(map[int]sb.MetricsSnapshot)
 
+	// publish mode maps
+	m.publishMode = make(map[string]string)
+	m.unpublishAfter = make(map[string]bool)
+
 	return m
 }
 
