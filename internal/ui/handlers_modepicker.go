@@ -23,12 +23,11 @@ func (m Model) handleModePickerKey(msg tea.KeyMsg) (Model, tea.Cmd) {
             m.statusMsg = "Scanne Stories…"
             return m, tea.Batch(m.spinner.Tick, m.scanStoriesCmd())
         }
-        // Components mode selected – placeholder until components scan is implemented
+        // Components mode selected – kick off components scan
         m.currentMode = modeComponents
-        // For now, stay on picker with a status message.
-        // Next iterations will trigger scanComponentsCmd and navigate to Components list.
-        m.statusMsg = "Components-Modus ausgewählt – Implementierung folgt in den nächsten Schritten."
-        return m, nil
+        m.state = stateScanning
+        m.statusMsg = "Scanne Components…"
+        return m, tea.Batch(m.spinner.Tick, m.scanComponentsCmd())
     case "esc", "b":
         // Back to space select
         m.state = stateSpaceSelect
@@ -37,4 +36,3 @@ func (m Model) handleModePickerKey(msg tea.KeyMsg) (Model, tea.Cmd) {
     }
     return m, nil
 }
-

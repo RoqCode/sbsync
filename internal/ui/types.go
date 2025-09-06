@@ -139,6 +139,11 @@ type Model struct {
     // mode picker
     modePickerIndex int
     currentMode     syncMode
+    // components data (populated by components scan)
+    componentsSource       []sb.Component
+    componentsTarget       []sb.Component
+    componentGroupsSource  []sb.ComponentGroup
+    componentGroupsTarget  []sb.ComponentGroup
 
 	// scan results
 	storiesSource []sb.Story

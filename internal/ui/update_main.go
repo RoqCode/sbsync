@@ -155,6 +155,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, nil
 
+	case compScanMsg:
+		return m.handleCompScanResult(msg)
+
 	case spinner.TickMsg:
 		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync {
 			var cmd tea.Cmd
