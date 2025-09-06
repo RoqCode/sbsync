@@ -169,7 +169,7 @@ func (m *Model) runNextItem() tea.Cmd {
 			break
 		}
 	}
-	idx := -1
+    idx := -1
 	// First pass: from current index to end
 	start := m.syncIndex
 	if start < 0 {
@@ -196,11 +196,24 @@ func (m *Model) runNextItem() tea.Cmd {
 			}
 		}
 	}
-	if idx == -1 {
-		// Either no pending items or only stories pending while folders still running.
-		// In both cases, do not schedule anything new.
-		return nil
-	}
+    if idx == -1 {
+        // Either no pending items or only stories pending while folders still running.
+        // In both cases, do not schedule anything new.
+        return nil
+    }
+    // Budgeted scheduling: limit concurrent write units to maxWorkers
+    runningUnits := 0
+    for i := range m.preflight.items {
+        if m.preflight.items[i].Run == RunRunning {
+            runningUnits += m.expectedWriteUnits(m.preflight.items[i])
+        }
+    }
+    candUnits := m.expectedWriteUnits(m.preflight.items[idx])
+    allowed := m.maxWorkers
+    if allowed <= 0 { allowed = 1 }
+    if runningUnits+candUnits > allowed {
+        return nil
+    }
 	m.syncIndex = idx
 	m.preflight.items[idx].Run = RunRunning
 

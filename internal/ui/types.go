@@ -217,4 +217,8 @@ type Model struct {
 	publishMode map[string]string // key: FullSlug
 	// Items that should be unpublished after overwrite (special case)
 	unpublishAfter map[string]bool // key: FullSlug
+
+	// --- EMA estimates for rate-limit budgeting ---
+	emaWritePerItem float64
+	emaItemDurSec   float64
 }

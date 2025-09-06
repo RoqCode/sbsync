@@ -250,21 +250,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastSnap = snap
 			}
 		}
-		return m, m.statsTick()
+        // Dynamic worker sizing (outside folder phase)
+        if m.emaItemDurSec > 0 && m.emaWritePerItem > 0 {
+            perWorkerWPS := m.emaWritePerItem / m.emaItemDurSec
+            if perWorkerWPS <= 0 {
+                perWorkerWPS = 0.5
+            }
+            targetWPS := m.rpsWriteCurrent
+            if targetWPS < 1 {
+                targetWPS = 1
+            }
+            if m.warningRate > 1.0 {
+                targetWPS *= 0.7
+            } else if m.warningRate == 0 {
+                targetWPS *= 1.2
+            }
+            est := int(targetWPS / perWorkerWPS)
+            if est < 1 { est = 1 }
+            if est > 12 { est = 12 }
+            // Smooth +/-1 change
+            desired := m.maxWorkers
+            if est > desired { desired++ }
+            if est < desired { desired-- }
+            if desired < 1 { desired = 1 }
+            m.maxWorkers = desired
+        }
+        return m, m.statsTick()
 
 	case syncResultMsg:
 		var follow tea.Cmd
 		// Prefer counters reported by result; fallback to client metrics delta
 		rate429Delta := 0
-		if msg.Result != nil {
-			rate429Delta = msg.Result.Retry429
-		} else if m.api != nil {
-			after := m.api.MetricsSnapshot()
-			if before, ok := m.syncStartMetrics[msg.Index]; ok {
-				rate429Delta = int(after.Status429 - before.Status429)
-				delete(m.syncStartMetrics, msg.Index)
-			}
-		}
+        if msg.Result != nil {
+            rate429Delta = msg.Result.Retry429
+        } else if m.api != nil {
+            after := m.api.MetricsSnapshot()
+            if before, ok := m.syncStartMetrics[msg.Index]; ok {
+                rate429Delta = int(after.Status429 - before.Status429)
+                // Update EMA cost estimates based on snapshot deltas
+                writeDelta := float64(after.WriteRequests - before.WriteRequests)
+                durSec := float64(msg.Duration) / 1000.0
+                if durSec <= 0 { durSec = 1 }
+                if writeDelta <= 0 { writeDelta = 1 }
+                const alpha = 0.3
+                if m.emaWritePerItem == 0 {
+                    m.emaWritePerItem = writeDelta
+                } else {
+                    m.emaWritePerItem = alpha*writeDelta + (1-alpha)*m.emaWritePerItem
+                }
+                if m.emaItemDurSec == 0 {
+                    m.emaItemDurSec = durSec
+                } else {
+                    m.emaItemDurSec = alpha*durSec + (1-alpha)*m.emaItemDurSec
+                }
+                delete(m.syncStartMetrics, msg.Index)
+            }
+        }
 
 		if msg.Index < len(m.preflight.items) {
 			if msg.Cancelled {
