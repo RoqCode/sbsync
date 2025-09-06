@@ -128,7 +128,12 @@ func displayStory(st sb.Story) string {
 		name = st.Slug
 	}
 	sym := storyTypeSymbol(st)
-	return fmt.Sprintf("%s %s  (%s)", sym, name, st.FullSlug)
+	// Simple source-state badge (hint only)
+	badge := "[Draft]"
+	if st.Published {
+		badge = "[Pub]"
+	}
+	return fmt.Sprintf("%s %s %s  (%s)", sym, name, helpStyle.Render(badge), st.FullSlug)
 }
 
 func storyTypeSymbol(st sb.Story) string {

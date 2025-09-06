@@ -169,7 +169,7 @@ func (m *Model) runNextItem() tea.Cmd {
 			break
 		}
 	}
-	idx := -1
+    idx := -1
 	// First pass: from current index to end
 	start := m.syncIndex
 	if start < 0 {
@@ -196,11 +196,24 @@ func (m *Model) runNextItem() tea.Cmd {
 			}
 		}
 	}
-	if idx == -1 {
-		// Either no pending items or only stories pending while folders still running.
-		// In both cases, do not schedule anything new.
-		return nil
-	}
+    if idx == -1 {
+        // Either no pending items or only stories pending while folders still running.
+        // In both cases, do not schedule anything new.
+        return nil
+    }
+    // Budgeted scheduling: limit concurrent write units to maxWorkers
+    runningUnits := 0
+    for i := range m.preflight.items {
+        if m.preflight.items[i].Run == RunRunning {
+            runningUnits += m.expectedWriteUnits(m.preflight.items[i])
+        }
+    }
+    candUnits := m.expectedWriteUnits(m.preflight.items[idx])
+    allowed := m.maxWorkers
+    if allowed <= 0 { allowed = 1 }
+    if runningUnits+candUnits > allowed {
+        return nil
+    }
 	m.syncIndex = idx
 	m.preflight.items[idx].Run = RunRunning
 
@@ -212,7 +225,40 @@ func (m *Model) runNextItem() tea.Cmd {
 	// Lazily create orchestrator inside the returned command to avoid panics
 	// when spaces/API are not initialized in tests.
 	// Build a lightweight adapter to capture current index and item.
-	item := &preflightItemAdapter{item: m.preflight.items[idx]}
+	// Build adapter and compute publish override for stories
+	it := m.preflight.items[idx]
+	item := &preflightItemAdapter{item: it}
+	if !it.Story.IsFolder {
+		mode := m.getPublishMode(it.Story.FullSlug)
+		exists, tgtPublished := false, false
+		for _, t := range m.storiesTarget {
+			if t.FullSlug == it.Story.FullSlug {
+				exists = true
+				tgtPublished = t.Published
+				break
+			}
+		}
+		publishFlag := false
+		switch mode {
+		case PublishModePublish:
+			publishFlag = true
+		case PublishModePublishChanges:
+			publishFlag = false
+		default:
+			publishFlag = false
+		}
+		if mode == PublishModeDraft && it.Story.Published && exists && tgtPublished {
+			publishFlag = true
+			if m.unpublishAfter == nil {
+				m.unpublishAfter = make(map[string]bool)
+			}
+			m.unpublishAfter[it.Story.FullSlug] = true
+			log.Printf("UNPUBLISH_MARK: slug=%s op=update will schedule unpublish after overwrite (mode=draft, srcPub=true, tgtPub=true)", it.Story.FullSlug)
+		}
+		log.Printf("PUBLISH_OVERRIDE: slug=%s mode=%s exists=%t tgtPublished=%t publishFlag=%t", it.Story.FullSlug, mode, exists, tgtPublished, publishFlag)
+		item.overridePublish = true
+		item.publishFlag = publishFlag
+	}
 
 	return func() tea.Msg {
 		// If essential dependencies are missing, fail fast with a result message.
@@ -235,11 +281,17 @@ func (m *Model) runNextItem() tea.Cmd {
 
 // preflightItemAdapter adapts PreflightItem to sync.SyncItem interface
 type preflightItemAdapter struct {
-	item PreflightItem
+	item            PreflightItem
+	overridePublish bool
+	publishFlag     bool
 }
 
 func (pia *preflightItemAdapter) GetStory() sb.Story {
-	return pia.item.Story
+	st := pia.item.Story
+	if pia.overridePublish && !st.IsFolder {
+		st.Published = pia.publishFlag
+	}
+	return st
 }
 
 func (pia *preflightItemAdapter) IsFolder() bool {

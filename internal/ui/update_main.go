@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -248,26 +250,72 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastSnap = snap
 			}
 		}
-		return m, m.statsTick()
+        // Dynamic worker sizing (outside folder phase)
+        if m.emaItemDurSec > 0 && m.emaWritePerItem > 0 {
+            perWorkerWPS := m.emaWritePerItem / m.emaItemDurSec
+            if perWorkerWPS <= 0 {
+                perWorkerWPS = 0.5
+            }
+            targetWPS := m.rpsWriteCurrent
+            if targetWPS < 1 {
+                targetWPS = 1
+            }
+            if m.warningRate > 1.0 {
+                targetWPS *= 0.7
+            } else if m.warningRate == 0 {
+                targetWPS *= 1.2
+            }
+            est := int(targetWPS / perWorkerWPS)
+            if est < 1 { est = 1 }
+            if est > 12 { est = 12 }
+            // Smooth +/-1 change
+            desired := m.maxWorkers
+            if est > desired { desired++ }
+            if est < desired { desired-- }
+            if desired < 1 { desired = 1 }
+            m.maxWorkers = desired
+        }
+        return m, m.statsTick()
 
 	case syncResultMsg:
+		var follow tea.Cmd
 		// Prefer counters reported by result; fallback to client metrics delta
 		rate429Delta := 0
-		if msg.Result != nil {
-			rate429Delta = msg.Result.Retry429
-		} else if m.api != nil {
-			after := m.api.MetricsSnapshot()
-			if before, ok := m.syncStartMetrics[msg.Index]; ok {
-				rate429Delta = int(after.Status429 - before.Status429)
-				delete(m.syncStartMetrics, msg.Index)
-			}
-		}
+        if msg.Result != nil {
+            rate429Delta = msg.Result.Retry429
+        } else if m.api != nil {
+            after := m.api.MetricsSnapshot()
+            if before, ok := m.syncStartMetrics[msg.Index]; ok {
+                rate429Delta = int(after.Status429 - before.Status429)
+                // Update EMA cost estimates based on snapshot deltas
+                writeDelta := float64(after.WriteRequests - before.WriteRequests)
+                durSec := float64(msg.Duration) / 1000.0
+                if durSec <= 0 { durSec = 1 }
+                if writeDelta <= 0 { writeDelta = 1 }
+                const alpha = 0.3
+                if m.emaWritePerItem == 0 {
+                    m.emaWritePerItem = writeDelta
+                } else {
+                    m.emaWritePerItem = alpha*writeDelta + (1-alpha)*m.emaWritePerItem
+                }
+                if m.emaItemDurSec == 0 {
+                    m.emaItemDurSec = durSec
+                } else {
+                    m.emaItemDurSec = alpha*durSec + (1-alpha)*m.emaItemDurSec
+                }
+                delete(m.syncStartMetrics, msg.Index)
+            }
+        }
 
 		if msg.Index < len(m.preflight.items) {
 			if msg.Cancelled {
 				m.preflight.items[msg.Index].Run = RunCancelled
 				it := m.preflight.items[msg.Index]
-				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "cancelled", Error: "Sync cancelled by user", Duration: 0, Story: &it.Story, RateLimit429: rate429Delta})
+				pub := ""
+				if !it.Story.IsFolder {
+					pub = m.getPublishMode(it.Story.FullSlug)
+				}
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "cancelled", Error: "Sync cancelled by user", Duration: 0, Story: &it.Story, RateLimit429: rate429Delta, PublishMode: pub})
 				// Set inline issue for cancelled item
 				m.preflight.items[msg.Index].Issue = "Sync cancelled by user"
 
@@ -286,19 +334,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.preflight.items[msg.Index].Issue = ""
 			if msg.Err != nil {
 				// Add error to report with complete source story
-				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "sync", Error: msg.Err.Error(), Duration: msg.Duration, Story: &it.Story, RateLimit429: rate429Delta})
+				pub := ""
+				if !it.Story.IsFolder {
+					pub = m.getPublishMode(it.Story.FullSlug)
+				}
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "sync", Error: msg.Err.Error(), Duration: msg.Duration, Story: &it.Story, RateLimit429: rate429Delta, PublishMode: pub})
 				// Set inline issue message
 				m.preflight.items[msg.Index].Issue = msg.Err.Error()
 			} else if msg.Result != nil {
 				// Add successful sync to report
 				if msg.Result.Warning != "" {
 					// Success with warning
-					m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "warning", Operation: msg.Result.Operation, Warning: msg.Result.Warning, Duration: msg.Duration, Story: &it.Story, TargetStory: msg.Result.TargetStory, RateLimit429: rate429Delta})
+					pub := ""
+					if !it.Story.IsFolder {
+						pub = m.getPublishMode(it.Story.FullSlug)
+					}
+					m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "warning", Operation: msg.Result.Operation, Warning: msg.Result.Warning, Duration: msg.Duration, Story: &it.Story, TargetStory: msg.Result.TargetStory, RateLimit429: rate429Delta, PublishMode: pub})
 					// Set inline issue message
 					m.preflight.items[msg.Index].Issue = msg.Result.Warning
 				} else {
 					// Pure success
-					m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success", Operation: msg.Result.Operation, Duration: msg.Duration, TargetStory: msg.Result.TargetStory, RateLimit429: rate429Delta})
+					pub := ""
+					if !it.Story.IsFolder {
+						pub = m.getPublishMode(it.Story.FullSlug)
+					}
+					m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success", Operation: msg.Result.Operation, Duration: msg.Duration, TargetStory: msg.Result.TargetStory, RateLimit429: rate429Delta, PublishMode: pub})
 					// Keep target index fresh: if a folder was created/updated, update m.storiesTarget
 					if msg.Result.TargetStory != nil && msg.Result.TargetStory.IsFolder {
 						updated := false
@@ -311,6 +371,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						if !updated {
 							m.storiesTarget = append(m.storiesTarget, *msg.Result.TargetStory)
+						}
+					}
+					// If we need to unpublish after overwrite, trigger async unpublish
+					if msg.Result != nil && msg.Result.TargetStory != nil && msg.Result.Operation == "update" {
+						slug := it.Story.FullSlug
+						needUnpublish := false
+						if m.unpublishAfter != nil && m.unpublishAfter[slug] {
+							needUnpublish = true
+						} else {
+							// Fallback inference (tests may bypass runNextItem): if mode=draft, source published and target published, and operation was update
+							if !it.Story.IsFolder && m.getPublishMode(slug) == PublishModeDraft && it.Story.Published {
+								// check target published in current index
+								for _, t := range m.storiesTarget {
+									if t.FullSlug == slug && t.Published {
+										needUnpublish = true
+										break
+									}
+								}
+							}
+						}
+						if needUnpublish {
+							log.Printf("UNPUBLISH_SCHEDULE: slug=%s resultOp=%s will unpublish targetID=%d", slug, msg.Result.Operation, msg.Result.TargetStory.ID)
+							// prepare unpublish command to be returned alongside scheduling
+							follow = m.unpublishCmd(msg.Index, msg.Result.TargetStory.ID)
+							// clear flag to avoid duplicates
+							delete(m.unpublishAfter, slug)
 						}
 					}
 				}
@@ -399,11 +485,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for i := 0; i < toStart; i++ {
 					cmds = append(cmds, m.runNextItem())
 				}
+				if follow != nil {
+					cmds = append(cmds, follow)
+				}
 				return m, tea.Batch(cmds...)
 			}
 		}
 		// If paused or no pending but still running workers, wait for them to finish
 		if running > 0 {
+			if follow != nil {
+				return m, follow
+			}
 			return m, nil
 		}
 
@@ -411,10 +503,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.paused {
 			m.syncing = false
 			m.statusMsg = "Sync paused – press 'r' to resume or 'q' to quit"
+			if follow != nil {
+				return m, follow
+			}
 			return m, nil
 		}
 
 		// All work done
+		if follow != nil {
+			// still have follow-up work; keep in sync state until it's done
+			return m, follow
+		}
 		m.syncing = false
 		m.paused = false
 		m.state = stateReport
@@ -427,6 +526,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update viewport content for report view
 		m.updateViewportContent()
+		return m, nil
+	case unpublishDoneMsg:
+		// Record unpublish result as a follow-up entry
+		if msg.Index < len(m.preflight.items) {
+			it := m.preflight.items[msg.Index]
+			if msg.Err != nil {
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "failure", Operation: "unpublish", Error: msg.Err.Error(), Duration: msg.Duration, Story: &it.Story})
+				// add inline issue note
+				if it.Issue == "" {
+					m.preflight.items[msg.Index].Issue = "Unpublish failed"
+				}
+			} else {
+				m.report.Add(ReportEntry{Slug: it.Story.FullSlug, Status: "success", Operation: "unpublish", Duration: msg.Duration})
+			}
+		}
 		return m, nil
 	}
 
@@ -442,4 +556,31 @@ type statsTickMsg struct{}
 
 func (m Model) statsTick() tea.Cmd {
 	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg { return statsTickMsg{} })
+}
+
+// --- Unpublish helper ---
+type unpublishDoneMsg struct {
+	Index    int
+	Err      error
+	Duration int64
+}
+
+func (m *Model) unpublishCmd(index, storyID int) tea.Cmd {
+	return func() tea.Msg {
+		if m.api == nil || m.targetSpace == nil {
+			return unpublishDoneMsg{Index: index, Err: fmt.Errorf("api not initialized"), Duration: 0}
+		}
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		log.Printf("UNPUBLISH_START: space=%d storyID=%d", m.targetSpace.ID, storyID)
+		err := m.api.UnpublishStory(ctx, m.targetSpace.ID, storyID)
+		d := time.Since(start).Milliseconds()
+		if err != nil {
+			log.Printf("UNPUBLISH_DONE: storyID=%d err=%v durationMs=%d", storyID, err, d)
+		} else {
+			log.Printf("UNPUBLISH_DONE: storyID=%d ok durationMs=%d", storyID, d)
+		}
+		return unpublishDoneMsg{Index: index, Err: err, Duration: d}
+	}
 }

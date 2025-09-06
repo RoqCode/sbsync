@@ -24,6 +24,10 @@ func displayPreflightItem(it PreflightItem) string {
 	if it.CopyAsNew {
 		badge = " " + helpStyle.Render("[Fork]")
 	}
+	// Publish mode badge (stories only)
+	if !it.Story.IsFolder {
+		// safe access via model is not available here; badges are appended in render
+	}
 	sym := storyTypeSymbol(it.Story)
 	return fmt.Sprintf("%s %s%s  %s", sym, name, badge, slug)
 }
@@ -74,8 +78,27 @@ func (m Model) renderPreflightContent() string {
 		if strings.ToLower(it.State) == StateSkip {
 			lineStyle = lineStyle.Faint(true)
 		}
+		// Append badges: Fork, Publish mode, Dev
+		var badges []string
 		if it.CopyAsNew {
-			content += " " + helpStyle.Render("[Fork]")
+			badges = append(badges, "[Fork]")
+		}
+		if !it.Story.IsFolder {
+			mode := m.getPublishMode(it.Story.FullSlug)
+			switch mode {
+			case PublishModePublish:
+				badges = append(badges, "[Pub]")
+			case PublishModePublishChanges:
+				badges = append(badges, "[Pub+∆]")
+			default:
+				badges = append(badges, "[Draft]")
+			}
+			if m.targetSpace != nil && m.targetSpace.PlanLevel == 999 {
+				badges = append(badges, "[Dev]")
+			}
+		}
+		if len(badges) > 0 {
+			content += " " + helpStyle.Render(strings.Join(badges, ""))
 		}
 		content = lineStyle.Render(content)
 		cursorCell := " "
@@ -115,7 +138,7 @@ func (m Model) renderPreflightFooter() string {
 	if m.syncing {
 		helpText = "Syncing... | Ctrl+C to cancel"
 	} else {
-		helpText = "j/k bewegen  |  f Fork  |  F Quick-Fork  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
+		helpText = "j/k bewegen  |  f Fork  |  F Quick-Fork  |  p Publish/Draft/Pub+∆  |  P auf Geschwister/Unterordner anwenden  |  x skip  |  X alle skippen  |  c Skips entfernen  |  Enter OK  |  esc/q zurück"
 	}
 
 	return renderFooter(statusLine, helpText)

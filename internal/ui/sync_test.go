@@ -484,3 +484,44 @@ func TestUIPhasedSyncAndIndexUpdate_PreventsRootPlacement(t *testing.T) {
 		t.Fatalf("expected target index to include created folder 'app'")
 	}
 }
+
+func TestOverwriteThenUnpublishSchedulesUnpublish(t *testing.T) {
+	// Setup a published source, published target; choose Draft to trigger overwrite+unpublish
+	st := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one", Published: true}
+	tgt := sb.Story{ID: 9, Name: "one", Slug: "one", FullSlug: "one", Published: true}
+	m := InitialModel()
+	m.state = stateSync
+	m.sourceSpace = &sb.Space{ID: 1, Name: "src"}
+	m.targetSpace = &sb.Space{ID: 2, Name: "tgt"}
+	m.api = sb.New("") // won't be used in test (we don't execute the cmd)
+	m.preflight.items = []PreflightItem{{Story: st, Selected: true, Run: RunRunning}}
+	m.storiesTarget = []sb.Story{tgt}
+	// Choose Draft explicitly
+	m.setPublishMode(st.FullSlug, PublishModeDraft)
+
+	// Simulate sync result success; should schedule unpublish (cmd != nil) and clear flag
+	res := &syncItemResult{Operation: "update", TargetStory: &sb.Story{ID: 9, FullSlug: st.FullSlug}}
+	model, cmd := m.Update(syncResultMsg{Index: 0, Result: res, Duration: 5})
+	if cmd == nil {
+		t.Fatalf("expected unpublish command to be scheduled")
+	}
+	mm := model.(Model)
+	if mm.unpublishAfter[st.FullSlug] {
+		t.Fatalf("expected unpublishAfter flag cleared after scheduling")
+	}
+
+	// Simulate completion of unpublish
+	model, _ = mm.Update(unpublishDoneMsg{Index: 0, Duration: 2})
+	mm2 := model.(Model)
+	// There should be at least one unpublish report entry
+	found := false
+	for _, e := range mm2.report.Entries {
+		if e.Operation == "unpublish" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected an unpublish entry in report")
+	}
+}

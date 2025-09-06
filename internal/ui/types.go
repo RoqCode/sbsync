@@ -211,4 +211,14 @@ type Model struct {
 	rpsGraphWidth  int
 	rpsGraphHeight int
 	showRpsGraph   bool
+
+	// --- Publish modes (UI-only) ---
+	// Per-item chosen publish mode: "draft", "publish", "publish_changes"
+	publishMode map[string]string // key: FullSlug
+	// Items that should be unpublished after overwrite (special case)
+	unpublishAfter map[string]bool // key: FullSlug
+
+	// --- EMA estimates for rate-limit budgeting ---
+	emaWritePerItem float64
+	emaItemDurSec   float64
 }

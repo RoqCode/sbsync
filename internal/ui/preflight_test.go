@@ -169,6 +169,119 @@ func TestViewPreflightShowsStateCell(t *testing.T) {
 	}
 }
 
+func TestDefaultPublishModes(t *testing.T) {
+	// One published source, one draft source
+	stPub := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one", Published: true}
+	stDr := sb.Story{ID: 2, Name: "two", Slug: "two", FullSlug: "two", Published: false}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{stPub, stDr}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[stPub.FullSlug] = true
+	m.selection.selected[stDr.FullSlug] = true
+	m.startPreflight()
+	if mode := m.getPublishMode(stPub.FullSlug); mode != PublishModePublish {
+		t.Fatalf("expected published source default to Publish, got %s", mode)
+	}
+	if mode := m.getPublishMode(stDr.FullSlug); mode != PublishModeDraft {
+		t.Fatalf("expected draft source default to Draft, got %s", mode)
+	}
+}
+
+func TestPublishToggleCycleAndBadges(t *testing.T) {
+	// Existing published target makes Publish&Changes valid
+	st := sb.Story{ID: 1, Name: "one", Slug: "one", FullSlug: "one", Published: true}
+	tgt := sb.Story{ID: 9, Name: "one", Slug: "one", FullSlug: "one", Published: true}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{st}
+	m.storiesTarget = []sb.Story{tgt}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	m.selection.selected[st.FullSlug] = true
+	m.startPreflight()
+
+	// Focus first item and cycle p twice. Default for published source is Publish,
+	// so after first 'p' we expect Publish&Changes, then back to Draft.
+	m.preflight.listIndex = 0
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if mode := m.getPublishMode(st.FullSlug); mode != PublishModePublishChanges {
+		t.Fatalf("expected mode PublishChanges after first p, got %s", mode)
+	}
+	// Render should contain [Pub+∆] after first toggle
+	m.updatePreflightViewport()
+	out := m.renderPreflightHeader() + "\n" + m.renderViewportContent()
+	if !strings.Contains(out, "[Pub+∆]") {
+		t.Fatalf("expected [Pub+∆] badge in preflight render")
+	}
+	// Second toggle to Draft
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if mode := m.getPublishMode(st.FullSlug); mode != PublishModeDraft {
+		t.Fatalf("expected mode Draft after second p, got %s", mode)
+	}
+}
+
+func TestPropagationP_OnFolderAndStory(t *testing.T) {
+	parent := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
+	child1 := sb.Story{ID: 2, Name: "a", Slug: "a", FullSlug: "app/a", FolderID: &parent.ID}
+	child2 := sb.Story{ID: 3, Name: "b", Slug: "b", FullSlug: "app/b", FolderID: &parent.ID}
+	sibFolder := sb.Story{ID: 4, Name: "sf", Slug: "sf", FullSlug: "app/sf", IsFolder: true, FolderID: &parent.ID}
+	sibStory := sb.Story{ID: 5, Name: "c", Slug: "c", FullSlug: "app/sf/c", FolderID: &sibFolder.ID}
+	m := InitialModel()
+	m.storiesSource = []sb.Story{parent, child1, child2, sibFolder, sibStory}
+	m.rebuildStoryIndex()
+	if m.selection.selected == nil {
+		m.selection.selected = make(map[string]bool)
+	}
+	// Select all
+	for _, s := range m.storiesSource {
+		m.selection.selected[s.FullSlug] = true
+	}
+	m.startPreflight()
+
+	// Set folder line index
+	var folderListIdx int
+	for i, vi := range m.preflight.visibleIdx {
+		if m.preflight.items[vi].Story.ID == parent.ID {
+			folderListIdx = i
+			break
+		}
+	}
+	m.preflight.listIndex = folderListIdx
+	// Cycle mode on folder's first child to Publish
+	m.setPublishMode(child1.FullSlug, PublishModePublish)
+	// Propagate with P on folder: should set children and subtree
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	if m.getPublishMode(child2.FullSlug) != PublishModePublish {
+		t.Fatalf("expected child2 to inherit Publish from folder P")
+	}
+	if m.getPublishMode(sibStory.FullSlug) != PublishModePublish {
+		t.Fatalf("expected sibStory under sibFolder to inherit Publish from folder P")
+	}
+
+	// Now focus on child1 and set to Draft; P should apply to siblings + sibling folder subtree
+	// Find child1 visible index
+	var childListIdx int
+	for i, vi := range m.preflight.visibleIdx {
+		if m.preflight.items[vi].Story.ID == child1.ID {
+			childListIdx = i
+			break
+		}
+	}
+	m.preflight.listIndex = childListIdx
+	m.setPublishMode(child1.FullSlug, PublishModeDraft)
+	m, _ = m.handlePreflightKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	if m.getPublishMode(child2.FullSlug) != PublishModeDraft {
+		t.Fatalf("expected child2 to inherit Draft from story P")
+	}
+	if m.getPublishMode(sibStory.FullSlug) != PublishModeDraft {
+		t.Fatalf("expected sibStory to inherit Draft from story P")
+	}
+}
+
 func TestOptimizePreflightDedupesFolders(t *testing.T) {
 	folder := sb.Story{ID: 1, Name: "app", Slug: "app", FullSlug: "app", IsFolder: true}
 	m := InitialModel()
