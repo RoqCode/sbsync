@@ -228,14 +228,14 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 			expectSourceSet: true,
 		},
 		{
-			name:            "enter on target selection starts scan",
+			name:            "enter on target selection goes to mode picker",
 			key:             "enter",
 			initialIndex:    1,
 			selectingSource: false,
 			expectedIndex:   1,
-			expectedState:   stateScanning,
+			expectedState:   stateModePicker,
 			expectTargetSet: true,
-			expectScanStart: true,
+			expectScanStart: false,
 		},
 		{
 			name:            "enter on target selection excludes source from list",
@@ -243,9 +243,9 @@ func TestHandleSpaceSelectKey(t *testing.T) {
 			initialIndex:    1, // index in filtered list
 			selectingSource: false,
 			expectedIndex:   1,
-			expectedState:   stateScanning,
+			expectedState:   stateModePicker,
 			expectTargetSet: true,
-			expectScanStart: true,
+			expectScanStart: false,
 			setSameAsSource: true,
 		},
 		{

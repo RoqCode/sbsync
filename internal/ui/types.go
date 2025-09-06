@@ -16,27 +16,27 @@ import (
 type state int
 
 const (
-    stateWelcome state = iota
-    stateTokenPrompt
-    stateValidating
-    stateSpaceSelect
-    stateModePicker
-    stateScanning
-    stateBrowseList
-    statePreflight
-    stateCopyAsNew
-    stateFolderFork
-    stateSync
-    stateReport
-    stateQuit
+	stateWelcome state = iota
+	stateTokenPrompt
+	stateValidating
+	stateSpaceSelect
+	stateModePicker
+	stateScanning
+	stateBrowseList
+	statePreflight
+	stateCopyAsNew
+	stateFolderFork
+	stateSync
+	stateReport
+	stateQuit
 )
 
 // syncMode selects which domain to sync in this run
 type syncMode int
 
 const (
-    modeStories syncMode = iota
-    modeComponents
+	modeStories syncMode = iota
+	modeComponents
 )
 
 type SelectionState struct {
@@ -104,7 +104,7 @@ type SyncPlan struct {
 }
 
 type Model struct {
-    state         state
+	state         state
 	cfg           config.Config
 	hasSBRC       bool
 	sbrcPath      string
@@ -115,8 +115,8 @@ type Model struct {
 	// viewport for scrollable content
 	viewport viewport.Model
 
-    // spinner for loading states
-    spinner     spinner.Model
+	// spinner for loading states
+	spinner     spinner.Model
 	syncing     bool
 	syncIndex   int
 	syncCancel  context.CancelFunc // for cancelling sync operations
@@ -130,20 +130,20 @@ type Model struct {
 	// token input
 	ti textinput.Model
 
-    // spaces & selection
-    spaces          []sb.Space
-    selectedIndex   int
-    selectingSource bool
-    sourceSpace     *sb.Space
-    targetSpace     *sb.Space
-    // mode picker
-    modePickerIndex int
-    currentMode     syncMode
-    // components data (populated by components scan)
-    componentsSource       []sb.Component
-    componentsTarget       []sb.Component
-    componentGroupsSource  []sb.ComponentGroup
-    componentGroupsTarget  []sb.ComponentGroup
+	// spaces & selection
+	spaces          []sb.Space
+	selectedIndex   int
+	selectingSource bool
+	sourceSpace     *sb.Space
+	targetSpace     *sb.Space
+	// mode picker
+	modePickerIndex int
+	currentMode     syncMode
+	// components data (populated by components scan)
+	componentsSource      []sb.Component
+	componentsTarget      []sb.Component
+	componentGroupsSource []sb.ComponentGroup
+	componentGroupsTarget []sb.ComponentGroup
 
 	// scan results
 	storiesSource []sb.Story

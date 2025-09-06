@@ -122,11 +122,11 @@ func (m Model) viewSpaceSelect() string {
 }
 
 func (m Model) viewScanning() string {
-    title := "🔄 Scanne Stories"
-    if m.currentMode == modeComponents {
-        title = "🔄 Scanne Components"
-    }
-    header := listHeaderStyle.Render(title)
+	title := "🔄 Scanne Stories"
+	if m.currentMode == modeComponents {
+		title = "🔄 Scanne Components"
+	}
+	header := listHeaderStyle.Render(title)
 
 	src := "(none)"
 	tgt := "(none)"
@@ -137,11 +137,11 @@ func (m Model) viewScanning() string {
 		tgt = fmt.Sprintf("%s (ID: %d)", m.targetSpace.Name, m.targetSpace.ID)
 	}
 
-    loading := "Lade Stories aus beiden Spaces..."
-    if m.currentMode == modeComponents {
-        loading = "Lade Components & Gruppen aus beiden Spaces..."
-    }
-    content := fmt.Sprintf("%s %s\n\n", m.spinner.View(), subtitleStyle.Render(loading))
+	loading := "Lade Stories aus beiden Spaces..."
+	if m.currentMode == modeComponents {
+		loading = "Lade Components & Gruppen aus beiden Spaces..."
+	}
+	content := fmt.Sprintf("%s %s\n\n", m.spinner.View(), subtitleStyle.Render(loading))
 	content += fmt.Sprintf("📂 Source: %s\n", okStyle.Render(src))
 	content += fmt.Sprintf("📂 Target: %s\n", okStyle.Render(tgt))
 
