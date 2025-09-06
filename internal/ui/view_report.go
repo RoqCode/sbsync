@@ -104,7 +104,7 @@ func (m Model) viewReport() string {
 
 	// Footer with actions
 	// 'r' resumes any pending items; if there are failures, it will retry failures instead when no pending
-	b.WriteString(helpStyle.Render("r resume/retry  |  enter/b back to scan  |  q exit"))
+	b.WriteString(helpStyle.Render("r resume/retry  |  enter/b/m Modus wählen  |  q exit"))
 
 	return b.String()
 }
