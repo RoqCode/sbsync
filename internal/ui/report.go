@@ -24,6 +24,8 @@ type ReportEntry struct {
 	TargetStory *sb.Story `json:"target_story,omitempty"` // Target story if created/updated
 	// Rate limit related counters (deltas captured per item)
 	RateLimit429 int `json:"rate_limit_429,omitempty"`
+	// Selected publish mode for this item (stories only): draft|publish|publish_changes
+	PublishMode string `json:"publish_mode,omitempty"`
 }
 
 // Report collects all entries and provides comprehensive sync reporting.

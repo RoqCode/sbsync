@@ -40,6 +40,22 @@ func (m Model) handlePreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				it := m.preflight.items[idx]
 				mode := m.getPublishMode(it.Story.FullSlug)
 				if it.Story.IsFolder {
+					// If folder has no meaningful mode, try to take the first selected descendant story's mode
+					if mode == PublishModeDraft {
+						root := it.Story.FullSlug
+						for i := range m.preflight.items {
+							st := m.preflight.items[i].Story
+							if st.IsFolder {
+								continue
+							}
+							if m.preflight.items[i].Selected && !m.preflight.items[i].Skip {
+								if st.FullSlug == root || strings.HasPrefix(st.FullSlug+"/", root+"/") {
+									mode = m.getPublishMode(st.FullSlug)
+									break
+								}
+							}
+						}
+					}
 					// Apply to all descendant stories under this folder
 					root := it.Story.FullSlug
 					for i := range m.preflight.items {

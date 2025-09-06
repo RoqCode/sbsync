@@ -240,7 +240,9 @@ func (m *Model) runNextItem() tea.Cmd {
 				m.unpublishAfter = make(map[string]bool)
 			}
 			m.unpublishAfter[it.Story.FullSlug] = true
+			log.Printf("UNPUBLISH_MARK: slug=%s op=update will schedule unpublish after overwrite (mode=draft, srcPub=true, tgtPub=true)", it.Story.FullSlug)
 		}
+		log.Printf("PUBLISH_OVERRIDE: slug=%s mode=%s exists=%t tgtPublished=%t publishFlag=%t", it.Story.FullSlug, mode, exists, tgtPublished, publishFlag)
 		item.overridePublish = true
 		item.publishFlag = publishFlag
 	}

@@ -671,7 +671,7 @@ func (c *Client) UnpublishStory(ctx context.Context, spaceID, storyID int) error
 		return errors.New("token leer")
 	}
 	u := fmt.Sprintf(base+"/spaces/%d/stories/%d/unpublish", spaceID, storyID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
