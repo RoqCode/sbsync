@@ -40,21 +40,16 @@ Interrupts: `r` to rescan, `q` to abort.
 
 2. Copy-as-new under different slug (collision handling) - completed
 
-3. UX improvements
+3. UX improvements - completed
 
-   - Publish state UI: show publish/unpublished badge in lists; in Preflight allow per‑item publish toggle (stories only), defaulting from source + plan policy; persist in plan and respect during sync.
-   - Per‑item progress, pause/cancel, clearer error surfacing in Sync view.
-
-4. Toggle publish state
-
-   - ...
+4. Toggle publish state - completed
 
 5. Security & logging
 
    - Redact tokens; avoid logging large payloads by default.
    - Structured logs with levels; audit for accidental secrets.
 
-6. Component sync (low priority)
+6. Component sync
 
 - Mode toggle: switch between Stories and Components in the UI.
 - API: extend client to list/get/create/update components; handle groups and display names.

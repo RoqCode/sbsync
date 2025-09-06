@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"storyblok-sync/internal/infra/logx"
 )
 
 // ---------- Setup Screen Handlers ----------
@@ -37,6 +39,8 @@ func (m Model) handleTokenPromptKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.statusMsg = "Token leer."
 			return m, nil
 		}
+		// Register newly entered token for log redaction
+		logx.RegisterSecret(m.cfg.Token)
 		m.state = stateValidating
 		m.statusMsg = "Validiere Token…"
 		return m, tea.Batch(m.spinner.Tick, m.validateTokenCmd())

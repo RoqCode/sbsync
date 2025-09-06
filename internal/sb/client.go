@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"storyblok-sync/internal/infra/logx"
 	"strings"
 )
 
@@ -408,8 +409,12 @@ func (c *Client) CreateStoryWithPublish(ctx context.Context, spaceID int, st Sto
 		return Story{}, err
 	}
 
-	// DEBUG: Do not dump full JSON payload to keep logs readable
-	log.Printf("DEBUG: JSON payload being sent (%d bytes) [omitted]", len(body))
+	// DEBUG/VERBOSE: Log payloads conditionally
+	if logx.Verbose() {
+		log.Printf("VERBOSE: JSON payload being sent: %s", string(body))
+	} else {
+		log.Printf("DEBUG: JSON payload being sent (%d bytes) [omitted]", len(body))
+	}
 
 	// DEBUG: Try minimal payload approach for debugging
 	log.Printf("DEBUG: Story UUID: %s", st.UUID)
@@ -551,6 +556,13 @@ func (c *Client) GetStoryWithContent(ctx context.Context, spaceID, storyID int) 
 		log.Printf("DEBUG: Story content is empty - this is likely the issue!")
 	}
 
+	// VERBOSE: Log full story object
+	if logx.Verbose() {
+		if b, err := json.Marshal(story); err == nil {
+			log.Printf("VERBOSE: Fetched story full: %s", string(b))
+		}
+	}
+
 	return story, nil
 }
 
@@ -601,6 +613,9 @@ func (c *Client) CreateStoryRawWithPublish(ctx context.Context, spaceID int, sto
 	if err != nil {
 		return Story{}, err
 	}
+	if logx.Verbose() {
+		log.Printf("VERBOSE: CreateStoryRaw payload: %s", string(body))
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", u, bytes.NewReader(body))
 	if err != nil {
 		return Story{}, fmt.Errorf("failed to create request: %w", err)
@@ -642,6 +657,9 @@ func (c *Client) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, sto
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return Story{}, err
+	}
+	if logx.Verbose() {
+		log.Printf("VERBOSE: UpdateStoryRaw payload: %s", string(body))
 	}
 	req, err := http.NewRequestWithContext(ctx, "PUT", u, bytes.NewReader(body))
 	if err != nil {

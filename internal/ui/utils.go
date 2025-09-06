@@ -198,29 +198,29 @@ func (m *Model) initDefaultPublishModes() {
 
 // sortStrings is a small helper used elsewhere; keep here to avoid import churn
 func sortStrings(s []string) {
-    sort.Strings(s)
+	sort.Strings(s)
 }
 
 // expectedWriteUnits estimates write cost for scheduling budget.
 // Stories normally cost 1 write; Draft over published (overwrite+unpublish) costs 2.
 // Folders cost 1.
 func (m *Model) expectedWriteUnits(it PreflightItem) int {
-    if it.Story.IsFolder {
-        return 1
-    }
-    mode := m.getPublishMode(it.Story.FullSlug)
-    exists, tgtPublished := false, false
-    for _, t := range m.storiesTarget {
-        if t.FullSlug == it.Story.FullSlug {
-            exists = true
-            tgtPublished = t.Published
-            break
-        }
-    }
-    if mode == PublishModeDraft && it.Story.Published && exists && tgtPublished {
-        return 2
-    }
-    return 1
+	if it.Story.IsFolder {
+		return 1
+	}
+	mode := m.getPublishMode(it.Story.FullSlug)
+	exists, tgtPublished := false, false
+	for _, t := range m.storiesTarget {
+		if t.FullSlug == it.Story.FullSlug {
+			exists = true
+			tgtPublished = t.Published
+			break
+		}
+	}
+	if mode == PublishModeDraft && it.Story.Published && exists && tgtPublished {
+		return 2
+	}
+	return 1
 }
 
 // selectableSpaces returns the list of spaces available for the current selection step.

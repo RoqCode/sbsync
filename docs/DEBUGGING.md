@@ -32,7 +32,13 @@ dlv connect 127.0.0.1:43000
 
 ## Debug Log Output
 
-When debug logging is enabled, you'll see detailed information about:
+When debug logging is enabled, you'll see structured JSON logs with fields like `ts`, `level`, and `msg`. Sensitive values like tokens are redacted.
+
+Verbose payload logging
+
+- Flag: pass `-verbose` to `sbsync` to emit full story payloads for create/update/fetch calls.
+- Env: alternatively set `SB_VERBOSE=1`.
+- Default behavior (no verbose): payloads are summarized (sizes only) and large messages are truncated for readability.
 
 - Sync operation start/completion for each item
 - API calls and responses
@@ -68,7 +74,7 @@ To test the improved sync implementation:
 
 3. **Run with debug logging**:
    ```bash
-   DEBUG=1 go run ./cmd/sbsync
+   DEBUG=1 go run ./cmd/sbsync -verbose
    ```
 
 4. **Verify sync behavior**:

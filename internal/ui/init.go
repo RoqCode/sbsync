@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/infra/logx"
 	"storyblok-sync/internal/sb"
 	"strings"
 	"time"
@@ -24,6 +25,11 @@ func InitialModel() Model {
 		hasSBRC:   hasFile,
 		sbrcPath:  p,
 		statusMsg: "",
+	}
+
+	// Register token for redaction if present
+	if cfg.Token != "" {
+		logx.RegisterSecret(cfg.Token)
 	}
 
 	if cfg.Token == "" {
