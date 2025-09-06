@@ -1,15 +1,18 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"storyblok-sync/internal/infra/logx"
 	"storyblok-sync/internal/ui"
 )
 
@@ -18,6 +21,9 @@ func main() {
 	cleanupOldLogFiles()
 
 	// Configure logging based on DEBUG environment variable
+	verboseFlag := flag.Bool("verbose", false, "log full story payloads and responses")
+	flag.Parse()
+
 	if len(os.Getenv("DEBUG")) > 0 {
 		// Enable Bubble Tea debug logging to file
 		f, err := tea.LogToFile("debug.log", "debug")
@@ -34,7 +40,16 @@ func main() {
 			os.Exit(1)
 		}
 		defer debugFile.Close()
-		log.SetOutput(debugFile)
+
+		// Initialize structured redacting logger
+		logx.SetOutput(debugFile)
+		logx.SetMinLevel(logx.LevelDebug)
+		// Environment fallback for verbose in addition to flag
+		if *verboseFlag || enableFlag(os.Getenv("SB_VERBOSE")) {
+			logx.SetVerbose(true)
+		}
+		// Route stdlib log through structured writer at debug level
+		log.SetOutput(logx.StdlogWriter(logx.LevelDebug, debugFile))
 
 		fmt.Println("Debug logging enabled. Run 'tail -f debug.log' to view logs.")
 	} else {
@@ -69,5 +84,15 @@ func cleanupOldLogFiles() {
 				}
 			}
 		}
+	}
+}
+
+// enableFlag returns true for common truthy values (shared with UI helper, duplicated to avoid import cycle)
+func enableFlag(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on", "enable", "enabled":
+		return true
+	default:
+		return false
 	}
 }
