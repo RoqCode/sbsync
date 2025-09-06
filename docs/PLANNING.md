@@ -1,213 +1,170 @@
-# Publish Toggle Plan (Publish, Draft, Publish&Changes)
+# Component Sync — Iteration Plan
 
-This plan specifies UX, data flow, and sync semantics for a three‑state publish toggle per story: Publish, Draft, and Publish&Changes. Focus is on predictable behavior and clear constraints for Storyblok’s dual‑version “publish with pending changes” mode.
+This plan breaks TODO #6 (Component sync) into small, stackable iterations. Each iteration is independently testable with deterministic fixtures under `testdata/` and unit tests using the standard `testing` package.
 
-## Goals
+Goals
 
-- Allow users to choose, per story, one of: Publish, Draft, Publish&Changes.
-- Default choices sensibly from source state and target space plan.
-- Prevent invalid combinations (e.g., Publish&Changes when target isn’t published or on creates).
-- Keep UI simple and consistent across Browse, Preflight, and Sync views.
+- Add a Components mode in the TUI to browse, diff, and sync component schemas from a source space to a target space.
+- Detect and communicate collisions, schema diffs, and dependency ordering.
+- Default to safe behavior; block or gate breaking changes. Provide backups and dry‑run validation paths.
 
-## State Definitions
+Non‑Goals (for now)
 
-- **Draft**: sync content to target without publishing. Target’s published version (if any) remains unchanged; target stays draft if it didn’t exist.
-- **Publish**: sync content and publish it (subject to plan limits and dev‑mode constraints).
-- **Publish&Changes**: sync content without publishing it, but keep target’s existing published version live. This implies the target already has a published version; the new content becomes the draft version. Equivalent API behavior: perform update with `publish=false` while the target story is in “published” state. UI badge: `[Pub+∆]`.
+- Field‑level merge UI for component schemas.
+- Automatic migration of existing Stories to satisfy breaking changes.
+- Full RichText or content preview for component examples.
 
-## Constraints & Rules
+Vocabulary
 
-- **Folders**: no publish state; the toggle applies to stories only.
-- **Creates**: Publish&Changes is invalid; there is no prior published version. Disable or automatically fall back to Draft.
-- **Target not published**: Publish&Changes is invalid; fall back to Draft and show a hint.
-- **Dev mode target space**: Publish requests may be blocked/limited; we still allow selecting Publish but visually hint “[Dev]”. Runtime errors are surfaced per item.
-- **Copy‑as‑new (fork)**: always Draft initially; Publish/Publish&Changes disabled by default. User may switch to Publish explicitly; Publish&Changes stays disabled.
+- Component: Storyblok component, identified by `name`, optional `display_name`, optional `group`, and JSON `schema`.
+- Schema diff: Structural comparison of JSON (type/required/enum changes, added/removed keys, option changes).
+- Breaking change: A change likely to invalidate existing content (e.g., type change, required added, enum shrink).
+- Dependency: Reference to other components (e.g., `component`, `blocks`, or `options.source=internal` with component lists) establishing a sync order.
 
-## Defaulting Policy
+High‑Level Architecture
 
-On preflight build, for each story item (not folder):
+- `internal/sb`: Extend client to List/Get/Create/Update components; List/Create component groups; List/Create internal tags; presets helpers. Reuse retries/metrics like Stories.
+- `internal/core/componentsync`: New focused package with planner, diff, dependency analysis, and executor.
+- `internal/ui`: Mode toggle (Stories/Components) and views for browse, preflight, diff, and report.
 
-1. Determine `existsInTarget` and `targetPublished`.
-2. If `source.Published == true` and `shouldPublish() == true`:
-   - Default to Publish (overwrite) regardless of whether the target is published.
-3. If `source.Published == false`: default to Draft.
-4. If target space is in dev mode: retain default but display a `[Dev]` badge; actual publish may be limited by API.
+Iteration 1 — Core Types & Fixtures
 
-Rationale: conservative when target is already live; otherwise mirror source intent.
+- Outcome: Common types for components, groups, and schema nodes; initial test fixtures committed under `testdata/components/`.
+- Scope: Define `corecomponents.Component` with `Name`, `DisplayName`, `Group`, `Schema` (as `map[string]any` or `json.RawMessage`), and `ID` (target/source). Define `corecomponents.Group` with `UUID`, `Name`. Provide a `GroupMap` helper (name→uuid) and fixture loaders used by tests.
+- Tests: Load fixture pairs (source/target) to ensure type unmarshalling and stable JSON normalisation (key order insensitive).
 
-## UX Design
+Iteration 2 — SB Client: List/Get
 
-Preflight view (primary surface):
+- Outcome: `sb.Client.ListComponents(ctx, spaceID)` and `GetComponent(ctx, spaceID, name)`.
+- Scope: Implement calls with existing transport, error wrapping, and metrics. Convert API JSON into `corecomponents.Component`.
+- Tests: Use canned JSON in tests (no network). Table tests for parsing, pagination (if applicable), and error surfacing.
 
-- Per‑item toggle cycling order: Draft → Publish → Publish&Changes → Draft.
-- Keybinds:
-  - `p`: cycle publish state for current story item.
-  - `P`: apply current item’s state broadly:
-    - If cursor is on a folder: apply to all children in that folder (direct descendants) and their subtrees (stories only; skip folders).
-    - If cursor is on a story: apply to all siblings within the same folder and their subtrees where applicable (i.e., for any sibling that is a folder, apply to its descendant stories).
-- Badges on list items:
-  - `[Draft]`, `[Pub]`, `[Pub+∆]` for stories.
-  - Add `[Dev]` badge when target space is dev mode.
-  - For forked items, keep `[Fork]`; combine compactly e.g., `[Fork][Draft]`.
-- Disabled states: when a state is invalid (e.g., Publish&Changes on create), the cycle skips it; footer notes why (“Publish&Changes requires published target”).
+Iteration 2a — SB Client: Component Groups
 
-Browse view (secondary):
+- Outcome: `sb.Client.ListComponentGroups(ctx, spaceID)` and `CreateComponentGroup(ctx, spaceID, name)`.
+- Scope: Map API JSON to `corecomponents.Group`. Provide `GroupMap` builder (name→uuid) for mapping and diffing. Handle idempotent create semantics (ignore 422/conflict).
+- Tests: Parsing fixtures and idempotent create behavior.
 
-- Show current effective publish badge for source items as a hint, but the toggle is only available in Preflight.
+Iteration 3 — SB Client: Create/Update
 
-Sync view:
+- Outcome: `CreateComponent(ctx, spaceID, Component)` and `UpdateComponent(ctx, spaceID, Component)`.
+- Scope: Implement minimal payloads (name/group/display_name/schema). Ensure idempotent update semantics.
+- Tests: Request body shaping and response parsing via fixtures; retry paths for 429/5xx simulated by stub transport.
 
-- Display the chosen state next to each story for visibility; color consistent with Preflight styling.
+Iteration 4 — UI Mode Toggle & Skeleton
 
-Footer help (Preflight):
+- Outcome: Toggle between Stories and Components. Empty list screen wired to fetch action later.
+- Scope: Add global mode state and a basic Components route in Bubble Tea; keybinding to switch modes.
+- Tests: Model update unit tests: mode toggles and view routing work; help footer shows correct hints.
 
-- Add: `p: Publish/Draft/Publish&Changes`. If dev mode: append “Ziel im Dev‑Modus: Publish kann ignoriert werden”.
+Iteration 5 — Scan & Browse Components
 
-## Data Model
+- Outcome: Fetch and list components for both spaces with counts; basic fuzzy search by name.
+- Scope: Wire `ListComponents` in a scan step. Render list with `group/name` and a status badge (New/Exists/OnlyTarget).
+- Tests: Model tests using fixtures; search filters results; status computation matches expectations.
 
-- Introduce an explicit per‑item enum independent of `sb.Story.Published`:
-  - New UI field on preflight item: `PublishMode` with values `draft|publish|publish_changes`.
-  - Continue using `sb.Story.Published` to reflect source state and for display; do not overload it for plan state.
-- Persistence: store `PublishMode` on `ui.PreflightItem` (UI layer) and compute the effective `publish` boolean at execution time based on the mode and context.
-- For copy‑as‑new: set `PublishMode = draft` initially; allow switching to `publish`; keep `publish_changes` disabled.
+Iteration 5.1 — Component Groups Sync & Mapping
 
-Note: Core sync orchestrator currently uses `story.Published` to decide publishing. UI will map `PublishMode` → `publish bool` and call the syncer with that flag (no core changes required).
+- Outcome: Ensure all source groups exist in target; compute `GroupMap` for mapping UUIDs by group name.
+- Scope: During scan, list groups for both spaces; create any missing target groups; build `GroupMap`. Expose `GroupMap` to planner/executor. This runs before component diff/plan to avoid spurious diffs from missing groups.
+- Tests: Fixtures with missing/existing groups; assert create calls and resulting map.
 
-## Sync Semantics
+Iteration 6 — Collision Detection (Name/Group)
 
-For each story item at scheduling time:
+- Outcome: Identify collisions where same `name` has differing `group`/`display_name`. Mark as Conflict in UI.
+- Scope: Matching strategy by `name` (canonical). Show per‑row badges: `[New]`, `[Update]`, `[Conflict]`, `[TargetOnly]`.
+- Tests: Table tests for pairing and conflict classification.
 
-- Draft: create/update with `publish=false`.
-- Publish: create/update with `publish=true` (if `shouldPublish() == true`; otherwise `false` but keep UI badge and show `[Dev]`).
-- Publish&Changes: update with `publish=false` (never publish). Only valid if `existsInTarget && targetPublished`. For creates or unpublished target, force `publish=false`, set an inline issue, continue. UI badge `[Pub+∆]`.
+Iteration 7 — Schema Diff Engine (Minimal)
 
-Special case (requested behavior):
+- Outcome: Pure function that compares two component schemas and returns a structured diff with severity.
+- Scope: Detect added/removed fields, type changes, required changes, enum additions/removals. Flag breaking vs non‑breaking. Canonicalize fields referencing groups (`component_group_whitelist`) by comparing against group names (via `GroupMap`) to avoid false diffs from differing UUIDs.
+- Tests: Fixtures for each case; stable output regardless of key order; readable string summary for the UI.
 
-- If the source story is Published but its `PublishMode` is set to Draft, and the target story is currently published, then:
-  - Overwrite the target’s content (perform an update), and
-  - Afterwards unpublish the story so the final state is Draft.
-  - Implementation requires an explicit Unpublish call; see Implementation Steps.
+Iteration 8 — Dependency Analysis
 
-Implementation detail: The UI already constructs a `StorySyncer` and invokes `SyncStoryDetailed`. We will pass the computed `publish` flag derived from `PublishMode` into that call. For the “overwrite then unpublish” case, after a successful update we call `UnpublishStory(spaceID, storyID)`.
+- Outcome: Extract dependencies from schema (component/blocks references). Build DAG and provide topological order.
+- Scope: Handle nested/array cases and guard against cycles with a clear error (cycle path in message).
+- Tests: Graph tests for simple chains, branching, and cycles. Ensure order respects prerequisites.
 
-## Edge Cases
+Iteration 9 — Planner (Preflight Plan)
 
-- Dev mode + Publish selected: API may return dev‑mode publish limit errors; surface as warnings/errors. Keep item completed with issue text; continue flow.
-- Publish&Changes on create: treat as Draft; add Issue: “Publish&Changes benötigt veröffentlichtes Ziel; als Draft synchronisiert”.
-- Publish&Changes on unpublished target: same fallback as above.
-- Folders: ignore toggle keys; no badges.
+- Outcome: Build an executable plan from source/target snapshots, collisions, diffs, and dependency order.
+- Scope: Items: Create, Update, Skip, Conflict. Carry diff summary and dependency info. Default policy: block breaking changes.
+- Tests: Plan construction over fixture pairs; verifies ordering and correct gating on breaking diffs.
 
-## Implementation Steps
+Iteration 10 — UI Preflight View
 
-1) Model & Wiring
-- Add `PublishMode string` to `internal/ui/types.go`’s `PreflightItem` (UI alias or wrapper). Allowed: `draft`, `publish`, `publish_changes`.
-- Initialize `PublishMode` in `startPreflight()` per Defaulting Policy (build a map `targetPublishedBySlug`).
+- Outcome: Show components with status, diff summary, and allow per‑item decision: Skip/Apply (and override to allow breaking with confirmation).
+- Scope: List view with filter by group; keybind to open a detail pane with diff summary. Gated confirmation for breaking changes.
+- Tests: Model update tests for toggles and confirmation flow; rendering smoke tests (string contains badges).
 
-2) Key Handling (Preflight)
-- In `handlePreflightKey`: on `p`, cycle `PublishMode` for the current visible story item, skipping invalid states based on existence/targetPublished. Re-render; keep skipped/deselected untouched.
-- `P` propagation as specified above (siblings + subtree).
+Iteration 11 — Executor (Safe Path)
 
-3) Rendering
-- `view_preflight.go`: append `[Draft]/[Pub]/[Pub+∆]` badges for stories; add `[Dev]` when applicable.
-- `view_browse.go`: show a small `[Pub]/[Draft]` hint for source items (optional).
-- `view_sync.go`: include the selected mode in each story’s line.
-- Update footer help strings accordingly.
+- Outcome: Execute Create/Update per plan with retries and progress reporting. Breaking changes blocked unless explicitly allowed in item.
+- Scope: Use a deterministic create/update decision from the target name→ID map (avoid create‑then‑update), but handle 422 as a fallback to update. Map `component_group_uuid` to the target UUID via `GroupMap`. For `bloks`/`richtext` fields, rewrite `component_group_whitelist` using `GroupMap`. Use `CreateComponent`/`UpdateComponent`. Respect dependency order (topo) and per‑item decisions. Produce a result report.
+- Tests: Stub client to capture calls; assert order and payloads. Verify blocked items are skipped with issue note.
 
-4) Execution Mapping
-- In `runNextItem()` command closure (or where `StorySyncer` is called):
-  - Compute `publishFlag` from `PublishMode` and `shouldPublish()`.
-  - For `publish_changes`, enforce update path assumption; if it’s a create, set `publishFlag=false` and set an inline Issue.
-  - For the “Published source + Draft mode + Target published” case: perform update with `publish=false` (or `true` if needed to guarantee overwrite semantics), then call `UnpublishStory` to ensure final draft state.
-  - Pass `publishFlag` into `SyncStoryDetailed` (UI already calls it with a boolean).
+Iteration 11.1 — Internal Tags
 
-New API in `internal/sb`:
+- Outcome: Ensure internal component tags exist in target and are applied explicitly on create and update.
+- Scope: Add client methods: `ListInternalTags(spaceID)` and `CreateInternalTag(spaceID, name, objectType=component)`. Before syncing a component, ensure all `internal_tags_list` exist in target; collect IDs and set `internal_tag_ids` explicitly on both create and update (backend merge can be non‑recursive). Avoid non‑awaited loops; in Go use simple loops or `errgroup` for parallelism with proper waits.
+- Tests: Fixtures for existing/missing tags; assert creation calls and final payload IDs. Error handling when tag creation fails should be surfaced as item issues but not crash the whole sync.
 
-- Add `UnpublishStory(ctx context.Context, spaceID, storyID int) error` to client; implement via Storyblok Management API. Use existing retry/transport; add tests.
+Iteration 11.2 — Presets Sync (Optional)
 
-5) Validation & Issues
-- On invalid mode usage (create/unpublished target with `publish_changes`), set a concise `item.Issue`. Keep it visible in Sync and Report.
+- Outcome: Sync component presets alongside component create/update.
+- Scope: Client helpers to list presets for a space/component and create/update them. On component create: add all source presets. On update: diff presets (by name/key) and submit creates/updates minimally.
+- Tests: Fixtures for presets on source/target; verify correct create/update sets and association with component IDs.
 
-6) Tests
-- Unit/UI:
-  - Defaulting from combinations of source/target publish flags (including “both published” → default Publish).
-  - Cycling skips invalid states and wraps correctly.
-  - Publish&Changes falls back to Draft for creates or unpublished targets and sets Issue; badge shows `[Pub+∆]` where applicable.
-  - Dev mode hint rendering.
-- Propagation: `P` on folder applies to all children and their subtrees; `P` on a story applies to siblings and their subtrees.
-- Integration (sync path): stub API and assert publish flag per mode; verify “overwrite then unpublish” sequence occurs when specified.
+Iteration 12 — Backups (Target Snapshot)
 
-## Open Questions / Later Improvements
+- Outcome: Write pre‑update target component schemas to `testdata/snapshots/<timestamp>/components.json` (or a configured path).
+- Scope: Add backup step when any Update is scheduled. Ensure directory creation and JSON formatting are deterministic.
+- Tests: Filesystem tests writing to a temp dir; JSON contains expected set and shapes.
 
-- Global apply: quick actions to set all selected stories to Draft/Publish?
-- Reports: include chosen publish mode in saved report entries.
-- Core API: add a formal publish override to reduce UI coupling (later).
+Iteration 13 — Diff UI (Expand/Highlight)
 
-## Acceptance Criteria
+- Outcome: Expandable diff view highlighting breaking changes (type/required/enum shrink). Collapse non‑breaking by default.
+- Scope: Minimal viewer: left/right summaries and a focused field list for breaking changes. No full tree view yet.
+- Tests: Rendering unit tests for diff summaries; breaking markers appear as expected.
 
-- Preflight shows and allows cycling Publish/Draft/Publish&Changes for stories; folders unaffected.
-- Defaulting follows the updated policy (source state mirrored; overwrite when both published); dev‑mode hints appear when applicable.
-- Publish&Changes only applies to updates of already published target stories; otherwise falls back to Draft with an inline issue; badge `[Pub+∆]` used consistently.
-- When a published source is set to Draft and the target is published, the tool overwrites content and unpublishes the target so the final state is Draft.
-- Sync honors the chosen mode and surfaces any API limits/errors.
+Iteration 14 — Optional Dry‑Run Validator
 
----
+- Outcome: Optional analysis to estimate impact on stories by scanning known schemas and referencing fields. No writes.
+- Scope: Flag as experimental; behind `SB_COMPONENT_DRYRUN=1`. Summarize potential risk (counts by component reference in source snapshot if available).
+- Tests: Deterministic counts via fixtures; UI shows a concise note when enabled.
 
-## Rate‑Limit Budget & Worker Allocation (Final Optimization)
+Iteration 15 — Reporting & Telemetry
 
-We will optimize concurrency to honor Storyblok limits while maximizing throughput, accounting for added API calls (notably `UnpublishStory`). This is a separate, last step after the publish toggle lands.
+- Outcome: Include component operations in the existing sync report (JSON). Add per‑item issues and diff summaries.
+- Scope: Reuse report plumbing; extend types minimally. Ensure no secrets leak.
+- Tests: Golden report tests with redaction.
 
-### Current State
+Iteration 16 — Polishing & Docs
 
-- Per‑host limiter in `internal/sb/transport.go` with adaptive RPS and retries.
-- Per‑space read/write buckets in `internal/core/sync/space_limiter.go` used by `StorySyncer` around MA calls.
-- UI schedules up to `maxWorkers` (currently 1 during folder phase, then up to 6) without explicit knowledge of expected API “cost” per item.
+- Outcome: Finalize help text, errors, and docs. Add README feature notes and usage tips.
+- Scope: Review keybindings, badges, and messages; update `docs/PLANNING.md` status; document environment flags.
+- Tests: Lint/vet clean; CI passes.
 
-### Objective
+Testing & Tooling Notes
 
-- Tune `maxWorkers` dynamically so the expected write pressure does not exceed the per‑space write bucket and avoids 429s, while keeping workers busy.
-- Incorporate different API footprints per publish mode, especially the “overwrite then unpublish” case which costs an extra write.
+- Use table‑driven tests; avoid network. Fixtures live under `testdata/components/` and `testdata/components_graphs/`.
+- JSON normalization helper for stable diffs (marshal with sorted keys for tests if needed).
+- Prefer small, focused packages: `internal/core/componentsync/{diff,plan,deps,exec}` for cohesion.
+- Run: `go test ./...` and `go vet ./...` before merging each iteration.
 
-### API Cost Model (initial)
+Open Questions
 
-- Story Update/Create (Draft/Publish/Publish&Changes): ~1 write, 1–2 reads (raw fetch + existence check fallback).
-- Overwrite then Unpublish (Published source set to Draft on published target): ~2 writes (update + unpublish), 1–2 reads.
-- Folder Create: 1 write (+ small read overhead).
+- Naming collisions across groups: do we allow auto‑rename for target creates? (Out of scope initially.)
+- Display name divergence: treat as non‑breaking but visible change.
+- Schema option diffs (e.g., plugin options) breadth; start minimal and expand with real cases.
 
-We will refine these using measured metrics deltas per item.
+Acceptance Criteria (Feature)
 
-### Plan
-
-1) Instrumentation
-- Use existing `sb.MetricsSnapshot` deltas per item (already captured) to compute `writesPerItem` and `readsPerItem` rolling averages by item type/mode.
-- Extend per‑item result to include `WriteDelta`/`ReadDelta` derived from snapshots for faster averaging (UI already tracks `Retry429`).
-
-2) Desired Concurrency Estimation
-- Maintain rolling averages: `avgWritePerItem`, `avgReadPerItem`, and `avgItemDuration` over the recent window.
-- Estimate sustainable concurrent items from current write bucket capacity and host limiter ceiling:
-  - `targetWriteRPS = min(spaceWriteRPS, hostWriteCeiling)` (derive from limiter configs and recent adaptive cap).
-  - `writesPerSecondPerWorker ≈ avgWritePerItem / avgItemDurationSeconds`.
-  - `desiredWorkers = clamp( floor(targetWriteRPS / writesPerSecondPerWorker), 1, 12 )`.
-- Apply smoothing (EMA) to avoid oscillation and only change by ±1 at a time.
-
-3) Mode‑Aware Budgeting
-- When scheduling next items, sum the expected writes of currently running items plus the candidate’s expected writes (use cost model by mode). Only schedule if the sum over the next `Δt` remains under the write bucket burst. This prevents spikes from multiple “update+unpublish” tasks in parallel.
-
-4) Adaptive Backoff on 429s
-- On spikes in 429 rate (windowed `warningRate`), immediately reduce `maxWorkers` by 1–2 and increase again slowly after the rate subsides (like TCP congestion control).
-
-5) Integration with SpaceLimiter
-- Option A (non‑intrusive): keep SpaceLimiter as is; use it as a guard at API call time, while the scheduler attempts to keep measured pressure under capacity.
-- Option B (later): expose a lightweight `TryReserveWrites(n)` from SpaceLimiter to pre‑reserve budget before scheduling; if reservation fails, delay scheduling.
-
-6) UI Wiring
-- Reuse `statsTick()` to recompute desired workers every 500ms based on the latest averages and warning/error rates; update `m.maxWorkers` accordingly (still honoring folder‑first sequencing).
-
-7) Tests
-- Simulate higher write cost (e.g., many items needing unpublish) → controller reduces workers.
-- Simulate no 429s and low cost → controller gently increases workers up to ceiling.
-- Ensure the controller never schedules stories during folder phase and never exceeds configured caps.
-
-### Out of Scope (for now)
-
-- Cross‑space global back‑pressure; we scope per‑run/per‑space only.
-- Fine‑grained per‑endpoint budgets; method‑level read/write split is sufficient.
+- Components mode lists source/target components with status and supports search/filter by name and group.
+- Component groups are synced first and mapped by name; component `component_group_uuid` and field `component_group_whitelist` are correctly remapped to target UUIDs.
+- Preflight shows diff summaries; breaking changes highlighted and blocked unless explicitly confirmed per item.
+- Sync uses deterministic create/update decisions (name→ID map) with 422 fallback, executes in dependency order, and produces a report.
+- Internal component tags are created as needed and applied via `internal_tag_ids` on both create and update.
+- Target schemas are snapshotted before overwrites.
