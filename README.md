@@ -44,10 +44,7 @@ Interrupts: `r` to rescan, `q` to abort.
 
 4. Toggle publish state - completed
 
-5. Security & logging
-
-   - Redact tokens; avoid logging large payloads by default.
-   - Structured logs with levels; audit for accidental secrets.
+5. Security & logging - completed
 
 6. Component sync
 
