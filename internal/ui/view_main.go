@@ -20,6 +20,10 @@ func (m Model) View() string {
 		stateHeader := m.renderStateHeader()
 		content := m.renderViewportContent()
 		return lipgloss.JoinVertical(lipgloss.Left, header, stateHeader, content, footer)
+	case stateCompList:
+		stateHeader := m.renderStateHeader()
+		content := m.renderViewportContent()
+		return lipgloss.JoinVertical(lipgloss.Left, header, stateHeader, content, footer)
 	default:
 		// States that don't use viewport (full-screen content)
 		var b strings.Builder
@@ -32,10 +36,10 @@ func (m Model) View() string {
 			b.WriteString(m.viewValidating())
 		case stateSpaceSelect:
 			b.WriteString(m.viewSpaceSelect())
-		case stateModePicker:
-			b.WriteString(m.viewModePicker())
-		case stateScanning:
-			b.WriteString(m.viewScanning())
+	case stateScanning:
+		b.WriteString(m.viewScanning())
+	case stateModePicker:
+		b.WriteString(m.viewModePicker())
 		case stateCopyAsNew:
 			b.WriteString(m.viewCopyAsNew())
 		case stateFolderFork:
@@ -58,6 +62,8 @@ func (m Model) renderFooter() string {
 	switch m.state {
 	case stateBrowseList:
 		return m.renderBrowseFooter()
+	case stateCompList:
+		return m.renderCompBrowseFooter()
 	case statePreflight:
 		return m.renderPreflightFooter()
 	case stateSync:
@@ -73,6 +79,8 @@ func (m Model) renderStateHeader() string {
 	switch m.state {
 	case stateBrowseList:
 		return m.renderBrowseHeader()
+	case stateCompList:
+		return m.renderCompBrowseHeader()
 	case statePreflight:
 		return m.renderPreflightHeader()
 	case stateSync:
@@ -92,6 +100,8 @@ func (m *Model) updateViewportContent() {
 	switch m.state {
 	case stateBrowseList:
 		m.updateBrowseViewport()
+	case stateCompList:
+		m.updateCompBrowseViewport()
 	case statePreflight:
 		m.updatePreflightViewport()
 	case stateSync:

@@ -123,6 +123,9 @@ func InitialModel() Model {
 	m.publishMode = make(map[string]string)
 	m.unpublishAfter = make(map[string]bool)
 
+	// components UI defaults
+	m.comp = CompListState{selected: make(map[string]bool), collapsed: make(map[string]bool), sortKey: compSortUpdated, sortAsc: false}
+
 	return m
 }
 

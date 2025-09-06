@@ -122,6 +122,21 @@ func (m Model) renderBrowseFooter() string {
 	)
 }
 
+// Components footer mirrors browse footer but with components-specific help
+func (m Model) renderCompBrowseFooter() string {
+    total := len(m.componentsSource)
+    checked := 0
+    for _, v := range m.comp.selected {
+        if v { checked++ }
+    }
+    statusLine := fmt.Sprintf("Total: %d | Markiert: %d", total, checked)
+    return renderFooter(
+        statusLine,
+        "j/k bewegen  |  h/l Gruppe klappen  |  space markieren  |  t sort  |  o Richtung  |  d Cutoff  |  m Modus  |  q beenden",
+        "f suchen (ein/aus)",
+    )
+}
+
 func displayStory(st sb.Story) string {
 	name := st.Name
 	if name == "" {
