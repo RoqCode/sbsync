@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 )
-
 // removed unused viewReport (superseded by renderReport* functions)
 
 func (m *Model) updateReportViewport() {

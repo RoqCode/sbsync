@@ -43,6 +43,12 @@ func (m Model) handleBrowseListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	// Actions
 	case "r", "s":
 		return m.handleBrowseActions(key)
+
+	// Go back to mode picker
+	case "m":
+		m.state = stateModePicker
+		m.statusMsg = "Zurück zur Modus-Auswahl."
+		return m, nil
 	}
 
 	return m, nil

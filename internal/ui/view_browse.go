@@ -117,7 +117,7 @@ func (m Model) renderBrowseFooter() string {
 
 	return renderFooter(
 		statusLine,
-		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden",
+		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  m Modus  |  q beenden",
 		"p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück",
 	)
 }

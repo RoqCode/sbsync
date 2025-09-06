@@ -32,6 +32,8 @@ func (m Model) View() string {
 			b.WriteString(m.viewValidating())
 		case stateSpaceSelect:
 			b.WriteString(m.viewSpaceSelect())
+		case stateModePicker:
+			b.WriteString(m.viewModePicker())
 		case stateScanning:
 			b.WriteString(m.viewScanning())
 		case stateCopyAsNew:

@@ -18,6 +18,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+		if m.state == stateModePicker {
+			return m.handleModePickerKey(msg)
+		}
 		if m.state == statePreflight {
 			return m.handlePreflightKey(msg)
 		}

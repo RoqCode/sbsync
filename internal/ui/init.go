@@ -25,6 +25,9 @@ func InitialModel() Model {
 		hasSBRC:   hasFile,
 		sbrcPath:  p,
 		statusMsg: "",
+		// default to stories mode
+		currentMode:     modeStories,
+		modePickerIndex: 0,
 	}
 
 	// Register token for redaction if present
