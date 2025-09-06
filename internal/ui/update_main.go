@@ -30,6 +30,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == stateFolderFork {
 			return m.handleFolderForkKey(msg)
 		}
+		if m.state == stateCompList {
+			return m.handleCompListKey(msg)
+		}
 
 		// global shortcuts
 		if key == "ctrl+c" {
@@ -156,7 +159,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case compScanMsg:
-		return m.handleCompScanResult(msg)
+		m, _ = m.handleCompScanResult(msg)
+		if msg.err != nil {
+			// On error, leave scanning and go back to Mode Picker with status message
+			m.state = stateModePicker
+			return m, nil
+		}
+		// Navigate to components list after successful scan
+		m.state = stateCompList
+		m.comp.listIndex = 0
+		if m.comp.selected == nil { m.comp.selected = make(map[string]bool) }
+		m.updateViewportContent()
+		return m, nil
 
 	case spinner.TickMsg:
 		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync {

@@ -19,11 +19,13 @@ const (
 	stateWelcome state = iota
 	stateTokenPrompt
 	stateValidating
-	stateSpaceSelect
-	stateModePicker
-	stateScanning
-	stateBrowseList
-	statePreflight
+    stateSpaceSelect
+    stateModePicker
+    stateScanning
+    stateCompList
+    stateCompPreflight
+    stateBrowseList
+    statePreflight
 	stateCopyAsNew
 	stateFolderFork
 	stateSync
@@ -144,6 +146,9 @@ type Model struct {
 	componentsTarget      []sb.Component
 	componentGroupsSource []sb.ComponentGroup
 	componentGroupsTarget []sb.ComponentGroup
+
+	// components UI state
+	comp CompListState
 
 	// scan results
 	storiesSource []sb.Story
