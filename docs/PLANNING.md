@@ -1,170 +1,122 @@
-# Component Sync — Iteration Plan
+# Component Sync — MVP and Future Plan
 
-This plan breaks TODO #6 (Component sync) into small, stackable iterations. Each iteration is independently testable with deterministic fixtures under `testdata/` and unit tests using the standard `testing` package.
+This plan restructures TODO #6 (Component sync) into a minimal, shippable MVP that mirrors Storyblok’s blind overwrite behavior, and a set of future optimizations to layer on later. Each MVP iteration is small and independently testable.
 
-Goals
+MVP Goals
 
-- Add a Components mode in the TUI to browse, diff, and sync component schemas from a source space to a target space.
-- Detect and communicate collisions, schema diffs, and dependency ordering.
-- Default to safe behavior; block or gate breaking changes. Provide backups and dry‑run validation paths.
+- Blind overwrite parity: create/update components in target based on source without schema diffing or merge logic.
+- Sync Mode picker: screen after space selection to choose what to sync (Stories or Components); accessible again from list and success views.
+- Usable browse experience: search, sorting (updated/created/name), group filter, and a date‑cutoff filter for components.
+- Robust mapping: ensure component groups and internal tags exist in target and are mapped correctly.
 
-Non‑Goals (for now)
+MVP Non‑Goals (deferred)
 
-- Field‑level merge UI for component schemas.
-- Automatic migration of existing Stories to satisfy breaking changes.
-- Full RichText or content preview for component examples.
+- Schema diffing, breaking‑change detection, and merge UI.
+- Dependency analysis and topological ordering.
+- Backups/snapshots and dry‑run validator.
 
 Vocabulary
 
-- Component: Storyblok component, identified by `name`, optional `display_name`, optional `group`, and JSON `schema`.
-- Schema diff: Structural comparison of JSON (type/required/enum changes, added/removed keys, option changes).
-- Breaking change: A change likely to invalidate existing content (e.g., type change, required added, enum shrink).
-- Dependency: Reference to other components (e.g., `component`, `blocks`, or `options.source=internal` with component lists) establishing a sync order.
+- Component: Storyblok component with `name`, optional `display_name`, optional `component_group_uuid`, and JSON `schema`.
+- Group map: name→UUID mapping to remap `component_group_uuid` and any `component_group_whitelist` entries within field schemas (e.g., bloks/richtext).
 
-High‑Level Architecture
+High‑Level Architecture (MVP)
 
-- `internal/sb`: Extend client to List/Get/Create/Update components; List/Create component groups; List/Create internal tags; presets helpers. Reuse retries/metrics like Stories.
-- `internal/core/componentsync`: New focused package with planner, diff, dependency analysis, and executor.
-- `internal/ui`: Mode toggle (Stories/Components) and views for browse, preflight, diff, and report.
+- `internal/sb`: List/Get/Create/Update components; List/Create component groups; List/Create internal tags. Reuse transport, retries, and metrics.
+- `internal/core/componentsync`: Planner/executor for blind overwrite; helpers for group/whitelist remapping and internal tag ensuring.
+- `internal/ui`: Add Sync Mode picker; components list tree (group → components) with search/sort/filter; preflight with name collision handling (Skip/Fork); success view with navigation back to picker.
+- Sync engine parity: Reuse the stories worker-pool pattern for concurrent execution and progress reporting.
 
-Iteration 1 — Core Types & Fixtures
+Architecture Decision
 
-- Outcome: Common types for components, groups, and schema nodes; initial test fixtures committed under `testdata/components/`.
-- Scope: Define `corecomponents.Component` with `Name`, `DisplayName`, `Group`, `Schema` (as `map[string]any` or `json.RawMessage`), and `ID` (target/source). Define `corecomponents.Group` with `UUID`, `Name`. Provide a `GroupMap` helper (name→uuid) and fixture loaders used by tests.
-- Tests: Load fixture pairs (source/target) to ensure type unmarshalling and stable JSON normalisation (key order insensitive).
+- Separate flows: Implement Components as a dedicated flow to keep concerns clean and avoid Story-specific assumptions (slugs, folders, publish modes). Use `internal/core/componentsync` with parallel UI under `internal/ui/components`.
+- Reuse patterns: Mirror Stories patterns for list tree, preflight decisions (Skip/Apply/Fork), worker scheduling with SpaceLimiter, and reporting, without forcing a generic Story abstraction.
+- Minimal shared helpers: Optionally extract tiny utilities (selection toggles, a small worker scheduler helper) where it reduces duplication without coupling domain specifics. Keep SpaceLimiter shared as-is.
+- Refactor later: After MVP, evaluate safe consolidation opportunities based on duplication observed in practice.
 
-Iteration 2 — SB Client: List/Get
+MVP Iterations
 
-- Outcome: `sb.Client.ListComponents(ctx, spaceID)` and `GetComponent(ctx, spaceID, name)`.
-- Scope: Implement calls with existing transport, error wrapping, and metrics. Convert API JSON into `corecomponents.Component`.
-- Tests: Use canned JSON in tests (no network). Table tests for parsing, pagination (if applicable), and error surfacing.
+1) Sync Mode Picker & Navigation
+- Outcome: New screen after SpaceSelect to choose Stories vs Components; reachable via a keybind from the Components list and Success views to return to picker.
+- Scope: `ModePicker` model/view, route wiring, and help footer updates.
+- Tests: Model routing tests; verify navigation from list/success back to picker.
 
-Iteration 2a — SB Client: Component Groups
+2) Core Types & Fixtures
+- Outcome: Types for `Component` and `Group`; fixtures under `testdata/components/` and `testdata/component_groups/`.
+- Scope: `Component{Name, DisplayName, GroupUUID, Schema, ID, CreatedAt, UpdatedAt}`; `Group{UUID, Name}`; fixture loaders.
+- Tests: Unmarshal from fixtures; timestamp parsing; stable normalization.
 
-- Outcome: `sb.Client.ListComponentGroups(ctx, spaceID)` and `CreateComponentGroup(ctx, spaceID, name)`.
-- Scope: Map API JSON to `corecomponents.Group`. Provide `GroupMap` builder (name→uuid) for mapping and diffing. Handle idempotent create semantics (ignore 422/conflict).
-- Tests: Parsing fixtures and idempotent create behavior.
+3) SB Client: List/Get (Components, Groups)
+- Outcome: `ListComponents`, `GetComponentByName`, `ListComponentGroups`.
+- Scope: Parse API JSON; paging if applicable. Build `GroupMap` (name→uuid).
+- Tests: Parsing fixtures and error surfacing.
 
-Iteration 3 — SB Client: Create/Update
+4) SB Client: Create/Update (Components), Groups Create, Internal Tags
+- Outcome: `CreateComponent`, `UpdateComponent`, `CreateComponentGroup`, `ListInternalTags`, `CreateInternalTag`.
+- Scope: Implement payload shaping. Treat 409/422 on create as idempotent. Ensure `internal_tag_ids` can be set explicitly.
+- Tests: Request/response shaping; idempotent create behavior.
 
-- Outcome: `CreateComponent(ctx, spaceID, Component)` and `UpdateComponent(ctx, spaceID, Component)`.
-- Scope: Implement minimal payloads (name/group/display_name/schema). Ensure idempotent update semantics.
-- Tests: Request body shaping and response parsing via fixtures; retry paths for 429/5xx simulated by stub transport.
+5) List Tree & Browse (Search, Sort, Date‑Cutoff)
+- Outcome: Components list tree grouped by component groups (expand/collapse), with:
+  - Search by name
+  - Sorting: by `UpdatedAt`, `CreatedAt`, or `Name` (asc/desc)
+  - Filters: by group and date‑cutoff (show items with `UpdatedAt` or `CreatedAt` >= input)
+- Scope: Client‑side sort/filter; accept date formats like `YYYY-MM-DD` or full RFC3339; show badges `[New]`, `[Update]`, `[TargetOnly]`; selection toggles mirror Stories UX.
+- Tests: Model tests for tree expand/collapse, selection, sort orders, date parsing edge cases, and stable ordering with ties.
 
-Iteration 4 — UI Mode Toggle & Skeleton
+6) Component Groups Sync & Mapping
+- Outcome: Ensure all source groups exist in target; build `GroupMap` for mapping.
+- Scope: During scan or preflight, list groups, create missing target groups; map `component_group_uuid` and `component_group_whitelist` via `GroupMap`.
+- Tests: Fixtures with missing/existing groups; verify whitelist remapping.
 
-- Outcome: Toggle between Stories and Components. Empty list screen wired to fetch action later.
-- Scope: Add global mode state and a basic Components route in Bubble Tea; keybinding to switch modes.
-- Tests: Model update unit tests: mode toggles and view routing work; help footer shows correct hints.
+7) Internal Tags Ensure
+- Outcome: Ensure component internal tags exist in target and apply via `internal_tag_ids`.
+- Scope: Read source `internal_tags_list`; create missing tags in target (`object_type=component`); set `internal_tag_ids` on create/update.
+- Tests: Existing vs missing tags; payload contains final IDs; error propagation as item issues.
 
-Iteration 5 — Scan & Browse Components
+8) Preflight (Name Collisions, Skip/Fork)
+- Outcome: Preflight screen summarizing actions with per-item decision: Skip, Apply (overwrite), or Fork.
+- Scope: Collision check by name only; if a source component name exists in target, default to Apply (overwrite) but allow Skip or Fork. Fork prompts for a new component name (suffix suggestion), and schedules a create under that name.
+- Tests: Model tests for decision cycling, fork name entry/validation, and persistence of choices.
 
-- Outcome: Fetch and list components for both spaces with counts; basic fuzzy search by name.
-- Scope: Wire `ListComponents` in a scan step. Render list with `group/name` and a status badge (New/Exists/OnlyTarget).
-- Tests: Model tests using fixtures; search filters results; status computation matches expectations.
+9) Planner (Blind Overwrite + Decisions)
+- Outcome: Plan with Create vs Update using target name→ID map and user decisions from Preflight; honor list filters (including date‑cutoff).
+- Scope: Classify items; transform Fork decisions into Create actions with the chosen name; collect mapping info for executor.
+- Tests: Table tests for classification and fork transformation.
 
-Iteration 5.1 — Component Groups Sync & Mapping
+10) Executor (Blind Overwrite, Concurrent Workers)
+- Outcome: Execute Create/Update with retries; map groups/whitelists; set `internal_tag_ids`; handle 422 as update fallback.
+- Scope: Use the stories worker-pool pattern (configurable concurrency). Ensure group creation step has completed before execution. Payload uses source fields; for schema use source verbatim except remapped whitelist. Progress + per‑item result.
+- Tests: Stub client; assert call order/payloads; concurrency respects worker limits; cover 422 fallback path.
 
-- Outcome: Ensure all source groups exist in target; compute `GroupMap` for mapping UUIDs by group name.
-- Scope: During scan, list groups for both spaces; create any missing target groups; build `GroupMap`. Expose `GroupMap` to planner/executor. This runs before component diff/plan to avoid spurious diffs from missing groups.
-- Tests: Fixtures with missing/existing groups; assert create calls and resulting map.
+11) Reporting & Success View
+- Outcome: Integrate results into existing report; success view offers navigation back to Mode Picker.
+- Scope: Extend report minimally; update help/footer with return action.
+- Tests: Golden report coverage and navigation tests.
 
-Iteration 6 — Collision Detection (Name/Group)
+Future Optimizations
 
-- Outcome: Identify collisions where same `name` has differing `group`/`display_name`. Mark as Conflict in UI.
-- Scope: Matching strategy by `name` (canonical). Show per‑row badges: `[New]`, `[Update]`, `[Conflict]`, `[TargetOnly]`.
-- Tests: Table tests for pairing and conflict classification.
-
-Iteration 7 — Schema Diff Engine (Minimal)
-
-- Outcome: Pure function that compares two component schemas and returns a structured diff with severity.
-- Scope: Detect added/removed fields, type changes, required changes, enum additions/removals. Flag breaking vs non‑breaking. Canonicalize fields referencing groups (`component_group_whitelist`) by comparing against group names (via `GroupMap`) to avoid false diffs from differing UUIDs.
-- Tests: Fixtures for each case; stable output regardless of key order; readable string summary for the UI.
-
-Iteration 8 — Dependency Analysis
-
-- Outcome: Extract dependencies from schema (component/blocks references). Build DAG and provide topological order.
-- Scope: Handle nested/array cases and guard against cycles with a clear error (cycle path in message).
-- Tests: Graph tests for simple chains, branching, and cycles. Ensure order respects prerequisites.
-
-Iteration 9 — Planner (Preflight Plan)
-
-- Outcome: Build an executable plan from source/target snapshots, collisions, diffs, and dependency order.
-- Scope: Items: Create, Update, Skip, Conflict. Carry diff summary and dependency info. Default policy: block breaking changes.
-- Tests: Plan construction over fixture pairs; verifies ordering and correct gating on breaking diffs.
-
-Iteration 10 — UI Preflight View
-
-- Outcome: Show components with status, diff summary, and allow per‑item decision: Skip/Apply (and override to allow breaking with confirmation).
-- Scope: List view with filter by group; keybind to open a detail pane with diff summary. Gated confirmation for breaking changes.
-- Tests: Model update tests for toggles and confirmation flow; rendering smoke tests (string contains badges).
-
-Iteration 11 — Executor (Safe Path)
-
-- Outcome: Execute Create/Update per plan with retries and progress reporting. Breaking changes blocked unless explicitly allowed in item.
-- Scope: Use a deterministic create/update decision from the target name→ID map (avoid create‑then‑update), but handle 422 as a fallback to update. Map `component_group_uuid` to the target UUID via `GroupMap`. For `bloks`/`richtext` fields, rewrite `component_group_whitelist` using `GroupMap`. Use `CreateComponent`/`UpdateComponent`. Respect dependency order (topo) and per‑item decisions. Produce a result report.
-- Tests: Stub client to capture calls; assert order and payloads. Verify blocked items are skipped with issue note.
-
-Iteration 11.1 — Internal Tags
-
-- Outcome: Ensure internal component tags exist in target and are applied explicitly on create and update.
-- Scope: Add client methods: `ListInternalTags(spaceID)` and `CreateInternalTag(spaceID, name, objectType=component)`. Before syncing a component, ensure all `internal_tags_list` exist in target; collect IDs and set `internal_tag_ids` explicitly on both create and update (backend merge can be non‑recursive). Avoid non‑awaited loops; in Go use simple loops or `errgroup` for parallelism with proper waits.
-- Tests: Fixtures for existing/missing tags; assert creation calls and final payload IDs. Error handling when tag creation fails should be surfaced as item issues but not crash the whole sync.
-
-Iteration 11.2 — Presets Sync (Optional)
-
-- Outcome: Sync component presets alongside component create/update.
-- Scope: Client helpers to list presets for a space/component and create/update them. On component create: add all source presets. On update: diff presets (by name/key) and submit creates/updates minimally.
-- Tests: Fixtures for presets on source/target; verify correct create/update sets and association with component IDs.
-
-Iteration 12 — Backups (Target Snapshot)
-
-- Outcome: Write pre‑update target component schemas to `testdata/snapshots/<timestamp>/components.json` (or a configured path).
-- Scope: Add backup step when any Update is scheduled. Ensure directory creation and JSON formatting are deterministic.
-- Tests: Filesystem tests writing to a temp dir; JSON contains expected set and shapes.
-
-Iteration 13 — Diff UI (Expand/Highlight)
-
-- Outcome: Expandable diff view highlighting breaking changes (type/required/enum shrink). Collapse non‑breaking by default.
-- Scope: Minimal viewer: left/right summaries and a focused field list for breaking changes. No full tree view yet.
-- Tests: Rendering unit tests for diff summaries; breaking markers appear as expected.
-
-Iteration 14 — Optional Dry‑Run Validator
-
-- Outcome: Optional analysis to estimate impact on stories by scanning known schemas and referencing fields. No writes.
-- Scope: Flag as experimental; behind `SB_COMPONENT_DRYRUN=1`. Summarize potential risk (counts by component reference in source snapshot if available).
-- Tests: Deterministic counts via fixtures; UI shows a concise note when enabled.
-
-Iteration 15 — Reporting & Telemetry
-
-- Outcome: Include component operations in the existing sync report (JSON). Add per‑item issues and diff summaries.
-- Scope: Reuse report plumbing; extend types minimally. Ensure no secrets leak.
-- Tests: Golden report tests with redaction.
-
-Iteration 16 — Polishing & Docs
-
-- Outcome: Finalize help text, errors, and docs. Add README feature notes and usage tips.
-- Scope: Review keybindings, badges, and messages; update `docs/PLANNING.md` status; document environment flags.
-- Tests: Lint/vet clean; CI passes.
+- Schema Diff Engine & Safety: Structured diffs, breaking‑change detection, and gated overrides.
+- Dependency Analysis: Build DAG of component references and sync in topological order; warn on cycles/missing deps.
+- Diff UI: Expandable tree and summaries for breaking vs non‑breaking changes.
+- Backups/Snapshots: Export target component schemas before overwrites to a timestamped location.
+- Dry‑Run Validator: Estimate impact on stories; report risks without writes.
+- Presets Advanced Sync: Full diff and partial updates beyond basic create/update.
+- Rate‑Limit Budgeting: Mode‑aware worker sizing based on measured API costs.
+- Shared abstractions: Identify and consolidate duplicate scheduler/preflight utilities across Stories and Components where it improves maintainability without over-coupling.
 
 Testing & Tooling Notes
 
-- Use table‑driven tests; avoid network. Fixtures live under `testdata/components/` and `testdata/components_graphs/`.
-- JSON normalization helper for stable diffs (marshal with sorted keys for tests if needed).
-- Prefer small, focused packages: `internal/core/componentsync/{diff,plan,deps,exec}` for cohesion.
-- Run: `go test ./...` and `go vet ./...` before merging each iteration.
+- Table‑driven tests; avoid network. Fixtures: `testdata/components/`, `testdata/component_groups/`, `testdata/internal_tags/`.
+- Date parsing: accept `YYYY-MM-DD` and full RFC3339 (e.g., `2025-09-06T12:00:00Z`); default to local midnight when only a date is provided.
+- Keep packages cohesive: `internal/core/componentsync/{plan,exec,map}` for MVP.
+- Run: `go fmt ./... && go vet ./... && go test ./...` before merging each iteration.
 
-Open Questions
+Acceptance Criteria (MVP)
 
-- Naming collisions across groups: do we allow auto‑rename for target creates? (Out of scope initially.)
-- Display name divergence: treat as non‑breaking but visible change.
-- Schema option diffs (e.g., plugin options) breadth; start minimal and expand with real cases.
-
-Acceptance Criteria (Feature)
-
-- Components mode lists source/target components with status and supports search/filter by name and group.
-- Component groups are synced first and mapped by name; component `component_group_uuid` and field `component_group_whitelist` are correctly remapped to target UUIDs.
-- Preflight shows diff summaries; breaking changes highlighted and blocked unless explicitly confirmed per item.
-- Sync uses deterministic create/update decisions (name→ID map) with 422 fallback, executes in dependency order, and produces a report.
+- Sync Mode picker appears after selecting spaces and is reachable from Components list and Success views.
+- Components list tree mirrors Stories UX: expand/collapse by group, selection toggles, search; supports sorting by updated/created/name (asc/desc), group filter, and date‑cutoff filtering.
+- Preflight exists for components and mirrors Stories UX with name-based collision handling: Skip, Apply (overwrite), and Fork (copy-as-new with rename input).
+- Groups are created and mapped before component execution; `component_group_uuid` and field `component_group_whitelist` are correctly remapped to target UUIDs.
 - Internal component tags are created as needed and applied via `internal_tag_ids` on both create and update.
-- Target schemas are snapshotted before overwrites.
+- Executor uses concurrent workers analogous to Stories; blind overwrite executes using deterministic create/update decisions (name→ID map) with 422 fallback; progress and reporting are shown.
