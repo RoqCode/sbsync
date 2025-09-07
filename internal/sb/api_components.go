@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-    "strconv"
+	"strconv"
 )
 
 // Component represents a Storyblok component definition
@@ -27,33 +27,35 @@ type Component struct {
 type IntSlice []int
 
 func (s *IntSlice) UnmarshalJSON(b []byte) error {
-    if string(b) == "null" {
-        *s = nil
-        return nil
-    }
-    var ints []int
-    if err := json.Unmarshal(b, &ints); err == nil {
-        *s = ints
-        return nil
-    }
-    var arr []interface{}
-    if err := json.Unmarshal(b, &arr); err != nil {
-        return err
-    }
-    out := make([]int, 0, len(arr))
-    for _, v := range arr {
-        switch vv := v.(type) {
-        case float64:
-            out = append(out, int(vv))
-        case string:
-            if vv == "" { continue }
-            if n, err := strconv.Atoi(vv); err == nil {
-                out = append(out, n)
-            }
-        }
-    }
-    *s = out
-    return nil
+	if string(b) == "null" {
+		*s = nil
+		return nil
+	}
+	var ints []int
+	if err := json.Unmarshal(b, &ints); err == nil {
+		*s = ints
+		return nil
+	}
+	var arr []interface{}
+	if err := json.Unmarshal(b, &arr); err != nil {
+		return err
+	}
+	out := make([]int, 0, len(arr))
+	for _, v := range arr {
+		switch vv := v.(type) {
+		case float64:
+			out = append(out, int(vv))
+		case string:
+			if vv == "" {
+				continue
+			}
+			if n, err := strconv.Atoi(vv); err == nil {
+				out = append(out, n)
+			}
+		}
+	}
+	*s = out
+	return nil
 }
 
 type componentsResp struct {
