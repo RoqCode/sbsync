@@ -2,11 +2,65 @@ package ui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"strings"
 	"time"
 )
 
 func (m Model) handleCompListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
+	// If in input mode, delegate to input handlers
+	if m.comp.inputMode == "search" {
+		// Update search input
+		var cmd tea.Cmd
+		m.comp.search.input, cmd = m.comp.search.input.Update(msg)
+		switch key {
+		case "enter":
+			m.comp.search.query = strings.TrimSpace(m.comp.search.input.Value())
+			m.comp.inputMode = ""
+			m.comp.listIndex = 0
+			m.ensureCompCursorVisible()
+			m.updateCompBrowseViewport()
+			return m, cmd
+		case "esc":
+			// cancel editing; keep previous query
+			m.comp.search.input.SetValue(m.comp.search.query)
+			m.comp.inputMode = ""
+			m.updateCompBrowseViewport()
+			return m, cmd
+		}
+		// keep viewport content same; header shows input view
+		return m, cmd
+	}
+	if m.comp.inputMode == "date" {
+		var cmd tea.Cmd
+		m.comp.dateInput, cmd = m.comp.dateInput.Update(msg)
+		switch key {
+		case "enter":
+			val := strings.TrimSpace(m.comp.dateInput.Value())
+			if val == "" {
+				m.comp.dateCutoff = timeZero()
+				m.comp.inputMode = ""
+			} else {
+				if t := parseTime(val); !t.IsZero() {
+					m.comp.dateCutoff = t
+					m.comp.inputMode = ""
+				} else {
+					m.statusMsg = "Ungültiges Datum. Format: YYYY-MM-DD"
+					return m, cmd
+				}
+			}
+			m.comp.listIndex = 0
+			m.ensureCompCursorVisible()
+			m.updateCompBrowseViewport()
+			return m, cmd
+		case "esc":
+			// cancel editing
+			m.comp.inputMode = ""
+			m.updateCompBrowseViewport()
+			return m, cmd
+		}
+		return m, cmd
+	}
 	switch key {
 	case "q":
 		return m, tea.Quit
@@ -77,18 +131,23 @@ func (m Model) handleCompListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.ensureCompCursorVisible()
 		m.updateCompBrowseViewport()
 		return m, nil
-	case "f":
-		// Start/stop lightweight search (no input component yet)
-		if m.comp.search.searching {
-			m.comp.search.searching = false
-			m.comp.search.query = ""
-		} else {
-			m.comp.search.searching = true
-			// no input widget: use status message as prompt for now
-			m.statusMsg = "Suche aktiv – tippe /<text> in späterer Iteration"
-		}
-		m.updateCompBrowseViewport()
-		return m, nil
+    case "f":
+        // Enter search input mode
+        m.comp.inputMode = "search"
+        m.comp.search.input.SetValue(m.comp.search.query)
+        m.comp.search.input.Focus()
+        m.updateCompBrowseViewport()
+        return m, nil
+    case "F":
+        // Clear search
+        m.comp.search.searching = false
+        m.comp.search.query = ""
+        m.comp.search.input.SetValue("")
+        m.comp.inputMode = ""
+        m.comp.listIndex = 0
+        m.ensureCompCursorVisible()
+        m.updateCompBrowseViewport()
+        return m, nil
 	case "t":
 		// cycle sort key
 		m.comp.sortKey = (m.comp.sortKey + 1) % 3
@@ -98,18 +157,26 @@ func (m Model) handleCompListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.comp.sortAsc = !m.comp.sortAsc
 		m.updateCompBrowseViewport()
 		return m, nil
-	case "d":
-		// toggle a simple date cutoff of today for now; later accept input
-		if m.comp.dateCutoff.IsZero() {
-			m.comp.dateCutoff = nowMidnight()
-		} else {
-			m.comp.dateCutoff = timeZero()
-		}
-		// reset cursor to top after large filter change
-		m.comp.listIndex = 0
-		m.ensureCompCursorVisible()
-		m.updateCompBrowseViewport()
-		return m, nil
+    case "d":
+        // Enter date input mode
+        m.comp.inputMode = "date"
+        if !m.comp.dateCutoff.IsZero() {
+            m.comp.dateInput.SetValue(m.comp.dateCutoff.Format("2006-01-02"))
+        } else {
+            m.comp.dateInput.SetValue("")
+        }
+        m.comp.dateInput.Focus()
+        m.updateCompBrowseViewport()
+        return m, nil
+    case "D":
+        // Clear date cutoff
+        m.comp.dateCutoff = timeZero()
+        m.comp.inputMode = ""
+        m.comp.dateInput.SetValue("")
+        m.comp.listIndex = 0
+        m.ensureCompCursorVisible()
+        m.updateCompBrowseViewport()
+        return m, nil
 	}
 	return m, nil
 }

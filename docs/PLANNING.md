@@ -36,60 +36,60 @@ Architecture Decision
 
 MVP Iterations
 
-1) Sync Mode Picker & Navigation
+1) Sync Mode Picker & Navigation — DONE
 - Outcome: New screen after SpaceSelect to choose Stories vs Components; reachable via a keybind from the Components list and Success views to return to picker.
 - Scope: `ModePicker` model/view, route wiring, and help footer updates.
 - Tests: Model routing tests; verify navigation from list/success back to picker.
 
-2) Core Types & Fixtures
+2) Core Types & Fixtures — DONE (types), fixtures TBD
 - Outcome: Types for `Component` and `Group`; fixtures under `testdata/components/` and `testdata/component_groups/`.
 - Scope: `Component{Name, DisplayName, GroupUUID, Schema, ID, CreatedAt, UpdatedAt}`; `Group{UUID, Name}`; fixture loaders.
 - Tests: Unmarshal from fixtures; timestamp parsing; stable normalization.
 
-3) SB Client: List/Get (Components, Groups)
+3) SB Client: List/Get (Components, Groups) — DONE
 - Outcome: `ListComponents`, `GetComponentByName`, `ListComponentGroups`.
 - Scope: Parse API JSON; paging if applicable. Build `GroupMap` (name→uuid).
 - Tests: Parsing fixtures and error surfacing.
 
-4) SB Client: Create/Update (Components), Groups Create, Internal Tags
+4) SB Client: Create/Update (Components), Groups Create, Internal Tags — DONE
 - Outcome: `CreateComponent`, `UpdateComponent`, `CreateComponentGroup`, `ListInternalTags`, `CreateInternalTag`.
 - Scope: Implement payload shaping. Treat 409/422 on create as idempotent. Ensure `internal_tag_ids` can be set explicitly.
 - Tests: Request/response shaping; idempotent create behavior.
 
-5) List Tree & Browse (Search, Sort, Date‑Cutoff)
-- Outcome: Components list tree grouped by component groups (expand/collapse), with:
-  - Search by name
-  - Sorting: by `UpdatedAt`, `CreatedAt`, or `Name` (asc/desc)
-  - Filters: by group and date‑cutoff (show items with `UpdatedAt` or `CreatedAt` >= input)
-- Scope: Client‑side sort/filter; accept date formats like `YYYY-MM-DD` or full RFC3339; show badges `[New]`, `[Update]`, `[TargetOnly]`; selection toggles mirror Stories UX.
-- Tests: Model tests for tree expand/collapse, selection, sort orders, date parsing edge cases, and stable ordering with ties.
+5) Browse Components (Search, Sort, Date‑Cutoff) — IN PROGRESS
+- Outcome: Flat components list with:
+  - Search by name (basic toggle now; text input follows)
+  - Sorting: by `UpdatedAt`, `CreatedAt`, or `Name` (asc/desc) [DONE]
+  - Filters: date‑cutoff quick toggle (today on/off) [DONE]; group filter via inline filter (UI affordance TBD)
+- Scope: Client‑side sort/filter; accept textual date input in a later step; selection toggles mirror Stories UX; show updated date per row.
+- Tests: Sorting/date‑cutoff tests [DONE]; add search input tests later.
 
-6) Component Groups Sync & Mapping
+6) Component Groups Sync & Mapping — PENDING
 - Outcome: Ensure all source groups exist in target; build `GroupMap` for mapping.
 - Scope: During scan or preflight, list groups, create missing target groups; map `component_group_uuid` and `component_group_whitelist` via `GroupMap`.
 - Tests: Fixtures with missing/existing groups; verify whitelist remapping.
 
-7) Internal Tags Ensure
+7) Internal Tags Ensure — PENDING
 - Outcome: Ensure component internal tags exist in target and apply via `internal_tag_ids`.
 - Scope: Read source `internal_tags_list`; create missing tags in target (`object_type=component`); set `internal_tag_ids` on create/update.
 - Tests: Existing vs missing tags; payload contains final IDs; error propagation as item issues.
 
-8) Preflight (Name Collisions, Skip/Fork)
+8) Preflight (Name Collisions, Skip/Fork) — PENDING
 - Outcome: Preflight screen summarizing actions with per-item decision: Skip, Apply (overwrite), or Fork.
 - Scope: Collision check by name only; if a source component name exists in target, default to Apply (overwrite) but allow Skip or Fork. Fork prompts for a new component name (suffix suggestion), and schedules a create under that name.
 - Tests: Model tests for decision cycling, fork name entry/validation, and persistence of choices.
 
-9) Planner (Blind Overwrite + Decisions)
+9) Planner (Blind Overwrite + Decisions) — PENDING
 - Outcome: Plan with Create vs Update using target name→ID map and user decisions from Preflight; honor list filters (including date‑cutoff).
 - Scope: Classify items; transform Fork decisions into Create actions with the chosen name; collect mapping info for executor.
 - Tests: Table tests for classification and fork transformation.
 
-10) Executor (Blind Overwrite, Concurrent Workers)
+10) Executor (Blind Overwrite, Concurrent Workers) — PENDING
 - Outcome: Execute Create/Update with retries; map groups/whitelists; set `internal_tag_ids`; handle 422 as update fallback.
 - Scope: Use the stories worker-pool pattern (configurable concurrency). Ensure group creation step has completed before execution. Payload uses source fields; for schema use source verbatim except remapped whitelist. Progress + per‑item result.
 - Tests: Stub client; assert call order/payloads; concurrency respects worker limits; cover 422 fallback path.
 
-11) Reporting & Success View
+11) Reporting & Success View — PENDING
 - Outcome: Integrate results into existing report; success view offers navigation back to Mode Picker.
 - Scope: Extend report minimally; update help/footer with return action.
 - Tests: Golden report coverage and navigation tests.

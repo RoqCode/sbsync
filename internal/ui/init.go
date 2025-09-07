@@ -125,6 +125,15 @@ func InitialModel() Model {
 
 	// components UI defaults
 	m.comp = CompListState{selected: make(map[string]bool), collapsed: make(map[string]bool), sortKey: compSortUpdated, sortAsc: false}
+	// init inputs for components search/date
+	m.comp.search.input = textinput.New()
+	m.comp.search.input.Placeholder = "Suchen…"
+	m.comp.search.input.CharLimit = 200
+	m.comp.search.input.Width = 40
+	m.comp.dateInput = textinput.New()
+	m.comp.dateInput.Placeholder = "YYYY-MM-DD"
+	m.comp.dateInput.CharLimit = 32
+	m.comp.dateInput.Width = 12
 
 	return m
 }
