@@ -168,7 +168,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Navigate to components list after successful scan
 		m.state = stateCompList
 		m.comp.listIndex = 0
-		if m.comp.selected == nil { m.comp.selected = make(map[string]bool) }
+		if m.comp.selected == nil {
+			m.comp.selected = make(map[string]bool)
+		}
 		m.updateViewportContent()
 		return m, nil
 

@@ -19,13 +19,13 @@ const (
 	stateWelcome state = iota
 	stateTokenPrompt
 	stateValidating
-    stateSpaceSelect
-    stateModePicker
-    stateScanning
-    stateCompList
-    stateCompPreflight
-    stateBrowseList
-    statePreflight
+	stateSpaceSelect
+	stateModePicker
+	stateScanning
+	stateCompList
+	stateCompPreflight
+	stateBrowseList
+	statePreflight
 	stateCopyAsNew
 	stateFolderFork
 	stateSync
