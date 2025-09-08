@@ -61,3 +61,49 @@ func PrepareTagIDsForTarget(ctx context.Context, api TagAPI, targetSpaceID int, 
 	}
 	return ids, nil
 }
+
+// EnsureTagNameIDs ensures that all provided tag names exist in the target space
+// (object_type=component) and returns a name->ID mapping for them.
+func EnsureTagNameIDs(ctx context.Context, api TagAPI, targetSpaceID int, names []string) (map[string]int, error) {
+	// Deduplicate names
+	unique := make([]string, 0, len(names))
+	seen := make(map[string]bool)
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		if !seen[n] {
+			unique = append(unique, n)
+			seen[n] = true
+		}
+	}
+	if len(unique) == 0 {
+		return map[string]int{}, nil
+	}
+	tgt, err := api.ListInternalTags(ctx, targetSpaceID)
+	if err != nil {
+		return nil, err
+	}
+	byName := make(map[string]int, len(tgt))
+	for _, t := range tgt {
+		byName[t.Name] = t.ID
+	}
+	for _, n := range unique {
+		if _, ok := byName[n]; ok {
+			continue
+		}
+		created, err := api.CreateInternalTag(ctx, targetSpaceID, n, "component")
+		if err != nil {
+			return nil, err
+		}
+		byName[n] = created.ID
+	}
+	// Return only requested names to keep map small
+	out := make(map[string]int, len(unique))
+	for _, n := range unique {
+		if id, ok := byName[n]; ok {
+			out[n] = id
+		}
+	}
+	return out, nil
+}

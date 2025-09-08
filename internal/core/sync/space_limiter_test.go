@@ -422,3 +422,23 @@ func TestSpaceLimiter_Integration(t *testing.T) {
 		t.Errorf("wait duration = %v, want ~%v", duration, expectedWait)
 	}
 }
+
+func TestDefaultLimitsForPlan(t *testing.T) {
+	tests := []struct {
+		plan  int
+		wantR float64
+		wantW float64
+		wantB int
+	}{
+		{0, 4, 3, 3},  // dev
+		{-1, 4, 3, 3}, // dev (defensive)
+		{1, 7, 7, 7},  // paid
+		{999, 7, 7, 7},
+	}
+	for _, tt := range tests {
+		r, w, b := DefaultLimitsForPlan(tt.plan)
+		if r != tt.wantR || w != tt.wantW || b != tt.wantB {
+			t.Fatalf("plan=%d got r=%.0f w=%.0f b=%d; want r=%.0f w=%.0f b=%d", tt.plan, r, w, b, tt.wantR, tt.wantW, tt.wantB)
+		}
+	}
+}

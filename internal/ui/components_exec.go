@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	comps "storyblok-sync/internal/core/componentsync"
+	synccore "storyblok-sync/internal/core/sync"
 	"storyblok-sync/internal/infra/logx"
 	"storyblok-sync/internal/sb"
 	"strings"
@@ -19,15 +20,17 @@ type compReportEntry struct {
 	Operation  string
 	Err        string
 	DurationMs int64
+	Retry429   int
+	RetryTotal int
 }
 type compApplyDoneMsg struct {
-    errCount int
-    entries  []compReportEntry
+	errCount int
+	entries  []compReportEntry
 }
-type compExecInitMsg struct{
-    err error
-    maps compRemapMaps
-    plan []componentsyncPlanItem
+type compExecInitMsg struct {
+	err  error
+	maps compRemapMaps
+	plan []componentsyncPlanItem
 }
 
 // internal planning types kept in UI to avoid importing in types.go
@@ -36,6 +39,7 @@ type compRemapMaps struct {
 	srcUUIDToName map[string]string
 	tgtNameToUUID map[string]string
 	tgtID         int
+	tagNameToID   map[string]int
 }
 
 // execCompApplyCmd builds a plan from preflight decisions and applies it serially.
@@ -77,6 +81,15 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
+		// Ensure limiter
+		if m.compLimiter == nil {
+			plan := 0
+			if m.targetSpace != nil {
+				plan = m.targetSpace.PlanLevel
+			}
+			r, w, b := synccore.DefaultLimitsForPlan(plan)
+			m.compLimiter = synccore.NewSpaceLimiter(r, w, b)
+		}
 		// Ensure groups
 		tgtGroups, err := comps.EnsureTargetGroups(ctx, m.api, tgtID, m.componentGroupsSource)
 		if err != nil {
@@ -85,6 +98,20 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 		}
 		// Build maps for remap
 		srcUUIDToName, tgtNameToUUID := comps.BuildGroupNameMaps(m.componentGroupsSource, tgtGroups)
+		// Pre-ensure internal tags across all selected components
+		tagNames := make([]string, 0)
+		for _, c := range selected {
+			for _, t := range c.InternalTagsList {
+				if t.Name != "" {
+					tagNames = append(tagNames, t.Name)
+				}
+			}
+		}
+		tagMap, err := comps.EnsureTagNameIDs(ctx, m.api, tgtID, tagNames)
+		if err != nil {
+			logx.Errorf("COMP_APPLY ensure tags: %v", err)
+			return compApplyDoneMsg{errCount: len(selected)}
+		}
 		// Build plan
 		plan := comps.BuildPlan(selected, m.componentsTarget, decisions)
 		// Concurrent worker pool
@@ -113,52 +140,72 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 					results <- compReportEntry{Name: comp.Name, Operation: p.Action, Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}
 					continue
 				}
-				// Ensure tags
-				ids, err := comps.PrepareTagIDsForTarget(ctx, m.api, tgtID, mapped.InternalTagsList, true)
-				if err != nil {
-					logx.Errorf("COMP_APPLY tags: %v", err)
-					results <- compReportEntry{Name: comp.Name, Operation: p.Action, Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}
-					continue
+				// Map internal tag IDs from pre-ensured map
+				if len(mapped.InternalTagsList) > 0 {
+					ids := make([]int, 0, len(mapped.InternalTagsList))
+					for _, t := range mapped.InternalTagsList {
+						if id, ok := tagMap[t.Name]; ok && id > 0 {
+							ids = append(ids, id)
+						}
+					}
+					mapped.InternalTagIDs = sb.IntSlice(ids)
 				}
-				mapped.InternalTagIDs = sb.IntSlice(ids)
+				// Attach retry counters to context for per-item attribution
+				rc := &sb.RetryCounters{}
+				ctx2 := sb.WithRetryCounters(ctx, rc)
 				// Write
 				switch p.Action {
 				case "create":
-					_, err = m.api.CreateComponent(ctx, tgtID, mapped)
+					_ = m.compLimiter.WaitWrite(ctx2, tgtID)
+					_, err = m.api.CreateComponent(ctx2, tgtID, mapped)
 					if err != nil {
 						// fallback: refresh target list and try update by name
 						id := findTargetComponentIDByName(m.componentsTarget, mapped.Name)
 						if id == 0 {
-							if compsNow, e := m.api.ListComponents(ctx, tgtID); e == nil {
+							if compsNow, e := m.api.ListComponents(ctx2, tgtID); e == nil {
 								id = findTargetComponentIDByName(compsNow, mapped.Name)
 							}
 						}
 						if id > 0 {
 							mapped.ID = id
-							if _, err2 := m.api.UpdateComponent(ctx, tgtID, mapped); err2 != nil {
+							_ = m.compLimiter.WaitWrite(ctx2, tgtID)
+							if _, err2 := m.api.UpdateComponent(ctx2, tgtID, mapped); err2 != nil {
 								logx.Errorf("COMP_APPLY create->update fallback failed: %v", err2)
-								results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds()}
+								if synccore.IsRateLimited(err2) {
+									m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
+								}
+								results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
 							} else {
-								results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds()}
+								m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
+								results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
 							}
 						} else {
 							logx.Errorf("COMP_APPLY create: %v", err)
-							results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}
+							if synccore.IsRateLimited(err) {
+								m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
+							}
+							results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
 						}
 					} else {
-						results <- compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds()}
+						m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
+						results <- compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
 					}
 				case "update":
 					mapped.ID = p.TargetID
-					if _, err = m.api.UpdateComponent(ctx, tgtID, mapped); err != nil {
+					_ = m.compLimiter.WaitWrite(ctx2, tgtID)
+					if _, err = m.api.UpdateComponent(ctx2, tgtID, mapped); err != nil {
 						logx.Errorf("COMP_APPLY update: %v", err)
-						results <- compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}
+						if synccore.IsRateLimited(err) {
+							m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
+						}
+						results <- compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
 					} else {
-						results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds()}
+						m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
+						results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
 					}
 				default:
 					// skip
-					results <- compReportEntry{Name: comp.Name, Operation: "skip", DurationMs: time.Since(start).Milliseconds()}
+					results <- compReportEntry{Name: comp.Name, Operation: "skip", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
 				}
 			}
 		}
@@ -227,8 +274,22 @@ func (m *Model) startCompApply() tea.Cmd {
 			return compExecInitMsg{err: err}
 		}
 		s2n, n2t := comps.BuildGroupNameMaps(srcGroups, tgtGroups)
+		// Pre-ensure internal tags across all selected components
+		tagNames := make([]string, 0)
+		for _, c := range selected {
+			for _, t := range c.InternalTagsList {
+				if t.Name != "" {
+					tagNames = append(tagNames, t.Name)
+				}
+			}
+		}
+		tagMap, err := comps.EnsureTagNameIDs(ctx, api, tgtID, tagNames)
+		if err != nil {
+			logx.Errorf("COMP_PREP ensure tags: %v", err)
+			return compExecInitMsg{err: err}
+		}
 		plan := comps.BuildPlan(selected, tgtSnapshot, decisions)
-		return compExecInitMsg{maps: compRemapMaps{srcUUIDToName: s2n, tgtNameToUUID: n2t, tgtID: tgtID}, plan: plan}
+		return compExecInitMsg{maps: compRemapMaps{srcUUIDToName: s2n, tgtNameToUUID: n2t, tgtID: tgtID, tagNameToID: tagMap}, plan: plan}
 	}
 }
 
@@ -260,45 +321,76 @@ func (m Model) runCompItemCmd(idx int) tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
+		// Ensure limiter
+		if m.compLimiter == nil {
+			plan := 0
+			if m.targetSpace != nil {
+				plan = m.targetSpace.PlanLevel
+			}
+			r, w, b := synccore.DefaultLimitsForPlan(plan)
+			m.compLimiter = synccore.NewSpaceLimiter(r, w, b)
+		}
 		mapped, _, err := comps.RemapComponentGroups(comp, maps.srcUUIDToName, maps.tgtNameToUUID)
 		if err != nil {
 			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: comp.Name, Operation: p.Action, Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}}
 		}
-		ids, err := comps.PrepareTagIDsForTarget(ctx, api, maps.tgtID, mapped.InternalTagsList, true)
-		if err != nil {
-			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: comp.Name, Operation: p.Action, Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}}
+		if len(mapped.InternalTagsList) > 0 {
+			ids := make([]int, 0, len(mapped.InternalTagsList))
+			for _, t := range mapped.InternalTagsList {
+				if id, ok := maps.tagNameToID[t.Name]; ok && id > 0 {
+					ids = append(ids, id)
+				}
+			}
+			mapped.InternalTagIDs = sb.IntSlice(ids)
 		}
-		mapped.InternalTagIDs = sb.IntSlice(ids)
+		// Attach retry counters to context for per-item attribution
+		rc := &sb.RetryCounters{}
+		ctx2 := sb.WithRetryCounters(ctx, rc)
 		// Write
 		switch p.Action {
 		case "create":
-			_, err = api.CreateComponent(ctx, maps.tgtID, mapped)
+			_ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+			_, err = api.CreateComponent(ctx2, maps.tgtID, mapped)
 			if err != nil {
 				// fallback: try update by name
 				id := findTargetComponentIDByName(nil, mapped.Name)
 				if id == 0 {
-					if compsNow, e := api.ListComponents(ctx, maps.tgtID); e == nil {
+					if compsNow, e := api.ListComponents(ctx2, maps.tgtID); e == nil {
 						id = findTargetComponentIDByName(compsNow, mapped.Name)
 					}
 				}
 				if id > 0 {
 					mapped.ID = id
-					if _, err2 := api.UpdateComponent(ctx, maps.tgtID, mapped); err2 != nil {
-						return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds()}}
+					_ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+					if _, err2 := api.UpdateComponent(ctx2, maps.tgtID, mapped); err2 != nil {
+						if synccore.IsRateLimited(err2) {
+							m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
+						}
+						return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
 					}
-					return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds()}}
+					m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
+					return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
 				}
-				return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}}
+				if synccore.IsRateLimited(err) {
+					m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
+				}
+				return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
 			}
-			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds()}}
+			m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
+			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
 		case "update":
 			mapped.ID = p.TargetID
-			if _, err = api.UpdateComponent(ctx, maps.tgtID, mapped); err != nil {
-				return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds()}}
+			_ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+			if _, err = api.UpdateComponent(ctx2, maps.tgtID, mapped); err != nil {
+				if synccore.IsRateLimited(err) {
+					m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
+				}
+				return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
 			}
-			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds()}}
+			m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
+			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
 		default:
-			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: comp.Name, Operation: "skip", DurationMs: time.Since(start).Milliseconds()}}
+			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: comp.Name, Operation: "skip", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
 		}
 	}
 }

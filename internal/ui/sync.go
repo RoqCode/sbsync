@@ -385,7 +385,19 @@ func (m *Model) shouldPublish() bool {
 // removed legacy syncFolder implementation
 
 // syncFolderDetailed handles folder synchronization and returns detailed results
-// removed legacy syncFolderDetailed
+func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, error) {
+	// Build a minimal target index
+	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+	for _, s := range m.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	plan := 0
+	if m.targetSpace != nil {
+		plan = m.targetSpace.PlanLevel
+	}
+	syncer := sync.NewStorySyncerWithPlan(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex, plan)
+	return syncer.SyncFolderDetailed(sourceFolder, m.shouldPublish())
+}
 
 // executeSync has been moved to sync/api_adapters.go as ExecuteSync
 
@@ -397,7 +409,18 @@ func (m *Model) shouldPublish() bool {
 
 // syncStoryContentDetailed handles story synchronization and returns detailed results
 // Note: Folder structure is now pre-planned in optimizePreflight(), so no need to ensure folder path here
-// removed legacy syncStoryContentDetailed
+func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult, error) {
+	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
+	for _, s := range m.storiesTarget {
+		tgtIndex[s.FullSlug] = s
+	}
+	plan := 0
+	if m.targetSpace != nil {
+		plan = m.targetSpace.PlanLevel
+	}
+	syncer := sync.NewStorySyncerWithPlan(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex, plan)
+	return syncer.SyncStoryDetailed(sourceStory, m.shouldPublish())
+}
 
 // processTranslatedSlugs handles translated slug processing like the Storyblok CLI
 func (m *Model) processTranslatedSlugs(sourceStory sb.Story, existingStories []sb.Story) sb.Story {

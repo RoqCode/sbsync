@@ -96,6 +96,15 @@ func NewSpaceLimiter(readRPS, writeRPS float64, burst int) *SpaceLimiter {
 	return &SpaceLimiter{spaces: make(map[int]*spaceBuckets), defReadRPS: readRPS, defWriteRPS: writeRPS, burst: float64(burst)}
 }
 
+// DefaultLimitsForPlan returns reasonable read/write RPS and burst based on space plan.
+// Dev spaces are more restrictive (~3 writes/sec). Treat planLevel <= 0 as dev.
+func DefaultLimitsForPlan(planLevel int) (readRPS, writeRPS float64, burst int) {
+	if planLevel <= 0 {
+		return 4, 3, 3
+	}
+	return 7, 7, 7
+}
+
 func (sl *SpaceLimiter) get(spaceID int) *spaceBuckets {
 	sl.mu.Lock()
 	defer sl.mu.Unlock()

@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/infra/logx"
 	"storyblok-sync/internal/sb"
 )
 
@@ -194,7 +195,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if e.Err != "" {
 				status = "failure"
 			}
-			rep.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err})
+			rep.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err, RateLimit429: e.Retry429})
 		}
 		rep.Finalize()
 		m.report = *rep
@@ -218,10 +219,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.compResults = nil
 		m.compPlan = make([]componentsyncPlanItem, 0, len(msg.plan))
 		byName := make(map[string]componentsyncPlanItem)
-		for _, p := range msg.plan { byName[p.Source.Name] = p }
+		for _, p := range msg.plan {
+			byName[p.Source.Name] = p
+		}
 		for i := range m.compPre.items {
 			it := &m.compPre.items[i]
-			if it.Skip { continue }
+			if it.Skip {
+				continue
+			}
 			if p, ok := byName[it.Source.Name]; ok {
 				m.compPlan = append(m.compPlan, p)
 				it.Run = RunPending
@@ -230,14 +235,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Switch to components sync view with spinner + stats
 		m.state = stateCompSync
 		m.syncing = true
-		// Seed workers
+		// Seed workers conservatively for components (ramp up dynamically)
 		workers := m.maxWorkers
-		if workers < 1 { workers = 4 }
+		if workers < 1 {
+			workers = 2
+		}
+		// Ensure model's maxWorkers is initialized so follow-up scheduling doesn't clamp to 1
+		m.maxWorkers = workers
 		pending := 0
 		cmds := make([]tea.Cmd, 0, workers+2)
 		for i := range m.compPre.items {
-			if pending >= workers { break }
-			if m.compPre.items[i].Skip || m.compPre.items[i].Run != RunPending { continue }
+			if pending >= workers {
+				break
+			}
+			if m.compPre.items[i].Skip || m.compPre.items[i].Run != RunPending {
+				continue
+			}
 			m.compPre.items[i].Run = RunRunning
 			cmds = append(cmds, m.runCompItemCmd(i))
 			pending++
@@ -256,12 +269,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.compResults = append(m.compResults, msg.entry)
-		// schedule next pending if any
+		// Log rate-limit warnings for this item if any
+		if msg.entry.Retry429 > 0 {
+			logx.Warnf("COMP_RATE_LIMIT item=%s op=%s retry429=%d retries=%d", msg.entry.Name, msg.entry.Operation, msg.entry.Retry429, msg.entry.RetryTotal)
+			// Apply gentle backpressure: temporarily reduce desired concurrency
+			if m.maxWorkers > 1 {
+				m.maxWorkers--
+			}
+		}
+		// schedule next pending if any, respecting write budget like stories
+		runningUnits := 0
+		for j := range m.compPre.items {
+			if m.compPre.items[j].Run == RunRunning {
+				runningUnits += 1
+			}
+		}
 		for i := range m.compPre.items {
 			if m.compPre.items[i].Skip {
 				continue
 			}
 			if m.compPre.items[i].Run == RunPending {
+				allowed := m.maxWorkers
+				if allowed <= 0 {
+					allowed = 1
+				}
+				if runningUnits+1 > allowed {
+					break
+				}
 				m.compPre.items[i].Run = RunRunning
 				m.updateViewportContent()
 				return m, m.runCompItemCmd(i)
