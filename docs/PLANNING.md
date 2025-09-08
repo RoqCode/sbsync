@@ -6,7 +6,7 @@ MVP Goals
 
 - Blind overwrite parity: create/update components in target based on source without schema diffing or merge logic.
 - Sync Mode picker: screen after space selection to choose what to sync (Stories or Components); accessible again from list and success views.
-- Usable browse experience: search, sorting (updated/created/name), group filter, and a date‑cutoff filter for components.
+- Usable browse experience: search, sorting (updated/created/name), and a date‑cutoff filter for components. (Group filter deferred.)
 - Robust mapping: ensure component groups and internal tags exist in target and are mapped correctly.
 
 MVP Non‑Goals (deferred)
@@ -56,40 +56,40 @@ MVP Iterations
 - Scope: Implement payload shaping. Treat 409/422 on create as idempotent. Ensure `internal_tag_ids` can be set explicitly.
 - Tests: Request/response shaping; idempotent create behavior.
 
-5) Browse Components (Search, Sort, Date‑Cutoff) — IN PROGRESS
+5) Browse Components (Search, Sort, Date‑Cutoff) — IN PROGRESS (Group filter deferred)
 - Outcome: Flat components list with:
   - Search by name (basic toggle now; text input follows)
   - Sorting: by `UpdatedAt`, `CreatedAt`, or `Name` (asc/desc) [DONE]
-  - Filters: date‑cutoff quick toggle (today on/off) [DONE]; group filter via inline filter (UI affordance TBD)
+  - Filters: date‑cutoff quick toggle (today on/off) [DONE]; group filter [Deferred]
 - Scope: Client‑side sort/filter; accept textual date input in a later step; selection toggles mirror Stories UX; show updated date per row.
 - Tests: Sorting/date‑cutoff tests [DONE]; add search input tests later.
 
-6) Component Groups Sync & Mapping — PENDING
+6) Component Groups Sync & Mapping — DONE
 - Outcome: Ensure all source groups exist in target; build `GroupMap` for mapping.
 - Scope: During scan or preflight, list groups, create missing target groups; map `component_group_uuid` and `component_group_whitelist` via `GroupMap`.
 - Tests: Fixtures with missing/existing groups; verify whitelist remapping.
 
-7) Internal Tags Ensure — PENDING
+7) Internal Tags Ensure — DONE
 - Outcome: Ensure component internal tags exist in target and apply via `internal_tag_ids`.
 - Scope: Read source `internal_tags_list`; create missing tags in target (`object_type=component`); set `internal_tag_ids` on create/update.
 - Tests: Existing vs missing tags; payload contains final IDs; error propagation as item issues.
 
-8) Preflight (Name Collisions, Skip/Fork) — PENDING
+8) Preflight (Name Collisions, Skip/Fork) — DONE
 - Outcome: Preflight screen summarizing actions with per-item decision: Skip, Apply (overwrite), or Fork.
 - Scope: Collision check by name only; if a source component name exists in target, default to Apply (overwrite) but allow Skip or Fork. Fork prompts for a new component name (suffix suggestion), and schedules a create under that name.
 - Tests: Model tests for decision cycling, fork name entry/validation, and persistence of choices.
 
-9) Planner (Blind Overwrite + Decisions) — PENDING
+9) Planner (Blind Overwrite + Decisions) — DONE
 - Outcome: Plan with Create vs Update using target name→ID map and user decisions from Preflight; honor list filters (including date‑cutoff).
 - Scope: Classify items; transform Fork decisions into Create actions with the chosen name; collect mapping info for executor.
 - Tests: Table tests for classification and fork transformation.
 
-10) Executor (Blind Overwrite, Concurrent Workers) — PENDING
+10) Executor (Blind Overwrite, Concurrent Workers) — DONE
 - Outcome: Execute Create/Update with retries; map groups/whitelists; set `internal_tag_ids`; handle 422 as update fallback.
 - Scope: Use the stories worker-pool pattern (configurable concurrency). Ensure group creation step has completed before execution. Payload uses source fields; for schema use source verbatim except remapped whitelist. Progress + per‑item result.
 - Tests: Stub client; assert call order/payloads; concurrency respects worker limits; cover 422 fallback path.
 
-11) Reporting & Success View — PENDING
+11) Reporting & Success View — DONE
 - Outcome: Integrate results into existing report; success view offers navigation back to Mode Picker.
 - Scope: Extend report minimally; update help/footer with return action.
 - Tests: Golden report coverage and navigation tests.
@@ -115,8 +115,8 @@ Testing & Tooling Notes
 Acceptance Criteria (MVP)
 
 - Sync Mode picker appears after selecting spaces and is reachable from Components list and Success views.
-- Components list tree mirrors Stories UX: expand/collapse by group, selection toggles, search; supports sorting by updated/created/name (asc/desc), group filter, and date‑cutoff filtering.
+- Components browse supports selection toggles, search, sorting by updated/created/name (asc/desc), and date‑cutoff filtering. (Group filter not required.)
 - Preflight exists for components and mirrors Stories UX with name-based collision handling: Skip, Apply (overwrite), and Fork (copy-as-new with rename input).
 - Groups are created and mapped before component execution; `component_group_uuid` and field `component_group_whitelist` are correctly remapped to target UUIDs.
 - Internal component tags are created as needed and applied via `internal_tag_ids` on both create and update.
-- Executor uses concurrent workers analogous to Stories; blind overwrite executes using deterministic create/update decisions (name→ID map) with 422 fallback; progress and reporting are shown.
+- Executor uses concurrent workers analogous to Stories; blind overwrite executes using deterministic create/update decisions (name→ID map) with create→update fallback; progress and reporting are shown.
