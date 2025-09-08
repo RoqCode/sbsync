@@ -232,6 +232,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				it.Run = RunPending
 			}
 		}
+		// Initialize a report with proper start time so duration is correct
+		srcName := ""
+		tgtName := ""
+		if m.sourceSpace != nil {
+			srcName = m.sourceSpace.Name
+		}
+		if m.targetSpace != nil {
+			tgtName = m.targetSpace.Name
+		}
+		m.report = *NewReport(srcName, tgtName)
 		// Switch to components sync view with spinner + stats
 		m.state = stateCompSync
 		m.syncing = true
@@ -309,25 +319,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if running == 0 {
-			// Build report
-			srcName := ""
-			tgtName := ""
-			if m.sourceSpace != nil {
-				srcName = m.sourceSpace.Name
-			}
-			if m.targetSpace != nil {
-				tgtName = m.targetSpace.Name
-			}
-			rep := NewReport(srcName, tgtName)
+			// Finalize report with accumulated results; StartTime was set at init
 			for _, e := range m.compResults {
 				status := "success"
 				if e.Err != "" {
 					status = "failure"
 				}
-				rep.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err})
+				m.report.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err, RateLimit429: e.Retry429})
 			}
-			rep.Finalize()
-			m.report = *rep
+			m.report.Finalize()
 			m.state = stateReport
 			m.updateViewportContent()
 			return m, nil
