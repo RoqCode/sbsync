@@ -112,29 +112,33 @@ func (m Model) visibleCompModel() []compLine {
 	})
 	// Build lines
 	lines := make([]compLine, 0, len(items))
-    for _, c := range items {
-        // Show date label aligned with current sort key
-        var dateLabel string
-        var dt time.Time
-        switch m.comp.sortKey {
-        case compSortCreated:
-            dateLabel = "created at:"
-            dt = parseTime(c.CreatedAt)
-            if dt.IsZero() { dt = parseTime(c.UpdatedAt) }
-        default: // compSortUpdated or name
-            dateLabel = "updated at:"
-            dt = parseTime(c.UpdatedAt)
-            if dt.IsZero() { dt = parseTime(c.CreatedAt) }
-        }
-        datePart := ""
-        if !dt.IsZero() {
-            datePart = " " + subtleStyle.Render(dateLabel+" "+dt.Format("2006-01-02"))
-        }
-        item := fmt.Sprintf("%s %s%s", symbolComp, c.Name, datePart)
-        // Reserve cells: cursor(1) + state(1) + spacer(1) => content width = m.width-5
-        content := lipgloss.NewStyle().Width(m.width - 5).Render(item)
-        lines = append(lines, compLine{content: content, name: c.Name, selected: m.comp.selected[c.Name]})
-    }
+	for _, c := range items {
+		// Show date label aligned with current sort key
+		var dateLabel string
+		var dt time.Time
+		switch m.comp.sortKey {
+		case compSortCreated:
+			dateLabel = "created at:"
+			dt = parseTime(c.CreatedAt)
+			if dt.IsZero() {
+				dt = parseTime(c.UpdatedAt)
+			}
+		default: // compSortUpdated or name
+			dateLabel = "updated at:"
+			dt = parseTime(c.UpdatedAt)
+			if dt.IsZero() {
+				dt = parseTime(c.CreatedAt)
+			}
+		}
+		datePart := ""
+		if !dt.IsZero() {
+			datePart = " " + subtleStyle.Render(dateLabel+" "+dt.Format("2006-01-02"))
+		}
+		item := fmt.Sprintf("%s %s%s", symbolComp, c.Name, datePart)
+		// Reserve cells: cursor(1) + state(1) + spacer(1) => content width = m.width-5
+		content := lipgloss.NewStyle().Width(m.width - 5).Render(item)
+		lines = append(lines, compLine{content: content, name: c.Name, selected: m.comp.selected[c.Name]})
+	}
 	if len(lines) == 0 {
 		lines = append(lines, compLine{content: warnStyle.Render("Keine Components gefunden (Filter aktiv?).")})
 	}

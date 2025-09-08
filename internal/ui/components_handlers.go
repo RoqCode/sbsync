@@ -131,23 +131,23 @@ func (m Model) handleCompListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.ensureCompCursorVisible()
 		m.updateCompBrowseViewport()
 		return m, nil
-    case "f":
-        // Enter search input mode
-        m.comp.inputMode = "search"
-        m.comp.search.input.SetValue(m.comp.search.query)
-        m.comp.search.input.Focus()
-        m.updateCompBrowseViewport()
-        return m, nil
-    case "F":
-        // Clear search
-        m.comp.search.searching = false
-        m.comp.search.query = ""
-        m.comp.search.input.SetValue("")
-        m.comp.inputMode = ""
-        m.comp.listIndex = 0
-        m.ensureCompCursorVisible()
-        m.updateCompBrowseViewport()
-        return m, nil
+	case "f":
+		// Enter search input mode
+		m.comp.inputMode = "search"
+		m.comp.search.input.SetValue(m.comp.search.query)
+		m.comp.search.input.Focus()
+		m.updateCompBrowseViewport()
+		return m, nil
+	case "F":
+		// Clear search
+		m.comp.search.searching = false
+		m.comp.search.query = ""
+		m.comp.search.input.SetValue("")
+		m.comp.inputMode = ""
+		m.comp.listIndex = 0
+		m.ensureCompCursorVisible()
+		m.updateCompBrowseViewport()
+		return m, nil
 	case "t":
 		// cycle sort key
 		m.comp.sortKey = (m.comp.sortKey + 1) % 3
@@ -157,26 +157,26 @@ func (m Model) handleCompListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.comp.sortAsc = !m.comp.sortAsc
 		m.updateCompBrowseViewport()
 		return m, nil
-    case "d":
-        // Enter date input mode
-        m.comp.inputMode = "date"
-        if !m.comp.dateCutoff.IsZero() {
-            m.comp.dateInput.SetValue(m.comp.dateCutoff.Format("2006-01-02"))
-        } else {
-            m.comp.dateInput.SetValue("")
-        }
-        m.comp.dateInput.Focus()
-        m.updateCompBrowseViewport()
-        return m, nil
-    case "D":
-        // Clear date cutoff
-        m.comp.dateCutoff = timeZero()
-        m.comp.inputMode = ""
-        m.comp.dateInput.SetValue("")
-        m.comp.listIndex = 0
-        m.ensureCompCursorVisible()
-        m.updateCompBrowseViewport()
-        return m, nil
+	case "d":
+		// Enter date input mode
+		m.comp.inputMode = "date"
+		if !m.comp.dateCutoff.IsZero() {
+			m.comp.dateInput.SetValue(m.comp.dateCutoff.Format("2006-01-02"))
+		} else {
+			m.comp.dateInput.SetValue("")
+		}
+		m.comp.dateInput.Focus()
+		m.updateCompBrowseViewport()
+		return m, nil
+	case "D":
+		// Clear date cutoff
+		m.comp.dateCutoff = timeZero()
+		m.comp.inputMode = ""
+		m.comp.dateInput.SetValue("")
+		m.comp.listIndex = 0
+		m.ensureCompCursorVisible()
+		m.updateCompBrowseViewport()
+		return m, nil
 	}
 	return m, nil
 }
