@@ -149,6 +149,11 @@ type Model struct {
 
 	// components UI state
 	comp CompListState
+	// components preflight state
+	compPre CompPreflightState
+	// planned component actions (once preflight confirmed)
+	// kept minimal until executor is added
+	// compPlan []componentsync.PlanItem
 
 	// scan results
 	storiesSource []sb.Story
