@@ -82,7 +82,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update viewport dimensions
 		// Header height: default 3 (title + divider + 1-line state header)
 		headerHeight := 3
-		if m.state == stateSync {
+		if m.state == stateSync || m.state == stateCompSync {
 			// Empirically account for:
 			// - progress line with style margin
 			// - current item line
@@ -227,11 +227,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				it.Run = RunPending
 			}
 		}
+		// Switch to components sync view with spinner + stats
+		m.state = stateCompSync
+		m.syncing = true
 		// Seed workers
 		workers := m.maxWorkers
 		if workers < 1 { workers = 4 }
 		pending := 0
-		cmds := make([]tea.Cmd, 0, workers)
+		cmds := make([]tea.Cmd, 0, workers+2)
 		for i := range m.compPre.items {
 			if pending >= workers { break }
 			if m.compPre.items[i].Skip || m.compPre.items[i].Run != RunPending { continue }
@@ -240,7 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			pending++
 		}
 		m.updateViewportContent()
-		return m, tea.Batch(cmds...)
+		return m, tea.Batch(append(cmds, m.spinner.Tick, m.statsTick())...)
 
 	case compItemDoneMsg:
 		// Update per-item run state and schedule next pending
@@ -299,7 +302,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync {
+		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync || m.state == stateCompSync {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -307,7 +310,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case statsTickMsg:
-		if m.state != stateSync {
+		if m.state != stateSync && m.state != stateCompSync {
 			return m, nil
 		}
 		now := time.Now()
