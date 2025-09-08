@@ -1,20 +1,33 @@
 package ui
 
 import (
-	"fmt"
-	"strings"
+    "fmt"
+    "strings"
+
+    comps "storyblok-sync/internal/core/componentsync"
+    "storyblok-sync/internal/sb"
 )
 
 // startCompPreflight builds component preflight items from current selection
 func (m *Model) startCompPreflight() {
 	// Build target name -> ID map
-	tgtByName := make(map[string]int, len(m.componentsTarget))
+    tgtByName := make(map[string]int, len(m.componentsTarget))
 	for _, t := range m.componentsTarget {
 		if t.Name == "" {
 			continue
 		}
-		tgtByName[strings.ToLower(t.Name)] = t.ID
+		ln := strings.ToLower(t.Name)
+        tgtByName[ln] = t.ID
 	}
+	// Build name->component map for target (lower-cased)
+	tgtCompByName := make(map[string]sb.Component, len(m.componentsTarget))
+	for _, t := range m.componentsTarget {
+		if t.Name == "" { continue }
+		ln := strings.ToLower(t.Name)
+		tgtCompByName[ln] = t
+	}
+	// Build group remap maps
+	s2n, n2t := comps.BuildGroupNameMaps(m.componentGroupsSource, m.componentGroupsTarget)
 	items := make([]CompPreflightItem, 0, len(m.componentsSource))
 	for _, c := range m.componentsSource {
 		if !m.comp.selected[c.Name] {
@@ -25,6 +38,14 @@ func (m *Model) startCompPreflight() {
 		it := CompPreflightItem{Source: c, Selected: true, Collision: exists, TargetID: id}
 		if exists {
 			it.State = StateUpdate
+			// Auto-skip if equal after mapping (no changes)
+			if tgt, ok := tgtCompByName[lower]; ok {
+				if comps.EqualAfterMapping(c, tgt, s2n, n2t) {
+					it.State = StateSkip
+					it.Skip = true
+					it.Issue = "no changes"
+				}
+			}
 		} else {
 			it.State = StateCreate
 		}
