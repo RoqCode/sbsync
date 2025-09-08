@@ -156,6 +156,8 @@ type Model struct {
 	compPlan    []componentsyncPlanItem
 	compResults []compReportEntry
 	compMaps    compRemapMaps
+	// components rate limiting (per-space)
+	compLimiter *sync.SpaceLimiter
 
 	// scan results
 	storiesSource []sb.Story

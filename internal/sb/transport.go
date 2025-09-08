@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"storyblok-sync/internal/infra/logx"
 )
 
 // Clock abstracts time for deterministic tests.
@@ -294,6 +296,7 @@ func (t *RetryingLimiterTransport) RoundTrip(req *http.Request) (*http.Response,
 				t.sleepBackoff(attempt)
 				// adaptive: back off slightly on network errors
 				lim.adjustRPS(-0.1, 1, t.maxRPSForHost(req.URL.Host))
+				logx.Warnf("HTTP net-error retry-backoff err=%v method=%s path=%s attempt=%d", err, req.Method, req.URL.Path, attempt)
 				continue
 			}
 			return nil, err
@@ -313,6 +316,11 @@ func (t *RetryingLimiterTransport) RoundTrip(req *http.Request) (*http.Response,
 		if shouldRetryStatus(resp.StatusCode) && attempt < attempts-1 {
 			// Respect Retry-After when present
 			if ra := parseRetryAfter(resp.Header.Get("Retry-After"), t.clock().Now()); ra > 0 {
+				if resp.StatusCode == 429 {
+					logx.Warnf("HTTP 429 retry-after=%s method=%s path=%s attempt=%d", ra.String(), req.Method, req.URL.Path, attempt)
+				} else if resp.StatusCode >= 500 {
+					logx.Warnf("HTTP %d retry-after=%s method=%s path=%s attempt=%d", resp.StatusCode, ra.String(), req.Method, req.URL.Path, attempt)
+				}
 				if t.Opts.Metrics != nil {
 					t.Opts.Metrics.IncRetry()
 					t.Opts.Metrics.AddBackoff(ra)
@@ -334,6 +342,11 @@ func (t *RetryingLimiterTransport) RoundTrip(req *http.Request) (*http.Response,
 			// Otherwise exponential backoff with jitter
 			resp.Body.Close()
 			t.sleepBackoff(attempt)
+			if resp.StatusCode == 429 {
+				logx.Warnf("HTTP 429 retry-backoff method=%s path=%s attempt=%d", req.Method, req.URL.Path, attempt)
+			} else if resp.StatusCode >= 500 {
+				logx.Warnf("HTTP %d retry-backoff method=%s path=%s attempt=%d", resp.StatusCode, req.Method, req.URL.Path, attempt)
+			}
 			if t.Opts.Metrics != nil {
 				t.Opts.Metrics.IncRetry()
 			}

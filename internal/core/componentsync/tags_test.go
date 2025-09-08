@@ -59,3 +59,21 @@ func TestPrepareTagIDsForTarget_ErrorOnCreate(t *testing.T) {
 		t.Fatal("expected error on create")
 	}
 }
+
+func TestEnsureTagNameIDs_CreatesMissingAndMaps(t *testing.T) {
+	api := &fakeTagAPI{tags: map[string]int{"exists": 7}, next: 0}
+	names := []string{"exists", "newtag", "exists"} // duplicates should be ignored
+	m, err := EnsureTagNameIDs(context.Background(), api, 1, names)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m) != 2 {
+		t.Fatalf("expected 2 entries, got %+v", m)
+	}
+	if m["exists"] != 7 {
+		t.Fatalf("exists id=7, got %d", m["exists"])
+	}
+	if m["newtag"] == 0 {
+		t.Fatalf("newtag should be created with non-zero id")
+	}
+}

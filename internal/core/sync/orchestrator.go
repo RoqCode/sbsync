@@ -126,7 +126,11 @@ func (so *SyncOrchestrator) ShouldPublish() bool {
 
 // SyncFolderDetailed synchronizes a folder using StorySyncer
 func (so *SyncOrchestrator) SyncFolderDetailed(story sb.Story) (*SyncItemResult, error) {
-	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex)
+	plan := 0
+	if so.targetSpace != nil {
+		plan = so.targetSpace.PlanLevel
+	}
+	syncer := NewStorySyncerWithPlan(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex, plan)
 	// Publish folders: never; for completeness compute publish flag but it will be ignored for folders
 	publish := so.ShouldPublish() && story.Published
 	return syncer.SyncFolderDetailed(story, publish)
@@ -137,7 +141,11 @@ func (so *SyncOrchestrator) SyncStoryDetailed(story sb.Story) (*SyncItemResult, 
 	// Compute publish flag from source item and target dev mode
 	publish := so.ShouldPublish() && story.Published
 
-	syncer := NewStorySyncer(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex)
+	plan := 0
+	if so.targetSpace != nil {
+		plan = so.targetSpace.PlanLevel
+	}
+	syncer := NewStorySyncerWithPlan(so.api, so.sourceSpace.ID, so.targetSpace.ID, so.targetIndex, plan)
 	return syncer.SyncStoryDetailed(story, publish)
 }
 

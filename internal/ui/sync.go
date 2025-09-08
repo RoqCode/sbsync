@@ -625,7 +625,11 @@ func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, erro
 	for _, s := range m.storiesTarget {
 		tgtIndex[s.FullSlug] = s
 	}
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
+	plan := 0
+	if m.targetSpace != nil {
+		plan = m.targetSpace.PlanLevel
+	}
+	syncer := sync.NewStorySyncerWithPlan(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex, plan)
 	return syncer.SyncFolderDetailed(sourceFolder, m.shouldPublish())
 }
 
@@ -734,7 +738,11 @@ func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult,
 	for _, s := range m.storiesTarget {
 		tgtIndex[s.FullSlug] = s
 	}
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
+	plan := 0
+	if m.targetSpace != nil {
+		plan = m.targetSpace.PlanLevel
+	}
+	syncer := sync.NewStorySyncerWithPlan(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex, plan)
 	return syncer.SyncStoryDetailed(sourceStory, m.shouldPublish())
 }
 
