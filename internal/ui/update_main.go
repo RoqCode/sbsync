@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/sb"
 )
 
 // ---------- Update ----------
@@ -178,13 +179,123 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case compApplyDoneMsg:
-		if msg.errCount == 0 {
-			m.statusMsg = "Components angewendet: Erfolg"
-		} else {
-			m.statusMsg = fmt.Sprintf("Components angewendet mit %d Fehler(n)", msg.errCount)
+		// Build a simple report from entries and show Report view
+		srcName := ""
+		tgtName := ""
+		if m.sourceSpace != nil {
+			srcName = m.sourceSpace.Name
 		}
-		// After apply, return to Mode Picker for now
-		m.state = stateModePicker
+		if m.targetSpace != nil {
+			tgtName = m.targetSpace.Name
+		}
+		rep := NewReport(srcName, tgtName)
+		for _, e := range msg.entries {
+			status := "success"
+			if e.Err != "" {
+				status = "failure"
+			}
+			rep.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err})
+		}
+		rep.Finalize()
+		m.report = *rep
+		m.state = stateReport
+		m.updateViewportContent()
+		return m, nil
+
+	case compExecInitMsg:
+		if msg.err != nil {
+			m.statusMsg = "Component-Apply-Fehler (Init): " + msg.err.Error()
+			// Stay on preflight so user can adjust
+			m.updateViewportContent()
+			return m, nil
+		}
+		// Ensure API client is initialized for worker commands
+		if m.api == nil {
+			m.api = sb.New(m.cfg.Token)
+		}
+		// Install maps and plan into model
+		m.compMaps = msg.maps
+		m.compResults = nil
+		m.compPlan = make([]componentsyncPlanItem, 0, len(msg.plan))
+		byName := make(map[string]componentsyncPlanItem)
+		for _, p := range msg.plan { byName[p.Source.Name] = p }
+		for i := range m.compPre.items {
+			it := &m.compPre.items[i]
+			if it.Skip { continue }
+			if p, ok := byName[it.Source.Name]; ok {
+				m.compPlan = append(m.compPlan, p)
+				it.Run = RunPending
+			}
+		}
+		// Seed workers
+		workers := m.maxWorkers
+		if workers < 1 { workers = 4 }
+		pending := 0
+		cmds := make([]tea.Cmd, 0, workers)
+		for i := range m.compPre.items {
+			if pending >= workers { break }
+			if m.compPre.items[i].Skip || m.compPre.items[i].Run != RunPending { continue }
+			m.compPre.items[i].Run = RunRunning
+			cmds = append(cmds, m.runCompItemCmd(i))
+			pending++
+		}
+		m.updateViewportContent()
+		return m, tea.Batch(cmds...)
+
+	case compItemDoneMsg:
+		// Update per-item run state and schedule next pending
+		idx := msg.idx
+		if idx >= 0 && idx < len(m.compPre.items) {
+			if msg.entry.Err == "" {
+				m.compPre.items[idx].Run = RunDone
+			} else {
+				m.compPre.items[idx].Run = RunCancelled
+			}
+		}
+		m.compResults = append(m.compResults, msg.entry)
+		// schedule next pending if any
+		for i := range m.compPre.items {
+			if m.compPre.items[i].Skip {
+				continue
+			}
+			if m.compPre.items[i].Run == RunPending {
+				m.compPre.items[i].Run = RunRunning
+				m.updateViewportContent()
+				return m, m.runCompItemCmd(i)
+			}
+		}
+		// if none pending and no running left, finish report
+		running := 0
+		for i := range m.compPre.items {
+			if m.compPre.items[i].Run == RunRunning {
+				running++
+			}
+		}
+		if running == 0 {
+			// Build report
+			srcName := ""
+			tgtName := ""
+			if m.sourceSpace != nil {
+				srcName = m.sourceSpace.Name
+			}
+			if m.targetSpace != nil {
+				tgtName = m.targetSpace.Name
+			}
+			rep := NewReport(srcName, tgtName)
+			for _, e := range m.compResults {
+				status := "success"
+				if e.Err != "" {
+					status = "failure"
+				}
+				rep.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err})
+			}
+			rep.Finalize()
+			m.report = *rep
+			m.state = stateReport
+			m.updateViewportContent()
+			return m, nil
+		}
+		m.updateViewportContent()
 		return m, nil
 
 	case spinner.TickMsg:

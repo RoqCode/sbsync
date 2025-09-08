@@ -151,9 +151,10 @@ type Model struct {
 	comp CompListState
 	// components preflight state
 	compPre CompPreflightState
-	// planned component actions (once preflight confirmed)
-	// kept minimal until executor is added
-	// compPlan []componentsync.PlanItem
+	// components execution planning/results (used during apply)
+	compPlan    []componentsyncPlanItem
+	compResults []compReportEntry
+	compMaps    compRemapMaps
 
 	// scan results
 	storiesSource []sb.Story
