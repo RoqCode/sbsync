@@ -24,6 +24,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == statePreflight {
 			return m.handlePreflightKey(msg)
 		}
+		if m.state == stateCompPreflight {
+			return m.handleCompPreflightKey(msg)
+		}
 		if m.state == stateCopyAsNew {
 			return m.handleCopyAsNewKey(msg)
 		}
@@ -172,6 +175,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.comp.selected = make(map[string]bool)
 		}
 		m.updateViewportContent()
+		return m, nil
+
+	case compApplyDoneMsg:
+		if msg.errCount == 0 {
+			m.statusMsg = "Components angewendet: Erfolg"
+		} else {
+			m.statusMsg = fmt.Sprintf("Components angewendet mit %d Fehler(n)", msg.errCount)
+		}
+		// After apply, return to Mode Picker for now
+		m.state = stateModePicker
 		return m, nil
 
 	case spinner.TickMsg:

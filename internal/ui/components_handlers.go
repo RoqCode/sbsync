@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"time"
@@ -176,6 +177,16 @@ func (m Model) handleCompListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.comp.listIndex = 0
 		m.ensureCompCursorVisible()
 		m.updateCompBrowseViewport()
+		return m, nil
+	case "s":
+		// Build preflight from selected components and enter preflight view
+		m.startCompPreflight()
+		m.state = stateCompPreflight
+		// init rename input
+		m.compPre.input = textinput.New()
+		m.compPre.input.CharLimit = 200
+		m.compPre.input.Width = 40
+		m.updateViewportContent()
 		return m, nil
 	}
 	return m, nil

@@ -134,9 +134,38 @@ func (m Model) renderCompBrowseFooter() string {
 	statusLine := fmt.Sprintf("Total: %d | Markiert: %d", total, checked)
 	return renderFooter(
 		statusLine,
-		"j/k bewegen  |  pgup/pgdown blättern  |  space markieren  |  t sort  |  o Richtung  |  d Cutoff  |  m Modus  |  q beenden",
+		"j/k bewegen  |  pgup/pgdown blättern  |  space markieren  |  s preflight  |  t sort  |  o Richtung  |  d Cutoff  |  m Modus  |  q beenden",
 		"f suchen (ein/aus)",
 	)
+}
+
+// Components Preflight header/footer
+func (m Model) renderCompPreflightHeader() string {
+	total := len(m.compPre.items)
+	coll := countCompCollisions(m.compPre.items)
+	return listHeaderStyle.Render(
+		fmt.Sprintf("Preflight (Components) – %d Items  |  Kollisionen: %d", total, coll),
+	)
+}
+
+func (m Model) renderCompPreflightFooter() string {
+	// Count states
+	cCreate, cUpdate, cSkip := 0, 0, 0
+	for _, it := range m.compPre.items {
+		switch it.State {
+		case StateCreate:
+			cCreate++
+		case StateUpdate:
+			cUpdate++
+		case StateSkip:
+			cSkip++
+		}
+	}
+	status := fmt.Sprintf("create:%d update:%d skip:%d", cCreate, cUpdate, cSkip)
+    return renderFooter(status,
+        "j/k bewegen  |  space Skip/Apply  |  f Fork (umbenennen)  |  Enter Anwenden  |  b/Esc zurück",
+        "Enter beendet Umbenennen | Esc abbrechen",
+    )
 }
 
 func displayStory(st sb.Story) string {
