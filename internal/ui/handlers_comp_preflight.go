@@ -14,11 +14,11 @@ func (m Model) handleCompPreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	// Inline rename mode
-    if m.compPre.renaming {
-        var cmd tea.Cmd
-        m.compPre.input, cmd = m.compPre.input.Update(msg)
-        switch key {
-        case "enter":
+	if m.compPre.renaming {
+		var cmd tea.Cmd
+		m.compPre.input, cmd = m.compPre.input.Update(msg)
+		switch key {
+		case "enter":
 			val := strings.TrimSpace(m.compPre.input.Value())
 			if val != "" {
 				i := m.compPre.listIndex
@@ -29,18 +29,18 @@ func (m Model) handleCompPreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 					it.State = StateCreate
 				}
 			}
-            m.compPre.renaming = false
-            m.updateCompPreflightViewport()
-            return m, cmd
-        case "esc":
-            m.compPre.renaming = false
-            m.updateCompPreflightViewport()
-            return m, cmd
-        }
-        // live update while typing
-        m.updateCompPreflightViewport()
-        return m, cmd
-    }
+			m.compPre.renaming = false
+			m.updateCompPreflightViewport()
+			return m, cmd
+		case "esc":
+			m.compPre.renaming = false
+			m.updateCompPreflightViewport()
+			return m, cmd
+		}
+		// live update while typing
+		m.updateCompPreflightViewport()
+		return m, cmd
+	}
 	switch key {
 	case "j", "down":
 		if m.compPre.listIndex < len(m.compPre.items)-1 {
@@ -54,13 +54,13 @@ func (m Model) handleCompPreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		m.updateCompPreflightViewport()
 		return m, nil
-    case "b", "esc":
-        m.state = stateCompList
-        return m, nil
-    case "enter":
-        // Apply selected plan (serial, MVP)
-        return m, m.execCompApplyCmd()
-    case " ":
+	case "b", "esc":
+		m.state = stateCompList
+		return m, nil
+	case "enter":
+		// Start concurrent apply with live progress
+		return m, m.startCompApply()
+	case " ":
 		// cycle Skip -> Apply -> Fork -> Apply ...
 		i := m.compPre.listIndex
 		it := &m.compPre.items[i]
@@ -97,6 +97,6 @@ func (m Model) handleCompPreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.compPre.renaming = true
 		m.updateCompPreflightViewport()
 		return m, nil
-    }
-    return m, nil
+	}
+	return m, nil
 }

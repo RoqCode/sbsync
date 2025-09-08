@@ -162,10 +162,10 @@ func (m Model) renderCompPreflightFooter() string {
 		}
 	}
 	status := fmt.Sprintf("create:%d update:%d skip:%d", cCreate, cUpdate, cSkip)
-    return renderFooter(status,
-        "j/k bewegen  |  space Skip/Apply  |  f Fork (umbenennen)  |  Enter Anwenden  |  b/Esc zurück",
-        "Enter beendet Umbenennen | Esc abbrechen",
-    )
+	return renderFooter(status,
+		"j/k bewegen  |  space Skip/Apply  |  f Fork (umbenennen)  |  Enter Anwenden  |  b/Esc zurück",
+		"Enter beendet Umbenennen | Esc abbrechen",
+	)
 }
 
 func displayStory(st sb.Story) string {
