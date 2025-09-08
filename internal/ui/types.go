@@ -24,6 +24,7 @@ const (
 	stateScanning
 	stateCompList
 	stateCompPreflight
+	stateCompSync
 	stateBrowseList
 	statePreflight
 	stateCopyAsNew

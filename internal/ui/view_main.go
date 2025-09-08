@@ -24,6 +24,10 @@ func (m Model) View() string {
 		stateHeader := m.renderStateHeader()
 		content := m.renderViewportContent()
 		return lipgloss.JoinVertical(lipgloss.Left, header, stateHeader, content, footer)
+	case stateCompSync:
+		stateHeader := m.renderStateHeader()
+		content := m.renderViewportContent()
+		return lipgloss.JoinVertical(lipgloss.Left, header, stateHeader, content, footer)
 	case stateCompPreflight:
 		stateHeader := m.renderStateHeader()
 		content := m.renderViewportContent()
@@ -68,6 +72,8 @@ func (m Model) renderFooter() string {
 		return m.renderBrowseFooter()
 	case stateCompList:
 		return m.renderCompBrowseFooter()
+	case stateCompSync:
+		return m.renderCompSyncFooter()
 	case stateCompPreflight:
 		return m.renderCompPreflightFooter()
 	case statePreflight:
@@ -87,6 +93,8 @@ func (m Model) renderStateHeader() string {
 		return m.renderBrowseHeader()
 	case stateCompList:
 		return m.renderCompBrowseHeader()
+	case stateCompSync:
+		return m.renderCompSyncHeader()
 	case stateCompPreflight:
 		return m.renderCompPreflightHeader()
 	case statePreflight:
@@ -110,6 +118,8 @@ func (m *Model) updateViewportContent() {
 		m.updateBrowseViewport()
 	case stateCompList:
 		m.updateCompBrowseViewport()
+	case stateCompSync:
+		m.updateCompSyncViewport()
 	case stateCompPreflight:
 		m.updateCompPreflightViewport()
 	case statePreflight:
