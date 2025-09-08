@@ -8,8 +8,8 @@ import (
 func TestStartCompPreflight_ClassifiesCollisions(t *testing.T) {
 	m := InitialModel()
 	m.currentMode = modeComponents
-	m.componentsSource = []sb.Component{{ID: 1, Name: "A"}, {ID: 2, Name: "B"}}
-	m.componentsTarget = []sb.Component{{ID: 10, Name: "B"}}
+    m.componentsSource = []sb.Component{{ID: 1, Name: "A"}, {ID: 2, Name: "B", DisplayName: "changed"}}
+    m.componentsTarget = []sb.Component{{ID: 10, Name: "B"}}
 	m.comp.selected = map[string]bool{"A": true, "B": true}
 	m.startCompPreflight()
 	if len(m.compPre.items) != 2 {
@@ -39,8 +39,8 @@ func TestCompPreflight_SpaceCycles(t *testing.T) {
 	m := InitialModel()
 	m.currentMode = modeComponents
 	m.state = stateCompList
-	m.componentsSource = []sb.Component{{ID: 1, Name: "A"}, {ID: 2, Name: "B"}}
-	m.componentsTarget = []sb.Component{{ID: 10, Name: "B"}}
+    m.componentsSource = []sb.Component{{ID: 1, Name: "A"}, {ID: 2, Name: "B", DisplayName: "changed"}}
+    m.componentsTarget = []sb.Component{{ID: 10, Name: "B"}}
 	m.comp.selected = map[string]bool{"A": true, "B": true}
 
 	// Build preflight
@@ -97,4 +97,24 @@ func TestCompPreflight_ForkRenameSetsName(t *testing.T) {
 	if !it.CopyAsNew || it.ForkName != "B-copy" || it.State != StateCreate {
 		t.Fatalf("expected fork name persisted and StateCreate; got %+v", it)
 	}
+}
+
+func TestCompPreflight_AutoSkipWhenUnchanged(t *testing.T) {
+    m := InitialModel()
+    m.currentMode = modeComponents
+    // Same component in source and target (same name, display, group, schema)
+    schema := sb.Component{ID: 1, Name: "A", DisplayName: "AA", ComponentGroupUUID: "g1", Schema: []byte(`{"x":1}`)}
+    m.componentsSource = []sb.Component{schema}
+    m.componentsTarget = []sb.Component{{ID: 10, Name: "A", DisplayName: "AA", ComponentGroupUUID: "g1", Schema: []byte(`{"x":1}`)}}
+    m.componentGroupsSource = []sb.ComponentGroup{{UUID: "g1", Name: "G"}}
+    m.componentGroupsTarget = []sb.ComponentGroup{{UUID: "g1", Name: "G"}}
+    m.comp.selected = map[string]bool{"A": true}
+    m.startCompPreflight()
+    if len(m.compPre.items) != 1 {
+        t.Fatalf("want 1 item, got %d", len(m.compPre.items))
+    }
+    it := m.compPre.items[0]
+    if !(it.Skip && it.State == StateSkip) {
+        t.Fatalf("expected item to be auto-skipped due to no changes: %+v", it)
+    }
 }
