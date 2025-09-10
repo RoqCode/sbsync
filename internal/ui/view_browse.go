@@ -117,8 +117,58 @@ func (m Model) renderBrowseFooter() string {
 
 	return renderFooter(
 		statusLine,
-		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  q beenden",
+		"j/k bewegen  |  h/l falten  |  H alles zu  |  L alles auf  |  space Story markieren  |  r rescan  |  s preflight  |  m Modus  |  q beenden",
 		"p Prefix  |  P Prefix löschen  |  f suchen |  F Suche löschen  |  c Filter löschen  |  Enter schließen  |  Esc löschen/zurück",
+	)
+}
+
+// Components footer mirrors browse footer but with components-specific help
+func (m Model) renderCompBrowseFooter() string {
+	total := len(m.componentsSource)
+	checked := 0
+	for _, v := range m.comp.selected {
+		if v {
+			checked++
+		}
+	}
+	statusLine := fmt.Sprintf("Total: %d | Markiert: %d", total, checked)
+	return renderFooter(
+		statusLine,
+		"j/k bewegen  |  pgup/pgdown blättern  |  space markieren  |  s preflight  |  t sort  |  o Richtung  |  d Cutoff  |  m Modus  |  q beenden",
+		"f suchen (ein/aus)",
+	)
+}
+
+// Components Preflight header/footer
+func (m Model) renderCompPreflightHeader() string {
+	total := len(m.compPre.items)
+	coll := countCompCollisions(m.compPre.items)
+	forced := "Aus"
+	if m.compPre.forceUpdateAll {
+		forced = "An"
+	}
+	return listHeaderStyle.Render(
+		fmt.Sprintf("Preflight (Components) – %d Items  |  Kollisionen: %d  |  Force-Update: %s", total, coll, forced),
+	)
+}
+
+func (m Model) renderCompPreflightFooter() string {
+	// Count states
+	cCreate, cUpdate, cSkip := 0, 0, 0
+	for _, it := range m.compPre.items {
+		switch it.State {
+		case StateCreate:
+			cCreate++
+		case StateUpdate:
+			cUpdate++
+		case StateSkip:
+			cSkip++
+		}
+	}
+	status := fmt.Sprintf("create:%d update:%d skip:%d", cCreate, cUpdate, cSkip)
+	return renderFooter(status,
+		"j/k bewegen  |  space Skip/Apply  |  f Fork (umbenennen)  |  u Force-Update (Presets)  |  Enter Anwenden  |  b/Esc zurück",
+		"Enter beendet Umbenennen | Esc abbrechen",
 	)
 }
 

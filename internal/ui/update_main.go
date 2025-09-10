@@ -10,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"storyblok-sync/internal/config"
+	"storyblok-sync/internal/infra/logx"
+	"storyblok-sync/internal/sb"
 )
 
 // ---------- Update ----------
@@ -18,14 +20,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+		if m.state == stateModePicker {
+			return m.handleModePickerKey(msg)
+		}
 		if m.state == statePreflight {
 			return m.handlePreflightKey(msg)
+		}
+		if m.state == stateCompPreflight {
+			return m.handleCompPreflightKey(msg)
 		}
 		if m.state == stateCopyAsNew {
 			return m.handleCopyAsNewKey(msg)
 		}
 		if m.state == stateFolderFork {
 			return m.handleFolderForkKey(msg)
+		}
+		if m.state == stateCompList {
+			return m.handleCompListKey(msg)
 		}
 
 		// global shortcuts
@@ -72,7 +83,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update viewport dimensions
 		// Header height: default 3 (title + divider + 1-line state header)
 		headerHeight := 3
-		if m.state == stateSync {
+		if m.state == stateSync || m.state == stateCompSync {
 			// Empirically account for:
 			// - progress line with style margin
 			// - current item line
@@ -152,8 +163,180 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, nil
 
+	case compScanMsg:
+		m, _ = m.handleCompScanResult(msg)
+		if msg.err != nil {
+			// On error, leave scanning and go back to Mode Picker with status message
+			m.state = stateModePicker
+			return m, nil
+		}
+		// Navigate to components list after successful scan
+		m.state = stateCompList
+		m.comp.listIndex = 0
+		if m.comp.selected == nil {
+			m.comp.selected = make(map[string]bool)
+		}
+		m.updateViewportContent()
+		return m, nil
+
+	case compApplyDoneMsg:
+		// Build a simple report from entries and show Report view
+		srcName := ""
+		tgtName := ""
+		if m.sourceSpace != nil {
+			srcName = m.sourceSpace.Name
+		}
+		if m.targetSpace != nil {
+			tgtName = m.targetSpace.Name
+		}
+		rep := NewReport(srcName, tgtName)
+		for _, e := range msg.entries {
+			status := "success"
+			if e.Err != "" {
+				status = "failure"
+			}
+			rep.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err, RateLimit429: e.Retry429})
+		}
+		rep.Finalize()
+		m.report = *rep
+		m.state = stateReport
+		m.updateViewportContent()
+		return m, nil
+
+	case compExecInitMsg:
+		if msg.err != nil {
+			m.statusMsg = "Component-Apply-Fehler (Init): " + msg.err.Error()
+			// Stay on preflight so user can adjust
+			m.updateViewportContent()
+			return m, nil
+		}
+		// Ensure API client is initialized for worker commands
+		if m.api == nil {
+			m.api = sb.New(m.cfg.Token)
+		}
+		// Install maps and plan into model
+		m.compMaps = msg.maps
+		m.compResults = nil
+		m.compPlan = make([]componentsyncPlanItem, 0, len(msg.plan))
+		byName := make(map[string]componentsyncPlanItem)
+		for _, p := range msg.plan {
+			byName[p.Source.Name] = p
+		}
+		for i := range m.compPre.items {
+			it := &m.compPre.items[i]
+			if it.Skip {
+				continue
+			}
+			if p, ok := byName[it.Source.Name]; ok {
+				m.compPlan = append(m.compPlan, p)
+				it.Run = RunPending
+			}
+		}
+		// Initialize a report with proper start time so duration is correct
+		srcName := ""
+		tgtName := ""
+		if m.sourceSpace != nil {
+			srcName = m.sourceSpace.Name
+		}
+		if m.targetSpace != nil {
+			tgtName = m.targetSpace.Name
+		}
+		m.report = *NewReport(srcName, tgtName)
+		// Switch to components sync view with spinner + stats
+		m.state = stateCompSync
+		m.syncing = true
+		// Seed workers conservatively for components (ramp up dynamically)
+		workers := m.maxWorkers
+		if workers < 1 {
+			workers = 2
+		}
+		// Ensure model's maxWorkers is initialized so follow-up scheduling doesn't clamp to 1
+		m.maxWorkers = workers
+		pending := 0
+		cmds := make([]tea.Cmd, 0, workers+2)
+		for i := range m.compPre.items {
+			if pending >= workers {
+				break
+			}
+			if m.compPre.items[i].Skip || m.compPre.items[i].Run != RunPending {
+				continue
+			}
+			m.compPre.items[i].Run = RunRunning
+			cmds = append(cmds, m.runCompItemCmd(i))
+			pending++
+		}
+		m.updateViewportContent()
+		return m, tea.Batch(append(cmds, m.spinner.Tick, m.statsTick())...)
+
+	case compItemDoneMsg:
+		// Update per-item run state and schedule next pending
+		idx := msg.idx
+		if idx >= 0 && idx < len(m.compPre.items) {
+			if msg.entry.Err == "" {
+				m.compPre.items[idx].Run = RunDone
+			} else {
+				m.compPre.items[idx].Run = RunCancelled
+			}
+		}
+		m.compResults = append(m.compResults, msg.entry)
+		// Log rate-limit warnings for this item if any
+		if msg.entry.Retry429 > 0 {
+			logx.Warnf("COMP_RATE_LIMIT item=%s op=%s retry429=%d retries=%d", msg.entry.Name, msg.entry.Operation, msg.entry.Retry429, msg.entry.RetryTotal)
+			// Apply gentle backpressure: temporarily reduce desired concurrency
+			if m.maxWorkers > 1 {
+				m.maxWorkers--
+			}
+		}
+		// schedule next pending if any, respecting write budget like stories
+		runningUnits := 0
+		for j := range m.compPre.items {
+			if m.compPre.items[j].Run == RunRunning {
+				runningUnits += 1
+			}
+		}
+		for i := range m.compPre.items {
+			if m.compPre.items[i].Skip {
+				continue
+			}
+			if m.compPre.items[i].Run == RunPending {
+				allowed := m.maxWorkers
+				if allowed <= 0 {
+					allowed = 1
+				}
+				if runningUnits+1 > allowed {
+					break
+				}
+				m.compPre.items[i].Run = RunRunning
+				m.updateViewportContent()
+				return m, m.runCompItemCmd(i)
+			}
+		}
+		// if none pending and no running left, finish report
+		running := 0
+		for i := range m.compPre.items {
+			if m.compPre.items[i].Run == RunRunning {
+				running++
+			}
+		}
+		if running == 0 {
+			// Finalize report with accumulated results; StartTime was set at init
+			for _, e := range m.compResults {
+				status := "success"
+				if e.Err != "" {
+					status = "failure"
+				}
+				m.report.Add(ReportEntry{Slug: e.Name, Status: status, Operation: e.Operation, Duration: e.DurationMs, Error: e.Err, RateLimit429: e.Retry429})
+			}
+			m.report.Finalize()
+			m.state = stateReport
+			m.updateViewportContent()
+			return m, nil
+		}
+		m.updateViewportContent()
+		return m, nil
+
 	case spinner.TickMsg:
-		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync {
+		if m.state == stateValidating || m.state == stateScanning || m.state == stateSync || m.state == stateCompSync {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -161,7 +344,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case statsTickMsg:
-		if m.state != stateSync {
+		if m.state != stateSync && m.state != stateCompSync {
 			return m, nil
 		}
 		now := time.Now()
@@ -211,16 +394,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.prevSuccS = m.spsSuccess
 				m.prevWarnPct = m.warningRate
 				m.prevErrPct = m.errorRate
-				// window-based RPS using first and last totals
+				// window-based Req/s; instantaneous Read/Write per last tick for responsiveness
 				if len(m.reqTimes) >= 2 {
 					elapsed := now.Sub(m.reqTimes[0]).Seconds()
 					if elapsed > 0 {
 						totalDelta := float64(m.reqTotals[len(m.reqTotals)-1] - m.reqTotals[0])
 						m.rpsCurrent = totalDelta / elapsed
-						readDelta := float64(m.readTotals[len(m.readTotals)-1] - m.readTotals[0])
-						writeDelta := float64(m.writeTotals[len(m.writeTotals)-1] - m.writeTotals[0])
-						m.rpsReadCurrent = readDelta / elapsed
-						m.rpsWriteCurrent = writeDelta / elapsed
+						// Instantaneous read/write RPS since last snapshot
+						dtInst := now.Sub(m.lastSnapTime).Seconds()
+						if dtInst <= 0 {
+							dtInst = 0.5
+						}
+						readDeltaInst := float64(snap.ReadRequests - m.lastSnap.ReadRequests)
+						writeDeltaInst := float64(snap.WriteRequests - m.lastSnap.WriteRequests)
+						m.rpsReadCurrent = readDeltaInst / dtInst
+						m.rpsWriteCurrent = writeDeltaInst / dtInst
 						// HTTP warning/error rates as percentages over the same window
 						if totalDelta > 0 {
 							warnDelta := float64(m.status429Totals[len(m.status429Totals)-1] - m.status429Totals[0])

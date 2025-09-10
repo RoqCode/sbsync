@@ -82,9 +82,10 @@ func (m Model) handleSpaceSelectKey(key string) (Model, tea.Cmd) {
 			m.selectedIndex = 0
 		} else {
 			m.targetSpace = &chosen
-			m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Scanne jetzt Stories…", chosen.Name, chosen.ID)
-			m.state = stateScanning
-			return m, tea.Batch(m.spinner.Tick, m.scanStoriesCmd())
+			m.statusMsg = fmt.Sprintf("Target gesetzt: %s (%d). Wähle Sync-Modus…", chosen.Name, chosen.ID)
+			m.state = stateModePicker
+			m.modePickerIndex = 0
+			return m, nil
 		}
 	}
 	return m, nil

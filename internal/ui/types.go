@@ -20,7 +20,11 @@ const (
 	stateTokenPrompt
 	stateValidating
 	stateSpaceSelect
+	stateModePicker
 	stateScanning
+	stateCompList
+	stateCompPreflight
+	stateCompSync
 	stateBrowseList
 	statePreflight
 	stateCopyAsNew
@@ -28,6 +32,14 @@ const (
 	stateSync
 	stateReport
 	stateQuit
+)
+
+// syncMode selects which domain to sync in this run
+type syncMode int
+
+const (
+	modeStories syncMode = iota
+	modeComponents
 )
 
 type SelectionState struct {
@@ -127,6 +139,25 @@ type Model struct {
 	selectingSource bool
 	sourceSpace     *sb.Space
 	targetSpace     *sb.Space
+	// mode picker
+	modePickerIndex int
+	currentMode     syncMode
+	// components data (populated by components scan)
+	componentsSource      []sb.Component
+	componentsTarget      []sb.Component
+	componentGroupsSource []sb.ComponentGroup
+	componentGroupsTarget []sb.ComponentGroup
+
+	// components UI state
+	comp CompListState
+	// components preflight state
+	compPre CompPreflightState
+	// components execution planning/results (used during apply)
+	compPlan    []componentsyncPlanItem
+	compResults []compReportEntry
+	compMaps    compRemapMaps
+	// components rate limiting (per-space)
+	compLimiter *sync.SpaceLimiter
 
 	// scan results
 	storiesSource []sb.Story

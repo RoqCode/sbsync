@@ -42,9 +42,13 @@ func (m Model) handleReportKey(key string) (Model, tea.Cmd) {
 		return m, nil
 	case "enter", "b":
 		// Go back to scan screen to allow starting a new sync
-		m.state = stateScanning
-		m.statusMsg = "Returning to scan screen for new sync…"
-		return m, m.scanStoriesCmd()
+		m.state = stateModePicker
+		m.statusMsg = "Zurück zur Modus-Auswahl…"
+		return m, nil
+	case "m":
+		m.state = stateModePicker
+		m.statusMsg = "Zurück zur Modus-Auswahl…"
+		return m, nil
 	case "r":
 		// Resume any pending work first; else retry failures if any
 		next := -1

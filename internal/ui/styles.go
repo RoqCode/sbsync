@@ -58,6 +58,7 @@ var (
 	symbolStory  = fgSymbol("#8942E1", "S")
 	symbolFolder = fgSymbol("#3AC4BA", "F")
 	symbolRoot   = fgSymbol("214", "R")
+	symbolComp   = fgSymbol("#8BBE1B", "C")
 )
 
 var stateStyles = map[string]lipgloss.Style{

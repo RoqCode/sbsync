@@ -39,6 +39,14 @@ func NewStorySyncer(api SyncAPI, sourceSpaceID, targetSpaceID int, existing map[
 	}
 }
 
+// NewStorySyncerWithPlan configures limiter defaults based on target plan level.
+func NewStorySyncerWithPlan(api SyncAPI, sourceSpaceID, targetSpaceID int, existing map[string]sb.Story, planLevel int) *StorySyncer {
+	ss := NewStorySyncer(api, sourceSpaceID, targetSpaceID, existing)
+	r, w, b := DefaultLimitsForPlan(planLevel)
+	ss.limiter = NewSpaceLimiter(r, w, b)
+	return ss
+}
+
 // Content manager is internal; on-demand MA reads ensure correctness.
 
 // SyncStory synchronizes a single story

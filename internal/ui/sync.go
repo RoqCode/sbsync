@@ -385,7 +385,7 @@ func (m *Model) shouldPublish() bool {
 // removed legacy syncFolder implementation
 
 // syncFolderDetailed handles folder synchronization and returns detailed results
-// removed legacy syncFolderDetailed
+// Note: legacy syncFolderDetailed removed; use orchestrator and sync module instead.
 
 // executeSync has been moved to sync/api_adapters.go as ExecuteSync
 
@@ -397,7 +397,7 @@ func (m *Model) shouldPublish() bool {
 
 // syncStoryContentDetailed handles story synchronization and returns detailed results
 // Note: Folder structure is now pre-planned in optimizePreflight(), so no need to ensure folder path here
-// removed legacy syncStoryContentDetailed
+// Note: legacy syncStoryContentDetailed removed; use orchestrator and sync module instead.
 
 // processTranslatedSlugs handles translated slug processing like the Storyblok CLI
 func (m *Model) processTranslatedSlugs(sourceStory sb.Story, existingStories []sb.Story) sb.Story {
