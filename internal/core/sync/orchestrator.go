@@ -141,13 +141,4 @@ func (so *SyncOrchestrator) SyncStoryDetailed(story sb.Story) (*SyncItemResult, 
 	return syncer.SyncStoryDetailed(story, publish)
 }
 
-// --- Local adapter to satisfy FolderPathBuilder's Report interface ---
-type folderReportAdapter struct{ r ReportInterface }
-
-func newFolderReportAdapter(r ReportInterface) Report { return folderReportAdapter{r: r} }
-
-func (ra folderReportAdapter) AddSuccess(slug, operation string, duration int64, story *sb.Story) {
-	if ra.r != nil {
-		ra.r.AddSuccess(slug, operation, duration, story)
-	}
-}
+// removed unused folderReportAdapter

@@ -21,12 +21,12 @@ func TestRetryCounters_WithRetryCounters(t *testing.T) {
 		t.Error("Retrieved retry counters don't match original")
 	}
 
-	// Test nil context handling
-	nilCtx := WithRetryCounters(nil, rc)
-	if nilCtx == nil {
-		t.Error("WithRetryCounters with nil context should return background context")
+	// Test non-nil context handling (avoid passing nil; use TODO)
+	todoCtx := WithRetryCounters(context.TODO(), rc)
+	if todoCtx == nil {
+		t.Error("WithRetryCounters with TODO context should return non-nil context")
 	}
-	retrieved = getRetryCounters(nilCtx)
+	retrieved = getRetryCounters(todoCtx)
 	if retrieved != rc {
 		t.Error("Retrieved retry counters from nil context don't match original")
 	}
@@ -40,8 +40,8 @@ func TestRetryCounters_GetRetryCounters(t *testing.T) {
 		t.Error("Expected nil retry counters for context without them")
 	}
 
-	// Test nil context
-	retrieved = getRetryCounters(nil)
+	// Test empty context (avoid nil; use TODO)
+	retrieved = getRetryCounters(context.TODO())
 	if retrieved != nil {
 		t.Error("Expected nil retry counters for nil context")
 	}

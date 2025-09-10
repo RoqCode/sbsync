@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"storyblok-sync/internal/sb"
@@ -196,10 +195,7 @@ func (m *Model) initDefaultPublishModes() {
 	}
 }
 
-// sortStrings is a small helper used elsewhere; keep here to avoid import churn
-func sortStrings(s []string) {
-	sort.Strings(s)
-}
+// removed unused sortStrings helper
 
 // expectedWriteUnits estimates write cost for scheduling budget.
 // Stories normally cost 1 write; Draft over published (overwrite+unpublish) costs 2.

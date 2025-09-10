@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -201,42 +200,7 @@ func TestEnsureFolderPathCreatesFolders(t *testing.T) {
 	// In raw path, folders are never published; no publish flags expected
 }
 
-type publishLimitCreateMock struct {
-	calls []bool
-}
-
-func (m *publishLimitCreateMock) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	m.calls = append(m.calls, publish)
-	if len(m.calls) == 1 {
-		return sb.Story{}, errors.New("This space is in the development mode. Publishing is limited to 3 publishes per day. Please upgrade the space.")
-	}
-	st.ID = 1
-	return st, nil
-}
-
-func TestCreateStoryWithPublishRetryDevMode(t *testing.T) {
-	// This test has been moved to the extracted sync module
-	// The retry logic is now in sync.APIAdapter.CreateStoryWithPublishRetry
-	t.Skip("Publish retry logic has been moved to extracted sync module")
-}
-
-type publishLimitUpdateMock struct {
-	calls []bool
-}
-
-func (m *publishLimitUpdateMock) UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	m.calls = append(m.calls, publish)
-	if len(m.calls) == 1 {
-		return sb.Story{}, errors.New("This space is in the development mode. Publishing is limited to 3 publishes per day. Please upgrade the space.")
-	}
-	return st, nil
-}
-
-func TestUpdateStoryWithPublishRetryDevMode(t *testing.T) {
-	// This test has been moved to the extracted sync module
-	// The retry logic is now in sync.APIAdapter.UpdateStoryWithPublishRetry
-	t.Skip("Publish retry logic has been moved to extracted sync module")
-}
+// Removed unused publish-limit mocks and associated skipped tests (moved to core module)
 
 func TestShouldPublishChecksPlanLevel(t *testing.T) {
 	m := InitialModel()

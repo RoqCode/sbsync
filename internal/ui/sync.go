@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -46,104 +45,13 @@ func (cm *contentManager) ensureContent(ctx context.Context, story sb.Story) (sb
 // Legacy wrappers for utility functions - now uses the extracted module
 func prepareStoryForCreation(story sb.Story) sb.Story { return sync.PrepareStoryForCreation(story) }
 
-func prepareStoryForUpdate(source, target sb.Story) sb.Story {
-	return sync.PrepareStoryForUpdate(source, target)
-}
-
-// resolveParentFolder resolves and sets the correct parent folder ID for a story
-func (m *Model) resolveParentFolder(ctx context.Context, story sb.Story) (sb.Story, string, error) {
-	var warning string
-
-	if story.FolderID == nil {
-		return story, warning, nil
-	}
-
-	parentSlugStr := sync.ParentSlug(story.FullSlug)
-
-	if parentSlugStr == "" {
-		story.FolderID = nil
-		return story, warning, nil
-	}
-
-	targetParents, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, parentSlugStr)
-	if err != nil {
-		return story, warning, err
-	}
-
-	if len(targetParents) > 0 {
-		story.FolderID = &targetParents[0].ID
-	} else {
-		story.FolderID = nil
-		warning = "Parent folder not found in target space"
-	}
-
-	return story, warning, nil
-}
-
-// syncUUID updates the UUID of a target story if it differs from source
-func (m *Model) syncUUID(ctx context.Context, targetStory sb.Story, sourceUUID string) error {
-	if targetStory.UUID == sourceUUID || sourceUUID == "" {
-		return nil
-	}
-
-	log.Printf("DEBUG: Updating UUID for %s from %s to %s",
-		targetStory.FullSlug, targetStory.UUID, sourceUUID)
-
-	err := m.api.UpdateStoryUUID(ctx, m.targetSpace.ID, targetStory.ID, sourceUUID)
-	if err != nil {
-		log.Printf("Warning: failed to update UUID for story %s: %v", targetStory.FullSlug, err)
-		return err
-	}
-
-	return nil
-}
-
-func ensureDefaultContent(story sb.Story) sb.Story {
-	return sync.EnsureDefaultContent(story)
-}
+// removed legacy wrappers (moved to core sync)
 
 // Legacy type aliases for backward compatibility
 type syncItemResult = sync.SyncItemResult
 type syncResultMsg = sync.SyncResultMsg
-type syncCancelledMsg = sync.SyncCancelledMsg
 
-// Legacy wrapper for logging functions - now uses the extracted module
-func logError(operation, slug string, err error, story *sb.Story) {
-	sync.LogError(operation, slug, err, story)
-}
-
-func logWarning(operation, slug, warning string, story *sb.Story) {
-	sync.LogWarning(operation, slug, warning, story)
-}
-
-func logSuccess(operation, slug string, duration int64, targetStory *sb.Story) {
-	sync.LogSuccess(operation, slug, duration, targetStory)
-}
-
-// logExtendedErrorContext is now handled within the sync.LogError function
-
-func getFolderPaths(slug string) []string {
-	return sync.GetFolderPaths(slug)
-}
-
-// buildTargetFolderMap creates a map of existing folders in target space for quick lookup
-func (m *Model) buildTargetFolderMap() map[string]sb.Story {
-	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
-	return planner.BuildTargetFolderMap()
-}
-
-// findMissingFolderPaths analyzes selected items and identifies missing parent folders
-func (m *Model) findMissingFolderPaths(items []PreflightItem) map[string]sb.Story {
-	planner := sync.NewPreflightPlanner(m.storiesSource, m.storiesTarget)
-	missingFolders := planner.FindMissingFolderPaths(items)
-
-	// Convert slice to map for backward compatibility
-	folderMap := make(map[string]sb.Story)
-	for _, folder := range missingFolders {
-		folderMap[folder.FullSlug] = folder
-	}
-	return folderMap
-}
+// removed unused type alias syncCancelledMsg
 
 // optimizePreflight deduplicates entries, pre-plans missing folders, and sorts by sync order (folders first).
 func (m *Model) optimizePreflight() {
@@ -301,32 +209,7 @@ func (pia *preflightItemAdapter) IsFolder() bool {
 }
 
 // Legacy wrapper functions for backward compatibility
-func isRateLimited(err error) bool {
-	return sync.IsRateLimited(err)
-}
-
-func isDevModePublishLimit(err error) bool {
-	return sync.IsDevModePublishLimit(err)
-}
-
-type updateAPI interface {
-	UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error)
-}
-
-type createAPI interface {
-	CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error)
-}
-
-// Legacy wrapper functions that now use the extracted API adapters
-func updateStoryWithPublishRetry(ctx context.Context, api updateAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	// Legacy wrapper removed; not used in raw path anymore
-	return st, nil
-}
-
-func createStoryWithPublishRetry(ctx context.Context, api createAPI, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
-	// Legacy wrapper removed; not used in raw path anymore
-	return st, nil
-}
+// removed legacy wrappers and interfaces
 
 type folderAPI interface {
 	GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error)
@@ -491,10 +374,6 @@ func ensureFolderPathImpl(api folderAPI, report *Report, sourceStories []sb.Stor
 	return created, nil
 }
 
-func (m *Model) ensureFolderPath(slug string) ([]sb.Story, error) {
-	return ensureFolderPathImpl(m.api, &m.report, m.storiesSource, m.sourceSpace.ID, m.targetSpace.ID, slug, m.shouldPublish())
-}
-
 func (m *Model) shouldPublish() bool {
 	if m.targetSpace != nil && m.targetSpace.PlanLevel == 999 {
 		return false
@@ -503,240 +382,22 @@ func (m *Model) shouldPublish() bool {
 }
 
 // syncFolder handles folder synchronization with proper parent resolution
-func (m *Model) syncFolder(sourceFolder sb.Story) error {
-	log.Printf("Syncing folder: %s", sourceFolder.FullSlug)
-
-	// Use the sourceFolder data directly, which should already have content
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	fullFolder := sourceFolder
-
-	// DEBUG: Log content preservation
-	log.Printf("DEBUG: syncFolder %s has content: %t, is_folder: %t", sourceFolder.FullSlug, len(sourceFolder.Content) > 0, sourceFolder.IsFolder)
-	if len(sourceFolder.Content) > 0 {
-		contentKeys := sync.GetContentKeys(sourceFolder.Content)
-		log.Printf("DEBUG: syncFolder source content keys: %v", contentKeys)
-
-		// Special logging for content_types field
-		if sourceFolder.IsFolder {
-			if v, ok := sync.GetContentField(sourceFolder.Content, "content_types"); ok {
-				log.Printf("DEBUG: syncFolder %s has content_types: %v", sourceFolder.FullSlug, v)
-			} else {
-				log.Printf("DEBUG: syncFolder %s missing content_types field", sourceFolder.FullSlug)
-			}
-		}
-	}
-	log.Printf("DEBUG: syncFolder %s ContentType field: '%s'", sourceFolder.FullSlug, sourceFolder.ContentType)
-
-	// If the source folder doesn't have content, try to fetch it from API
-	if len(fullFolder.Content) == 0 {
-		apiFolder, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceFolder.ID)
-		if err != nil {
-			return err
-		}
-		// Preserve any content that came from the API
-		if len(apiFolder.Content) > 0 {
-			fullFolder.Content = apiFolder.Content
-		} else {
-			// Create minimal content structure for folders
-			fullFolder.Content = json.RawMessage([]byte(`{}`))
-		}
-	}
-
-	// Don't modify ContentType or Content - preserve exactly as from source
-
-	// Check if folder already exists in target
-	existing, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, sourceFolder.FullSlug)
-	if err != nil {
-		return err
-	}
-
-	// Resolve parent folder ID
-	if fullFolder.FolderID != nil {
-		parentSlug := parentSlug(fullFolder.FullSlug)
-		if parentSlug != "" {
-			if targetParents, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, parentSlug); err == nil && len(targetParents) > 0 {
-				fullFolder.FolderID = &targetParents[0].ID
-			} else {
-				fullFolder.FolderID = nil // Set to root if parent not found
-			}
-		}
-	}
-
-	// Handle translated slugs
-	fullFolder = m.processTranslatedSlugs(fullFolder, existing)
-
-	if len(existing) > 0 {
-		// Update existing folder
-		existingFolder := existing[0]
-		fullFolder.ID = existingFolder.ID
-		// Never publish folders; update respects publish flag internally
-		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, false)
-		if err != nil {
-			return err
-		}
-
-		// Update UUID if different
-		if updated.UUID != fullFolder.UUID && fullFolder.UUID != "" {
-			if err := m.api.UpdateStoryUUID(ctx, m.targetSpace.ID, updated.ID, fullFolder.UUID); err != nil {
-				log.Printf("Warning: failed to update UUID for folder %s: %v", fullFolder.FullSlug, err)
-			}
-		}
-
-		log.Printf("Updated folder: %s", fullFolder.FullSlug)
-	} else {
-		// Create new folder
-		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
-		fullFolder.ID = 0
-		fullFolder.CreatedAt = ""
-		fullFolder.UpdatedAt = "" // This was causing 422!
-
-		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
-
-		// Ensure folders have proper content structure
-		if fullFolder.IsFolder && len(fullFolder.Content) == 0 {
-			fullFolder.Content = json.RawMessage([]byte(`{}`))
-		}
-
-		// Never publish folders on create
-		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullFolder, false)
-		if err != nil {
-			return err
-		}
-
-		// Update UUID if different
-		if created.UUID != fullFolder.UUID && fullFolder.UUID != "" {
-			if err := m.api.UpdateStoryUUID(ctx, m.targetSpace.ID, created.ID, fullFolder.UUID); err != nil {
-				log.Printf("Warning: failed to update UUID for new folder %s: %v", fullFolder.FullSlug, err)
-			}
-		}
-
-		log.Printf("Created folder: %s", fullFolder.FullSlug)
-	}
-
-	return nil
-}
+// removed legacy syncFolder implementation
 
 // syncFolderDetailed handles folder synchronization and returns detailed results
-func (m *Model) syncFolderDetailed(sourceFolder sb.Story) (*syncItemResult, error) {
-	// Build a minimal target index
-	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
-	for _, s := range m.storiesTarget {
-		tgtIndex[s.FullSlug] = s
-	}
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
-	return syncer.SyncFolderDetailed(sourceFolder, m.shouldPublish())
-}
+// removed legacy syncFolderDetailed
 
 // executeSync has been moved to sync/api_adapters.go as ExecuteSync
 
 // itemType returns a string describing the item type for logging
-func itemType(story sb.Story) string {
-	return sync.ItemType(story)
-}
+// removed legacy itemType
 
 // syncStoryContent handles story synchronization with proper UUID management
-func (m *Model) syncStoryContent(sourceStory sb.Story) error {
-	log.Printf("Syncing story: %s", sourceStory.FullSlug)
-
-	// Get full story content from source
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	fullStory, err := m.api.GetStoryWithContent(ctx, m.sourceSpace.ID, sourceStory.ID)
-	if err != nil {
-		return err
-	}
-
-	// Check if story already exists in target
-	existing, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, sourceStory.FullSlug)
-	if err != nil {
-		return err
-	}
-
-	// Resolve parent folder ID if story is in a folder
-	if fullStory.FolderID != nil {
-		parentSlug := parentSlug(fullStory.FullSlug)
-		if parentSlug != "" {
-			if targetParents, err := m.api.GetStoriesBySlug(ctx, m.targetSpace.ID, parentSlug); err == nil && len(targetParents) > 0 {
-				fullStory.FolderID = &targetParents[0].ID
-			} else {
-				log.Printf("Warning: parent folder %s not found for story %s", parentSlug, fullStory.FullSlug)
-				fullStory.FolderID = nil // Set to root if parent not found
-			}
-		}
-	}
-
-	// Handle translated slugs
-	fullStory = m.processTranslatedSlugs(fullStory, existing)
-
-	if len(existing) > 0 {
-		// Update existing story
-		existingStory := existing[0]
-		fullStory.ID = existingStory.ID
-		// Publish only if source was published and target space allows it
-		publish := m.shouldPublish() && sourceStory.Published
-		updated, err := updateStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, publish)
-		if err != nil {
-			return err
-		}
-
-		// Update UUID if different
-		if updated.UUID != fullStory.UUID && fullStory.UUID != "" {
-			if err := m.api.UpdateStoryUUID(ctx, m.targetSpace.ID, updated.ID, fullStory.UUID); err != nil {
-				log.Printf("Warning: failed to update UUID for story %s: %v", fullStory.FullSlug, err)
-			}
-		}
-
-		log.Printf("Updated story: %s", fullStory.FullSlug)
-	} else {
-		// Create new story
-		// Clear ALL fields that shouldn't be set on creation (based on Storyblok CLI)
-		fullStory.ID = 0
-		fullStory.CreatedAt = ""
-		fullStory.UpdatedAt = "" // This was causing 422!
-
-		// Note: Don't reset Position and FolderID here as they are set by parent resolution above
-
-		// Ensure stories have content (required for Storyblok API)
-		if !fullStory.IsFolder && len(fullStory.Content) == 0 {
-			contentBytes, _ := json.Marshal(map[string]interface{}{
-				"component": "page",
-			})
-			fullStory.Content = json.RawMessage(contentBytes)
-		}
-
-		// Publish only if source was published and target space allows it
-		publish := m.shouldPublish() && sourceStory.Published
-		created, err := createStoryWithPublishRetry(ctx, m.api, m.targetSpace.ID, fullStory, publish)
-		if err != nil {
-			return err
-		}
-
-		// Update UUID if different
-		if created.UUID != fullStory.UUID && fullStory.UUID != "" {
-			if err := m.api.UpdateStoryUUID(ctx, m.targetSpace.ID, created.ID, fullStory.UUID); err != nil {
-				log.Printf("Warning: failed to update UUID for new story %s: %v", fullStory.FullSlug, err)
-			}
-		}
-
-		log.Printf("Created story: %s", fullStory.FullSlug)
-	}
-
-	return nil
-}
+// removed legacy syncStoryContent
 
 // syncStoryContentDetailed handles story synchronization and returns detailed results
 // Note: Folder structure is now pre-planned in optimizePreflight(), so no need to ensure folder path here
-func (m *Model) syncStoryContentDetailed(sourceStory sb.Story) (*syncItemResult, error) {
-	tgtIndex := make(map[string]sb.Story, len(m.storiesTarget))
-	for _, s := range m.storiesTarget {
-		tgtIndex[s.FullSlug] = s
-	}
-	syncer := sync.NewStorySyncer(m.api, m.sourceSpace.ID, m.targetSpace.ID, tgtIndex)
-	return syncer.SyncStoryDetailed(sourceStory, m.shouldPublish())
-}
+// removed legacy syncStoryContentDetailed
 
 // processTranslatedSlugs handles translated slug processing like the Storyblok CLI
 func (m *Model) processTranslatedSlugs(sourceStory sb.Story, existingStories []sb.Story) sb.Story {
