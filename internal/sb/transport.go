@@ -394,7 +394,9 @@ func (t *RetryingLimiterTransport) maxRPSForHost(host string) float64 {
 func isTransientNetErr(err error) bool {
 	var ne net.Error
 	if errors.As(err, &ne) {
-		return ne.Timeout() || ne.Temporary()
+		if ne.Timeout() {
+			return true
+		}
 	}
 	// Sometimes wrapped or stringly-typed
 	msg := strings.ToLower(err.Error())

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -130,26 +129,7 @@ func TestScanCommandTimeout(t *testing.T) {
 	}
 }
 
-// Mock client for testing successful scenarios
-type mockClient struct {
-	spaces      []sb.Space
-	stories     []sb.Story
-	shouldError bool
-}
-
-func (m *mockClient) ListSpaces(ctx context.Context) ([]sb.Space, error) {
-	if m.shouldError {
-		return nil, errors.New("mock error")
-	}
-	return m.spaces, nil
-}
-
-func (m *mockClient) ListStories(ctx context.Context, opts sb.ListStoriesOpts) ([]sb.Story, error) {
-	if m.shouldError {
-		return nil, errors.New("mock error")
-	}
-	return m.stories, nil
-}
+// Removed unused mock client (was not referenced by tests)
 
 func TestValidateMessageTypes(t *testing.T) {
 	tests := []struct {

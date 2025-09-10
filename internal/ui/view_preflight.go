@@ -73,7 +73,7 @@ func (m Model) renderPreflightContent() string {
 		}
 		lineStyle := lipgloss.NewStyle().Width(m.width - 4)
 		if visPos == m.preflight.listIndex {
-			lineStyle = cursorLineStyle.Copy().Width(m.width - 4)
+			lineStyle = cursorLineStyle.Width(m.width - 4)
 		}
 		if strings.ToLower(it.State) == StateSkip {
 			lineStyle = lineStyle.Faint(true)

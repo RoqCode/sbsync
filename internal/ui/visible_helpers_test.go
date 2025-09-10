@@ -27,7 +27,7 @@ func TestVisibleOrderBrowseMatchesItemAt(t *testing.T) {
 	// expand folder and check order again
 	m.folderCollapsed[folder.ID] = false
 	m.refreshVisible()
-	stories, order = m.visibleOrderBrowse()
+	stories, _ = m.visibleOrderBrowse()
 	if len(stories) != 2 {
 		t.Fatalf("expected 2 visible stories after expand, got %d", len(stories))
 	}

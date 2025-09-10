@@ -2,7 +2,6 @@ package ui
 
 import (
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -22,10 +21,7 @@ func (m *Model) applyFolderFork(folderIdx int, newFolderSlug string, appendFolde
 	}
 	oldRoot := top.Story.FullSlug
 	parent := parentSlug(oldRoot)
-	newRoot := newFolderSlug
-	if parent != "" {
-		newRoot = parent + "/" + newFolderSlug
-	}
+	var newRoot string
 
 	// Shadow occupancy per parent path for uniqueness checks
 	shadow := make(map[string]map[string]bool) // parentFull -> set of leaf slugs
@@ -289,19 +285,7 @@ func (m Model) handleCopyAsNewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 // openCopyAsNewForIndex is a helper (unused externally yet) to initialize state.
-func (m *Model) openCopyAsNewForIndex(idx int) {
-	it := m.preflight.items[idx]
-	m.copy.itemIdx = idx
-	m.copy.parent = parentSlug(it.Story.FullSlug)
-	m.copy.baseSlug = sync.NormalizeSlug(it.Story.Slug)
-	m.copy.presets = sync.BuildSlugPresets(m.copy.baseSlug, time.Now())
-	m.copy.selectedPreset = 0
-	m.copy.input.SetValue(m.copy.presets[0])
-	m.copy.input.CursorEnd()
-	m.copy.appendCopyToName = false
-	m.copy.errorMsg = ""
-	m.state = stateCopyAsNew
-}
+// removed unused openCopyAsNewForIndex helper
 
 // handleFolderForkKey manages the full-screen folder fork flow.
 func (m Model) handleFolderForkKey(msg tea.KeyMsg) (Model, tea.Cmd) {

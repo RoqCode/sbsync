@@ -2,6 +2,7 @@ package sb
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 )
 
@@ -21,12 +22,12 @@ func TestRetryCounters_WithRetryCounters(t *testing.T) {
 		t.Error("Retrieved retry counters don't match original")
 	}
 
-	// Test nil context handling
-	nilCtx := WithRetryCounters(nil, rc)
-	if nilCtx == nil {
-		t.Error("WithRetryCounters with nil context should return background context")
+	// Test non-nil context handling (avoid passing nil; use TODO)
+	todoCtx := WithRetryCounters(context.TODO(), rc)
+	if todoCtx == nil {
+		t.Error("WithRetryCounters with TODO context should return non-nil context")
 	}
-	retrieved = getRetryCounters(nilCtx)
+	retrieved = getRetryCounters(todoCtx)
 	if retrieved != rc {
 		t.Error("Retrieved retry counters from nil context don't match original")
 	}
@@ -40,8 +41,8 @@ func TestRetryCounters_GetRetryCounters(t *testing.T) {
 		t.Error("Expected nil retry counters for context without them")
 	}
 
-	// Test nil context
-	retrieved = getRetryCounters(nil)
+	// Test empty context (avoid nil; use TODO)
+	retrieved = getRetryCounters(context.TODO())
 	if retrieved != nil {
 		t.Error("Expected nil retry counters for nil context")
 	}
@@ -170,11 +171,11 @@ func TestRetryCounters_ConcurrentAccess(t *testing.T) {
 				return
 			}
 
-			// Modify counters
-			retrieved.Total++
-			retrieved.Status429++
-			retrieved.Status5xx++
-			retrieved.Net++
+			// Modify counters atomically to avoid data races in tests
+			atomic.AddInt64(&retrieved.Total, 1)
+			atomic.AddInt64(&retrieved.Status429, 1)
+			atomic.AddInt64(&retrieved.Status5xx, 1)
+			atomic.AddInt64(&retrieved.Net, 1)
 		}()
 	}
 
@@ -184,16 +185,16 @@ func TestRetryCounters_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Verify final values
-	if rc.Total != 10 {
+	if atomic.LoadInt64(&rc.Total) != 10 {
 		t.Errorf("Total = %d, want 10", rc.Total)
 	}
-	if rc.Status429 != 10 {
+	if atomic.LoadInt64(&rc.Status429) != 10 {
 		t.Errorf("Status429 = %d, want 10", rc.Status429)
 	}
-	if rc.Status5xx != 10 {
+	if atomic.LoadInt64(&rc.Status5xx) != 10 {
 		t.Errorf("Status5xx = %d, want 10", rc.Status5xx)
 	}
-	if rc.Net != 10 {
+	if atomic.LoadInt64(&rc.Net) != 10 {
 		t.Errorf("Net = %d, want 10", rc.Net)
 	}
 }
