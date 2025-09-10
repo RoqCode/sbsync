@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"storyblok-sync/internal/sb"
@@ -10,6 +11,7 @@ import (
 
 // mockRateLimitedAPI implements SyncAPI with rate limiting simulation
 type mockRateLimitedAPI struct {
+	mu sync.Mutex
 	// Call tracking
 	readCalls  int
 	writeCalls int
@@ -33,6 +35,8 @@ func newMockRateLimitedAPI() *mockRateLimitedAPI {
 }
 
 func (m *mockRateLimitedAPI) GetStoriesBySlug(ctx context.Context, spaceID int, slug string) ([]sb.Story, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.readCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
@@ -47,6 +51,8 @@ func (m *mockRateLimitedAPI) GetStoriesBySlug(ctx context.Context, spaceID int, 
 }
 
 func (m *mockRateLimitedAPI) GetStoryWithContent(ctx context.Context, spaceID, storyID int) (sb.Story, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.readCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
@@ -58,6 +64,8 @@ func (m *mockRateLimitedAPI) GetStoryWithContent(ctx context.Context, spaceID, s
 }
 
 func (m *mockRateLimitedAPI) CreateStoryWithPublish(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.writeCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
@@ -71,6 +79,8 @@ func (m *mockRateLimitedAPI) CreateStoryWithPublish(ctx context.Context, spaceID
 }
 
 func (m *mockRateLimitedAPI) UpdateStory(ctx context.Context, spaceID int, st sb.Story, publish bool) (sb.Story, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.writeCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
@@ -83,6 +93,8 @@ func (m *mockRateLimitedAPI) UpdateStory(ctx context.Context, spaceID int, st sb
 }
 
 func (m *mockRateLimitedAPI) UpdateStoryUUID(ctx context.Context, spaceID, storyID int, uuid string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.writeCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
@@ -95,6 +107,8 @@ func (m *mockRateLimitedAPI) UpdateStoryUUID(ctx context.Context, spaceID, story
 
 // storyRawAPI implementation
 func (m *mockRateLimitedAPI) GetStoryRaw(ctx context.Context, spaceID, storyID int) (map[string]interface{}, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.readCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
@@ -106,6 +120,8 @@ func (m *mockRateLimitedAPI) GetStoryRaw(ctx context.Context, spaceID, storyID i
 }
 
 func (m *mockRateLimitedAPI) CreateStoryRawWithPublish(ctx context.Context, spaceID int, story map[string]interface{}, publish bool) (sb.Story, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.writeCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
@@ -119,6 +135,8 @@ func (m *mockRateLimitedAPI) CreateStoryRawWithPublish(ctx context.Context, spac
 }
 
 func (m *mockRateLimitedAPI) UpdateStoryRawWithPublish(ctx context.Context, spaceID int, storyID int, story map[string]interface{}, publish bool) (sb.Story, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.writeCalls++
 
 	if m.shouldRateLimit && m.rateLimitCount > 0 {
