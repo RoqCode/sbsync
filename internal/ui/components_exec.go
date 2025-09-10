@@ -36,10 +36,12 @@ type compExecInitMsg struct {
 // internal planning types kept in UI to avoid importing in types.go
 type componentsyncPlanItem = comps.PlanItem
 type compRemapMaps struct {
-	srcUUIDToName map[string]string
-	tgtNameToUUID map[string]string
-	tgtID         int
-	tagNameToID   map[string]int
+    srcUUIDToName map[string]string
+    tgtNameToUUID map[string]string
+    tgtID         int
+    tagNameToID   map[string]int
+    srcPresets    []sb.ComponentPreset
+    tgtPresets    []sb.ComponentPreset
 }
 
 // execCompApplyCmd builds a plan from preflight decisions and applies it serially.
@@ -96,10 +98,10 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 			logx.Errorf("COMP_APPLY ensure groups: %v", err)
 			return compApplyDoneMsg{errCount: len(selected)}
 		}
-		// Build maps for remap
-		srcUUIDToName, tgtNameToUUID := comps.BuildGroupNameMaps(m.componentGroupsSource, tgtGroups)
-		// Pre-ensure internal tags across all selected components
-		tagNames := make([]string, 0)
+        // Build maps for remap
+        srcUUIDToName, tgtNameToUUID := comps.BuildGroupNameMaps(m.componentGroupsSource, tgtGroups)
+        // Pre-ensure internal tags across all selected components
+        tagNames := make([]string, 0)
 		for _, c := range selected {
 			for _, t := range c.InternalTagsList {
 				if t.Name != "" {
@@ -108,10 +110,25 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 			}
 		}
 		tagMap, err := comps.EnsureTagNameIDs(ctx, m.api, tgtID, tagNames)
-		if err != nil {
-			logx.Errorf("COMP_APPLY ensure tags: %v", err)
-			return compApplyDoneMsg{errCount: len(selected)}
-		}
+        if err != nil {
+            logx.Errorf("COMP_APPLY ensure tags: %v", err)
+            return compApplyDoneMsg{errCount: len(selected)}
+        }
+        // Fetch presets from source and target spaces
+        var srcPresets []sb.ComponentPreset
+        if m.sourceSpace != nil {
+            if pp, e := m.api.ListPresets(ctx, m.sourceSpace.ID); e == nil {
+                srcPresets = pp
+            } else {
+                logx.Errorf("COMP_APPLY list source presets: %v", e)
+            }
+        }
+        var tgtPresets []sb.ComponentPreset
+        if pp, e := m.api.ListPresets(ctx, tgtID); e == nil {
+            tgtPresets = pp
+        } else {
+            logx.Errorf("COMP_APPLY list target presets: %v", e)
+        }
 		// Build plan
 		plan := comps.BuildPlan(selected, m.componentsTarget, decisions)
 		// Concurrent worker pool
@@ -123,11 +140,11 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 		results := make(chan compReportEntry, len(plan))
 		var wg sync.WaitGroup
 
-		// worker function
-		worker := func() {
-			defer wg.Done()
-			for p := range jobs {
-				start := time.Now()
+        // worker function
+        worker := func() {
+            defer wg.Done()
+            for p := range jobs {
+                start := time.Now()
 				// Prepare component
 				comp := p.Source
 				if p.Name != "" {
@@ -154,55 +171,107 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 				rc := &sb.RetryCounters{}
 				ctx2 := sb.WithRetryCounters(ctx, rc)
 				// Write
-				switch p.Action {
-				case "create":
-					_ = m.compLimiter.WaitWrite(ctx2, tgtID)
-					_, err = m.api.CreateComponent(ctx2, tgtID, mapped)
-					if err != nil {
-						// fallback: refresh target list and try update by name
-						id := findTargetComponentIDByName(m.componentsTarget, mapped.Name)
-						if id == 0 {
-							if compsNow, e := m.api.ListComponents(ctx2, tgtID); e == nil {
-								id = findTargetComponentIDByName(compsNow, mapped.Name)
-							}
-						}
-						if id > 0 {
-							mapped.ID = id
-							_ = m.compLimiter.WaitWrite(ctx2, tgtID)
-							if _, err2 := m.api.UpdateComponent(ctx2, tgtID, mapped); err2 != nil {
-								logx.Errorf("COMP_APPLY create->update fallback failed: %v", err2)
-								if synccore.IsRateLimited(err2) {
-									m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
-								}
-								results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
-							} else {
-								m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
-								results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
-							}
-						} else {
-							logx.Errorf("COMP_APPLY create: %v", err)
-							if synccore.IsRateLimited(err) {
-								m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
-							}
-							results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
-						}
-					} else {
-						m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
-						results <- compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
-					}
-				case "update":
-					mapped.ID = p.TargetID
-					_ = m.compLimiter.WaitWrite(ctx2, tgtID)
-					if _, err = m.api.UpdateComponent(ctx2, tgtID, mapped); err != nil {
-						logx.Errorf("COMP_APPLY update: %v", err)
-						if synccore.IsRateLimited(err) {
-							m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
-						}
-						results <- compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
-					} else {
-						m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
-						results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
-					}
+                switch p.Action {
+                case "create":
+                    _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                    createdComp, err2 := m.api.CreateComponent(ctx2, tgtID, mapped)
+                    err = err2
+                    if err != nil {
+                        // fallback: refresh target list and try update by name
+                        id := findTargetComponentIDByName(m.componentsTarget, mapped.Name)
+                        if id == 0 {
+                            if compsNow, e := m.api.ListComponents(ctx2, tgtID); e == nil {
+                                id = findTargetComponentIDByName(compsNow, mapped.Name)
+                            }
+                        }
+                        if id > 0 {
+                            mapped.ID = id
+                            _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                            if _, err2 := m.api.UpdateComponent(ctx2, tgtID, mapped); err2 != nil {
+                                logx.Errorf("COMP_APPLY create->update fallback failed: %v", err2)
+                                if synccore.IsRateLimited(err2) {
+                                    m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
+                                }
+                                results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
+                            } else {
+                                // Sync presets on update path (diff by name)
+                                srcCP := comps.FilterPresetsForComponentID(srcPresets, p.Source.ID)
+                                tgtCP := comps.FilterPresetsForComponentID(tgtPresets, mapped.ID)
+                                newP, updP := comps.DiffPresetsByName(srcCP, tgtCP)
+                                createdCount, updatedCount := 0, 0
+                                for _, np := range newP {
+                                    norm := comps.NormalizePresetForTarget(np, mapped.ID)
+                                    _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                                    if _, e := m.api.CreatePreset(ctx2, tgtID, norm); e != nil {
+                                        logx.Errorf("COMP_APPLY preset create: %v", e)
+                                    } else { createdCount++ }
+                                }
+                                for _, up := range updP {
+                                    norm := comps.NormalizePresetForTarget(up, mapped.ID)
+                                    _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                                    if _, e := m.api.UpdatePreset(ctx2, tgtID, norm); e != nil {
+                                        logx.Errorf("COMP_APPLY preset update: %v", e)
+                                    } else { updatedCount++ }
+                                }
+                                logx.Infof("Presets in sync for %s — created: %d, updated: %d", mapped.Name, createdCount, updatedCount)
+                                m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
+                                results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
+                            }
+                        } else {
+                            logx.Errorf("COMP_APPLY create: %v", err)
+                            if synccore.IsRateLimited(err) {
+                                m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
+                            }
+                            results <- compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
+                        }
+                    } else {
+                        // Sync presets on create path: push all source presets for this component
+                        srcCP := comps.FilterPresetsForComponentID(srcPresets, p.Source.ID)
+                        createdCount := 0
+                        for _, sp := range srcCP {
+                            norm := comps.NormalizePresetForTarget(sp, createdComp.ID)
+                            _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                            if _, e := m.api.CreatePreset(ctx2, tgtID, norm); e != nil {
+                                logx.Errorf("COMP_APPLY preset create: %v", e)
+                            } else { createdCount++ }
+                        }
+                        logx.Infof("Presets in sync for %s — created: %d, updated: %d", mapped.Name, createdCount, 0)
+                        m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
+                        results <- compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
+                    }
+                case "update":
+                    mapped.ID = p.TargetID
+                    _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                    if _, err = m.api.UpdateComponent(ctx2, tgtID, mapped); err != nil {
+                        logx.Errorf("COMP_APPLY update: %v", err)
+                        if synccore.IsRateLimited(err) {
+                            m.compLimiter.NudgeWrite(tgtID, -0.2, 1, 7)
+                        }
+                        results <- compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
+                    } else {
+                        // Sync presets on update path (diff by name)
+                        srcCP := comps.FilterPresetsForComponentID(srcPresets, p.Source.ID)
+                        tgtCP := comps.FilterPresetsForComponentID(tgtPresets, mapped.ID)
+                        newP, updP := comps.DiffPresetsByName(srcCP, tgtCP)
+                        createdCount, updatedCount := 0, 0
+                        for _, np := range newP {
+                            norm := comps.NormalizePresetForTarget(np, mapped.ID)
+                            _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                            if _, e := m.api.CreatePreset(ctx2, tgtID, norm); e != nil {
+                                logx.Errorf("COMP_APPLY preset create: %v", e)
+                            } else { createdCount++ }
+                        }
+                        for _, up := range updP {
+                            norm := comps.NormalizePresetForTarget(up, mapped.ID)
+                            _ = m.compLimiter.WaitWrite(ctx2, tgtID)
+                            if _, e := m.api.UpdatePreset(ctx2, tgtID, norm); e != nil {
+                                logx.Errorf("COMP_APPLY preset update: %v", e)
+                            } else { updatedCount++ }
+                        }
+                        logx.Infof("Presets in sync for %s — created: %d, updated: %d", mapped.Name, createdCount, updatedCount)
+                        m.compLimiter.NudgeWrite(tgtID, +0.02, 1, 7)
+                        results <- compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
+                    }
 				default:
 					// skip
 					results <- compReportEntry{Name: comp.Name, Operation: "skip", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}
@@ -260,37 +329,52 @@ func (m *Model) startCompApply() tea.Cmd {
 	}
 	srcGroups := append([]sb.ComponentGroup(nil), m.componentGroupsSource...)
 	tgtSnapshot := append([]sb.Component(nil), m.componentsTarget...)
-	return func() tea.Msg {
-		api := m.api
-		if api == nil {
-			api = sb.New(token)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		// Ensure groups and build maps
-		tgtGroups, err := comps.EnsureTargetGroups(ctx, api, tgtID, srcGroups)
-		if err != nil {
-			logx.Errorf("COMP_PREP ensure groups: %v", err)
-			return compExecInitMsg{err: err}
-		}
-		s2n, n2t := comps.BuildGroupNameMaps(srcGroups, tgtGroups)
-		// Pre-ensure internal tags across all selected components
-		tagNames := make([]string, 0)
-		for _, c := range selected {
-			for _, t := range c.InternalTagsList {
-				if t.Name != "" {
-					tagNames = append(tagNames, t.Name)
-				}
-			}
-		}
-		tagMap, err := comps.EnsureTagNameIDs(ctx, api, tgtID, tagNames)
-		if err != nil {
-			logx.Errorf("COMP_PREP ensure tags: %v", err)
-			return compExecInitMsg{err: err}
-		}
-		plan := comps.BuildPlan(selected, tgtSnapshot, decisions)
-		return compExecInitMsg{maps: compRemapMaps{srcUUIDToName: s2n, tgtNameToUUID: n2t, tgtID: tgtID, tagNameToID: tagMap}, plan: plan}
-	}
+    return func() tea.Msg {
+        api := m.api
+        if api == nil {
+            api = sb.New(token)
+        }
+        ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+        defer cancel()
+        // Ensure groups and build maps
+        tgtGroups, err := comps.EnsureTargetGroups(ctx, api, tgtID, srcGroups)
+        if err != nil {
+            logx.Errorf("COMP_PREP ensure groups: %v", err)
+            return compExecInitMsg{err: err}
+        }
+        s2n, n2t := comps.BuildGroupNameMaps(srcGroups, tgtGroups)
+        // Pre-ensure internal tags across all selected components
+        tagNames := make([]string, 0)
+        for _, c := range selected {
+            for _, t := range c.InternalTagsList {
+                if t.Name != "" {
+                    tagNames = append(tagNames, t.Name)
+                }
+            }
+        }
+        tagMap, err := comps.EnsureTagNameIDs(ctx, api, tgtID, tagNames)
+        if err != nil {
+            logx.Errorf("COMP_PREP ensure tags: %v", err)
+            return compExecInitMsg{err: err}
+        }
+        // Fetch presets from source and target
+        var srcPresets []sb.ComponentPreset
+        if m.sourceSpace != nil {
+            if pp, e := api.ListPresets(ctx, m.sourceSpace.ID); e == nil {
+                srcPresets = pp
+            } else {
+                logx.Errorf("COMP_PREP list source presets: %v", e)
+            }
+        }
+        var tgtPresets []sb.ComponentPreset
+        if pp, e := api.ListPresets(ctx, tgtID); e == nil {
+            tgtPresets = pp
+        } else {
+            logx.Errorf("COMP_PREP list target presets: %v", e)
+        }
+        plan := comps.BuildPlan(selected, tgtSnapshot, decisions)
+        return compExecInitMsg{maps: compRemapMaps{srcUUIDToName: s2n, tgtNameToUUID: n2t, tgtID: tgtID, tagNameToID: tagMap, srcPresets: srcPresets, tgtPresets: tgtPresets}, plan: plan}
+    }
 }
 
 // Single item command: performs create/update and returns a done message
@@ -312,8 +396,8 @@ func (m Model) runCompItemCmd(idx int) tea.Cmd {
 	}
 	maps := m.compMaps
 	api := m.api
-	return func() tea.Msg {
-		start := time.Now()
+    return func() tea.Msg {
+        start := time.Now()
 		// Prepare
 		comp := p.Source
 		if p.Name != "" {
@@ -346,53 +430,105 @@ func (m Model) runCompItemCmd(idx int) tea.Cmd {
 		// Attach retry counters to context for per-item attribution
 		rc := &sb.RetryCounters{}
 		ctx2 := sb.WithRetryCounters(ctx, rc)
-		// Write
-		switch p.Action {
-		case "create":
-			_ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
-			_, err = api.CreateComponent(ctx2, maps.tgtID, mapped)
-			if err != nil {
-				// fallback: try update by name
-				id := findTargetComponentIDByName(nil, mapped.Name)
-				if id == 0 {
-					if compsNow, e := api.ListComponents(ctx2, maps.tgtID); e == nil {
-						id = findTargetComponentIDByName(compsNow, mapped.Name)
-					}
-				}
-				if id > 0 {
-					mapped.ID = id
-					_ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
-					if _, err2 := api.UpdateComponent(ctx2, maps.tgtID, mapped); err2 != nil {
-						if synccore.IsRateLimited(err2) {
-							m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
-						}
-						return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
-					}
-					m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
-					return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
-				}
-				if synccore.IsRateLimited(err) {
-					m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
-				}
-				return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
-			}
-			m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
-			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
-		case "update":
-			mapped.ID = p.TargetID
-			_ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
-			if _, err = api.UpdateComponent(ctx2, maps.tgtID, mapped); err != nil {
-				if synccore.IsRateLimited(err) {
-					m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
-				}
-				return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
-			}
-			m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
-			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
-		default:
-			return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: comp.Name, Operation: "skip", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
-		}
-	}
+        // Write
+        switch p.Action {
+        case "create":
+            _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+            createdComp, err2 := api.CreateComponent(ctx2, maps.tgtID, mapped)
+            err = err2
+            if err != nil {
+                // fallback: try update by name
+                id := findTargetComponentIDByName(nil, mapped.Name)
+                if id == 0 {
+                    if compsNow, e := api.ListComponents(ctx2, maps.tgtID); e == nil {
+                        id = findTargetComponentIDByName(compsNow, mapped.Name)
+                    }
+                }
+                if id > 0 {
+                    mapped.ID = id
+                    _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+                    if _, err2 := api.UpdateComponent(ctx2, maps.tgtID, mapped); err2 != nil {
+                        if synccore.IsRateLimited(err2) {
+                            m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
+                        }
+                        return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err2.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
+                    }
+                    // Sync presets on update path
+                    srcCP := comps.FilterPresetsForComponentID(maps.srcPresets, p.Source.ID)
+                    tgtCP := comps.FilterPresetsForComponentID(maps.tgtPresets, mapped.ID)
+                    newP, updP := comps.DiffPresetsByName(srcCP, tgtCP)
+                    createdCount, updatedCount := 0, 0
+                    for _, np := range newP {
+                        norm := comps.NormalizePresetForTarget(np, mapped.ID)
+                        _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+                        if _, e := api.CreatePreset(ctx2, maps.tgtID, norm); e != nil {
+                            logx.Errorf("COMP_ITEM preset create: %v", e)
+                        } else { createdCount++ }
+                    }
+                    for _, up := range updP {
+                        norm := comps.NormalizePresetForTarget(up, mapped.ID)
+                        _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+                        if _, e := api.UpdatePreset(ctx2, maps.tgtID, norm); e != nil {
+                            logx.Errorf("COMP_ITEM preset update: %v", e)
+                        } else { updatedCount++ }
+                    }
+                    logx.Infof("Presets in sync for %s — created: %d, updated: %d", mapped.Name, createdCount, updatedCount)
+                    m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
+                    return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
+                }
+                if synccore.IsRateLimited(err) {
+                    m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
+                }
+                return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
+            }
+            // Sync presets on create path
+            srcCP := comps.FilterPresetsForComponentID(maps.srcPresets, p.Source.ID)
+            createdCount := 0
+            for _, sp := range srcCP {
+                norm := comps.NormalizePresetForTarget(sp, createdComp.ID)
+                _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+                if _, e := api.CreatePreset(ctx2, maps.tgtID, norm); e != nil {
+                    logx.Errorf("COMP_ITEM preset create: %v", e)
+                } else { createdCount++ }
+            }
+            logx.Infof("Presets in sync for %s — created: %d, updated: %d", mapped.Name, createdCount, 0)
+            m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
+            return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "create", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
+        case "update":
+            mapped.ID = p.TargetID
+            _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+            if _, err = api.UpdateComponent(ctx2, maps.tgtID, mapped); err != nil {
+                if synccore.IsRateLimited(err) {
+                    m.compLimiter.NudgeWrite(maps.tgtID, -0.2, 1, 7)
+                }
+                return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", Err: err.Error(), DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
+            }
+            // Sync presets on update path
+            srcCP := comps.FilterPresetsForComponentID(maps.srcPresets, p.Source.ID)
+            tgtCP := comps.FilterPresetsForComponentID(maps.tgtPresets, mapped.ID)
+            newP, updP := comps.DiffPresetsByName(srcCP, tgtCP)
+            createdCount, updatedCount := 0, 0
+            for _, np := range newP {
+                norm := comps.NormalizePresetForTarget(np, mapped.ID)
+                _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+                if _, e := api.CreatePreset(ctx2, maps.tgtID, norm); e != nil {
+                    logx.Errorf("COMP_ITEM preset create: %v", e)
+                } else { createdCount++ }
+            }
+            for _, up := range updP {
+                norm := comps.NormalizePresetForTarget(up, mapped.ID)
+                _ = m.compLimiter.WaitWrite(ctx2, maps.tgtID)
+                if _, e := api.UpdatePreset(ctx2, maps.tgtID, norm); e != nil {
+                    logx.Errorf("COMP_ITEM preset update: %v", e)
+                } else { updatedCount++ }
+            }
+            logx.Infof("Presets in sync for %s — created: %d, updated: %d", mapped.Name, createdCount, updatedCount)
+            m.compLimiter.NudgeWrite(maps.tgtID, +0.02, 1, 7)
+            return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: mapped.Name, Operation: "update", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
+        default:
+            return compItemDoneMsg{idx: idx, entry: compReportEntry{Name: comp.Name, Operation: "skip", DurationMs: time.Since(start).Milliseconds(), Retry429: int(rc.Status429), RetryTotal: int(rc.Total)}}
+        }
+    }
 }
 
 func findTargetComponentIDByName(tgt []sb.Component, name string) int {

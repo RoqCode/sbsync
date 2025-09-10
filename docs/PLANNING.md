@@ -1,122 +1,103 @@
-# Component Sync — MVP and Future Plan
+# Component Preset Sync — MVP Parity Plan
 
-This plan restructures TODO #6 (Component sync) into a minimal, shippable MVP that mirrors Storyblok’s blind overwrite behavior, and a set of future optimizations to layer on later. Each MVP iteration is small and independently testable.
+Goal: Add preset synchronization to the existing component sync with parity (where sensible) to Storyblok’s reference implementation. No extras beyond optimizations that do not change behavior.
 
-MVP Goals
+Scope Overview
 
-- Blind overwrite parity: create/update components in target based on source without schema diffing or merge logic.
-- Sync Mode picker: screen after space selection to choose what to sync (Stories or Components); accessible again from list and success views.
-- Usable browse experience: search, sorting (updated/created/name), and a date‑cutoff filter for components. (Group filter deferred.)
-- Robust mapping: ensure component groups and internal tags exist in target and are mapped correctly.
+- Read all presets from source space, filter per component.
+- On component create: push all its source presets to target (POST).
+- On component update: compute new vs existing by name; create new (POST) and update existing (PUT).
+- Preserve and pass through `image` if present; no upload pipeline in MVP.
+- Keep existing behaviors: group mapping, whitelist remap, internal tag ensuring, create→update fallback, rate limiting.
 
-MVP Non‑Goals (deferred)
+API Surface (internal/sb)
 
-- Schema diffing, breaking‑change detection, and merge UI.
-- Dependency analysis and topological ordering.
-- Backups/snapshots and dry‑run validator.
+- Types:
+  - `ComponentPreset { id, name, component_id, preset(json), image }`.
+  - Extend `Component` to optionally decode `all_presets` when returned by API.
+- Endpoints:
+  - GET `spaces/{space}/presets` → list all presets.
+  - POST `spaces/{space}/presets` with `{ "preset": { name, component_id, preset, image } }`.
+  - PUT `spaces/{space}/presets/{id}` with same shape.
 
-Vocabulary
+Core Helpers (internal/core/componentsync)
 
-- Component: Storyblok component with `name`, optional `display_name`, optional `component_group_uuid`, and JSON `schema`.
-- Group map: name→UUID mapping to remap `component_group_uuid` and any `component_group_whitelist` entries within field schemas (e.g., bloks/richtext).
+- `FilterPresetsForComponentID(all, compID)`: select presets for a component.
+- `DiffPresetsByName(src, tgt)`: return `(new, update)` by comparing names; for updates carry target `id`.
+- `NormalizePresetForTarget(p, targetComponentID)`: drop `id`, set `component_id`, keep `name`, `preset`, `image`.
+- JSON equality for update minimization is optional; MVP can always PUT existing-name presets.
 
-High‑Level Architecture (MVP)
+Execution Flow Changes (internal/ui)
 
-- `internal/sb`: List/Get/Create/Update components; List/Create component groups; List/Create internal tags. Reuse transport, retries, and metrics.
-- `internal/core/componentsync`: Planner/executor for blind overwrite; helpers for group/whitelist remapping and internal tag ensuring.
-- `internal/ui`: Add Sync Mode picker; components list tree (group → components) with search/sort/filter; preflight with name collision handling (Skip/Fork); success view with navigation back to picker.
-- Sync engine parity: Reuse the stories worker-pool pattern for concurrent execution and progress reporting.
+- Pre‑apply (shared prep):
+  - Fetch `srcPresets := ListPresets(sourceSpaceID)` once.
+  - Fetch `tgtPresets := ListPresets(targetSpaceID)` once (for update diffing).
+- Per component:
+  - After mapping groups/whitelists and mapping internal tags:
+    - Create path:
+      - `created := CreateComponent(...)`
+      - `srcCompPresets := FilterPresetsForComponentID(srcPresets, sourceComp.ID)`
+      - For each: `CreatePreset(targetSpaceID, NormalizePresetForTarget(p, created.ID))`
+    - Update path:
+      - `srcCompPresets := FilterPresetsForComponentID(srcPresets, sourceComp.ID)`
+      - `tgtCompPresets := FilterPresetsForComponentID(tgtPresets, targetComp.ID)` (or `all_presets` if available)
+      - `(new, upd) := DiffPresetsByName(srcCompPresets, tgtCompPresets)`
+      - POST each in `new`; PUT each in `upd`.
+- Rate limits: reuse component write limiter for POST/PUT preset calls.
+- Logging: report counts created/updated; final "Presets in sync" per component.
 
-Architecture Decision
+Edge Cases & Parity Decisions
 
-- Separate flows: Implement Components as a dedicated flow to keep concerns clean and avoid Story-specific assumptions (slugs, folders, publish modes). Use `internal/core/componentsync` with parallel UI under `internal/ui/components`.
-- Reuse patterns: Mirror Stories patterns for list tree, preflight decisions (Skip/Apply/Fork), worker scheduling with SpaceLimiter, and reporting, without forcing a generic Story abstraction.
-- Minimal shared helpers: Optionally extract tiny utilities (selection toggles, a small worker scheduler helper) where it reduces duplication without coupling domain specifics. Keep SpaceLimiter shared as-is.
-- Refactor later: After MVP, evaluate safe consolidation opportunities based on duplication observed in practice.
+- Name collisions: name is the matching key across spaces.
+- Missing `all_presets`: space‑level `GET /presets` is the source of truth.
+- Image handling: pass through source `image` field; no cross‑space re‑upload in MVP.
+- Deletes: do not delete target‑only presets.
+- Order: no ordering guarantees; Storyblok’s lib pushes sequentially; we can keep sequential per component while still using worker pool across components.
 
-MVP Iterations
+Step‑by‑Step Implementation
 
-1) Sync Mode Picker & Navigation — DONE
-- Outcome: New screen after SpaceSelect to choose Stories vs Components; reachable via a keybind from the Components list and Success views to return to picker.
-- Scope: `ModePicker` model/view, route wiring, and help footer updates.
-- Tests: Model routing tests; verify navigation from list/success back to picker.
+1) sb types and endpoints
+- Add `ComponentPreset` type and JSON wiring.
+- Extend `Component` with `AllPresets` (omitempty).
+- Implement `ListPresets`, `CreatePreset`, `UpdatePreset` on `Client`.
+- Tests: request paths, payload shape, response decoding.
 
-2) Core Types & Fixtures — DONE (types), fixtures TBD
-- Outcome: Types for `Component` and `Group`; fixtures under `testdata/components/` and `testdata/component_groups/`.
-- Scope: `Component{Name, DisplayName, GroupUUID, Schema, ID, CreatedAt, UpdatedAt}`; `Group{UUID, Name}`; fixture loaders.
-- Tests: Unmarshal from fixtures; timestamp parsing; stable normalization.
+2) Core helpers
+- Add `presets.go` with filter/diff/normalize helpers.
+- Tests: table‑driven diffing (name‑based), normalization sets `component_id`, preserves `name/preset/image`.
 
-3) SB Client: List/Get (Components, Groups) — DONE
-- Outcome: `ListComponents`, `GetComponentByName`, `ListComponentGroups`.
-- Scope: Parse API JSON; paging if applicable. Build `GroupMap` (name→uuid).
-- Tests: Parsing fixtures and error surfacing.
+3) UI prep integration
+- In components apply prep, fetch `srcPresets` and `tgtPresets` once.
+- Plumb them into executor/init messages.
 
-4) SB Client: Create/Update (Components), Groups Create, Internal Tags — DONE
-- Outcome: `CreateComponent`, `UpdateComponent`, `CreateComponentGroup`, `ListInternalTags`, `CreateInternalTag`.
-- Scope: Implement payload shaping. Treat 409/422 on create as idempotent. Ensure `internal_tag_ids` can be set explicitly.
-- Tests: Request/response shaping; idempotent create behavior.
+4) Create path wiring
+- After successful `CreateComponent`, filter/normalize and POST presets for that component.
+- Log count; handle errors per item without aborting other items.
 
-5) Browse Components (Search, Sort, Date‑Cutoff) — IN PROGRESS (Group filter deferred)
-- Outcome: Flat components list with:
-  - Search by name (basic toggle now; text input follows)
-  - Sorting: by `UpdatedAt`, `CreatedAt`, or `Name` (asc/desc) [DONE]
-  - Filters: date‑cutoff quick toggle (today on/off) [DONE]; group filter [Deferred]
-- Scope: Client‑side sort/filter; accept textual date input in a later step; selection toggles mirror Stories UX; show updated date per row.
-- Tests: Sorting/date‑cutoff tests [DONE]; add search input tests later.
+5) Update path wiring
+- Before `UpdateComponent` response handling completes, compute `(new, upd)` using `tgtPresets`.
+- POST new, PUT existing; log counts and errors.
 
-6) Component Groups Sync & Mapping — DONE
-- Outcome: Ensure all source groups exist in target; build `GroupMap` for mapping.
-- Scope: During scan or preflight, list groups, create missing target groups; map `component_group_uuid` and `component_group_whitelist` via `GroupMap`.
-- Tests: Fixtures with missing/existing groups; verify whitelist remapping.
+6) Concurrency & limits
+- Reuse SpaceLimiter writes for preset POST/PUT.
+- Keep per‑component preset operations sequential to match reference behavior.
 
-7) Internal Tags Ensure — DONE
-- Outcome: Ensure component internal tags exist in target and apply via `internal_tag_ids`.
-- Scope: Read source `internal_tags_list`; create missing tags in target (`object_type=component`); set `internal_tag_ids` on create/update.
-- Tests: Existing vs missing tags; payload contains final IDs; error propagation as item issues.
+7) Tests & fixtures
+- Add unit tests for helpers; client tests for new endpoints.
+- Add integration‑style executor test with fake API covering create and update scenarios.
 
-8) Preflight (Name Collisions, Skip/Fork) — DONE
-- Outcome: Preflight screen summarizing actions with per-item decision: Skip, Apply (overwrite), or Fork.
-- Scope: Collision check by name only; if a source component name exists in target, default to Apply (overwrite) but allow Skip or Fork. Fork prompts for a new component name (suffix suggestion), and schedules a create under that name.
-- Tests: Model tests for decision cycling, fork name entry/validation, and persistence of choices.
+8) Docs & acceptance
+- Update README component sync notes to mention presets.
+- Acceptance: For a component with presets in source, target ends up with same set by name, with payloads (including image) mirrored; existing presets updated; no deletes.
 
-9) Planner (Blind Overwrite + Decisions) — DONE
-- Outcome: Plan with Create vs Update using target name→ID map and user decisions from Preflight; honor list filters (including date‑cutoff).
-- Scope: Classify items; transform Fork decisions into Create actions with the chosen name; collect mapping info for executor.
-- Tests: Table tests for classification and fork transformation.
+Non‑Goals (MVP)
 
-10) Executor (Blind Overwrite, Concurrent Workers) — DONE
-- Outcome: Execute Create/Update with retries; map groups/whitelists; set `internal_tag_ids`; handle 422 as update fallback.
-- Scope: Use the stories worker-pool pattern (configurable concurrency). Ensure group creation step has completed before execution. Payload uses source fields; for schema use source verbatim except remapped whitelist. Progress + per‑item result.
-- Tests: Stub client; assert call order/payloads; concurrency respects worker limits; cover 422 fallback path.
+- Image upload to target assets (S3 signed URL flow).
+- Deleting target‑only presets.
+- Advanced diff of `preset` JSON for minimal PUTs.
 
-11) Reporting & Success View — DONE
-- Outcome: Integrate results into existing report; success view offers navigation back to Mode Picker.
-- Scope: Extend report minimally; update help/footer with return action.
-- Tests: Golden report coverage and navigation tests.
+Rollout Plan
 
-Future Optimizations
-
-- Schema Diff Engine & Safety: Structured diffs, breaking‑change detection, and gated overrides.
-- Dependency Analysis: Build DAG of component references and sync in topological order; warn on cycles/missing deps.
-- Diff UI: Expandable tree and summaries for breaking vs non‑breaking changes.
-- Backups/Snapshots: Export target component schemas before overwrites to a timestamped location.
-- Dry‑Run Validator: Estimate impact on stories; report risks without writes.
-- Presets Advanced Sync: Full diff and partial updates beyond basic create/update.
-- Rate‑Limit Budgeting: Mode‑aware worker sizing based on measured API costs.
-- Shared abstractions: Identify and consolidate duplicate scheduler/preflight utilities across Stories and Components where it improves maintainability without over-coupling.
-
-Testing & Tooling Notes
-
-- Table‑driven tests; avoid network. Fixtures: `testdata/components/`, `testdata/component_groups/`, `testdata/internal_tags/`.
-- Date parsing: accept `YYYY-MM-DD` and full RFC3339 (e.g., `2025-09-06T12:00:00Z`); default to local midnight when only a date is provided.
-- Keep packages cohesive: `internal/core/componentsync/{plan,exec,map}` for MVP.
-- Run: `go fmt ./... && go vet ./... && go test ./...` before merging each iteration.
-
-Acceptance Criteria (MVP)
-
-- Sync Mode picker appears after selecting spaces and is reachable from Components list and Success views.
-- Components browse supports selection toggles, search, sorting by updated/created/name (asc/desc), and date‑cutoff filtering. (Group filter not required.)
-- Preflight exists for components and mirrors Stories UX with name-based collision handling: Skip, Apply (overwrite), and Fork (copy-as-new with rename input).
-- Groups are created and mapped before component execution; `component_group_uuid` and field `component_group_whitelist` are correctly remapped to target UUIDs.
-- Internal component tags are created as needed and applied via `internal_tag_ids` on both create and update.
-- Executor uses concurrent workers analogous to Stories; blind overwrite executes using deterministic create/update decisions (name→ID map) with create→update fallback; progress and reporting are shown.
+- Feature‑flag internally if needed; otherwise enable by default.
+- Verify on a small subset of components; confirm counts and names.
+- Monitor rate‑limits; adjust limiter nudges if needed.

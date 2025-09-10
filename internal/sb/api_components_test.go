@@ -176,26 +176,101 @@ func TestListInternalTagsAndCreate(t *testing.T) {
 }
 
 func TestComponentsNoToken(t *testing.T) {
-	c := New("")
-	if _, err := c.ListComponents(context.Background(), 1); err == nil {
-		t.Fatal("expected error for empty token")
-	}
-	if _, err := c.CreateComponent(context.Background(), 1, Component{}); err == nil {
-		t.Fatal("expected error for empty token")
-	}
-	if _, err := c.UpdateComponent(context.Background(), 1, Component{}); err == nil {
-		t.Fatal("expected error for missing id / token")
-	}
-	if _, err := c.ListComponentGroups(context.Background(), 1); err == nil {
-		t.Fatal("expected error for empty token")
-	}
-	if _, err := c.CreateComponentGroup(context.Background(), 1, "g"); err == nil {
-		t.Fatal("expected error for empty token")
-	}
-	if _, err := c.ListInternalTags(context.Background(), 1); err == nil {
-		t.Fatal("expected error for empty token")
-	}
-	if _, err := c.CreateInternalTag(context.Background(), 1, "t", "component"); err == nil {
-		t.Fatal("expected error for empty token")
-	}
+    c := New("")
+    if _, err := c.ListComponents(context.Background(), 1); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.CreateComponent(context.Background(), 1, Component{}); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.UpdateComponent(context.Background(), 1, Component{}); err == nil {
+        t.Fatal("expected error for missing id / token")
+    }
+    if _, err := c.ListComponentGroups(context.Background(), 1); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.CreateComponentGroup(context.Background(), 1, "g"); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.ListInternalTags(context.Background(), 1); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.CreateInternalTag(context.Background(), 1, "t", "component"); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.ListPresets(context.Background(), 1); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.CreatePreset(context.Background(), 1, ComponentPreset{}); err == nil {
+        t.Fatal("expected error for empty token")
+    }
+    if _, err := c.UpdatePreset(context.Background(), 1, ComponentPreset{}); err == nil {
+        t.Fatal("expected error for empty token / id")
+    }
+}
+
+func TestListPresetsAndCreateUpdate(t *testing.T) {
+    c := New("token")
+    // List
+    c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+        if req.Method != http.MethodGet {
+            t.Fatalf("want GET, got %s", req.Method)
+        }
+        if !strings.HasSuffix(req.URL.Path, "/v1/spaces/1/presets") {
+            t.Fatalf("unexpected path: %s", req.URL.Path)
+        }
+        body := `{"presets":[{"id":5,"name":"Default","component_id":7,"preset":{},"image":"//img.png"}]}`
+        return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+    })}
+    presets, err := c.ListPresets(context.Background(), 1)
+    if err != nil {
+        t.Fatalf("ListPresets error: %v", err)
+    }
+    if len(presets) != 1 || presets[0].ID != 5 || presets[0].ComponentID != 7 {
+        t.Fatalf("unexpected presets: %+v", presets)
+    }
+    // Create
+    c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+        if req.Method != http.MethodPost {
+            t.Fatalf("want POST, got %s", req.Method)
+        }
+        if !strings.HasSuffix(req.URL.Path, "/v1/spaces/1/presets") {
+            t.Fatalf("unexpected path: %s", req.URL.Path)
+        }
+        b, _ := io.ReadAll(req.Body)
+        var payload struct{ Preset ComponentPreset `json:"preset"` }
+        if err := json.Unmarshal(b, &payload); err != nil {
+            t.Fatalf("unmarshal: %v", err)
+        }
+        if payload.Preset.Name != "Default" || payload.Preset.ComponentID != 7 {
+            t.Fatalf("unexpected payload: %+v", payload.Preset)
+        }
+        res := `{"preset":{"id":11,"name":"Default","component_id":7}}`
+        return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(res)), Header: make(http.Header)}, nil
+    })}
+    created, err := c.CreatePreset(context.Background(), 1, ComponentPreset{Name: "Default", ComponentID: 7})
+    if err != nil {
+        t.Fatalf("CreatePreset error: %v", err)
+    }
+    if created.ID != 11 {
+        t.Fatalf("unexpected created preset: %+v", created)
+    }
+    // Update
+    c.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+        if req.Method != http.MethodPut {
+            t.Fatalf("want PUT, got %s", req.Method)
+        }
+        if !strings.HasSuffix(req.URL.Path, "/v1/spaces/1/presets/11") {
+            t.Fatalf("unexpected path: %s", req.URL.Path)
+        }
+        res := `{"preset":{"id":11,"name":"Default","component_id":7}}`
+        return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(res)), Header: make(http.Header)}, nil
+    })}
+    upd, err := c.UpdatePreset(context.Background(), 1, ComponentPreset{ID: 11, Name: "Default", ComponentID: 7})
+    if err != nil {
+        t.Fatalf("UpdatePreset error: %v", err)
+    }
+    if upd.ID != 11 {
+        t.Fatalf("unexpected updated preset: %+v", upd)
+    }
 }
