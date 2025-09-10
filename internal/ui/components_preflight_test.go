@@ -1,8 +1,9 @@
 package ui
 
 import (
-	"storyblok-sync/internal/sb"
-	"testing"
+    "strings"
+    "storyblok-sync/internal/sb"
+    "testing"
 )
 
 func TestStartCompPreflight_ClassifiesCollisions(t *testing.T) {
@@ -116,5 +117,38 @@ func TestCompPreflight_AutoSkipWhenUnchanged(t *testing.T) {
     it := m.compPre.items[0]
     if !(it.Skip && it.State == StateSkip) {
         t.Fatalf("expected item to be auto-skipped due to no changes: %+v", it)
+    }
+}
+
+func TestCompPreflight_ForceUpdateToggle(t *testing.T) {
+    m := InitialModel()
+    m.currentMode = modeComponents
+    // Same component in source and target (no changes)
+    schema := sb.Component{ID: 1, Name: "A", DisplayName: "AA", ComponentGroupUUID: "g1", Schema: []byte(`{"x":1}`)}
+    m.componentsSource = []sb.Component{schema}
+    m.componentsTarget = []sb.Component{{ID: 10, Name: "A", DisplayName: "AA", ComponentGroupUUID: "g1", Schema: []byte(`{"x":1}`)}}
+    m.componentGroupsSource = []sb.ComponentGroup{{UUID: "g1", Name: "G"}}
+    m.componentGroupsTarget = []sb.ComponentGroup{{UUID: "g1", Name: "G"}}
+    m.comp.selected = map[string]bool{"A": true}
+
+    m.startCompPreflight()
+    if len(m.compPre.items) != 1 {
+        t.Fatalf("want 1 item, got %d", len(m.compPre.items))
+    }
+    it := m.compPre.items[0]
+    if it.State != StateSkip || !it.Skip || strings.ToLower(it.Issue) != "no changes" {
+        t.Fatalf("expected auto-skip no changes, got %+v", it)
+    }
+    // Toggle force update
+    m, _ = m.handleCompPreflightKey(createKeyMsg("u"))
+    it = m.compPre.items[0]
+    if it.State != StateUpdate || it.Skip {
+        t.Fatalf("expected forced update, got %+v", it)
+    }
+    // Toggle back
+    m, _ = m.handleCompPreflightKey(createKeyMsg("u"))
+    it = m.compPre.items[0]
+    if it.State != StateSkip || !it.Skip {
+        t.Fatalf("expected back to skip, got %+v", it)
     }
 }

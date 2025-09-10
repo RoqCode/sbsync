@@ -38,14 +38,20 @@ func (m *Model) startCompPreflight() {
 		it := CompPreflightItem{Source: c, Selected: true, Collision: exists, TargetID: id}
 		if exists {
 			it.State = StateUpdate
-			// Auto-skip if equal after mapping (no changes)
-			if tgt, ok := tgtCompByName[lower]; ok {
-				if comps.EqualAfterMapping(c, tgt, s2n, n2t) {
-					it.State = StateSkip
-					it.Skip = true
-					it.Issue = "no changes"
-				}
-			}
+            // Auto-skip if equal after mapping (no changes) unless forceUpdateAll is enabled
+            if tgt, ok := tgtCompByName[lower]; ok {
+                if comps.EqualAfterMapping(c, tgt, s2n, n2t) {
+                    if m.compPre.forceUpdateAll {
+                        it.State = StateUpdate
+                        it.Skip = false
+                        it.Issue = "no changes"
+                    } else {
+                        it.State = StateSkip
+                        it.Skip = true
+                        it.Issue = "no changes"
+                    }
+                }
+            }
 		} else {
 			it.State = StateCreate
 		}

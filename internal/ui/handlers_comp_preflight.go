@@ -42,6 +42,25 @@ func (m Model) handleCompPreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, cmd
 	}
 	switch key {
+	case "u":
+		// Toggle force update for unchanged items
+		m.compPre.forceUpdateAll = !m.compPre.forceUpdateAll
+		for i := range m.compPre.items {
+			it := &m.compPre.items[i]
+			if strings.ToLower(it.Issue) == "no changes" {
+				if m.compPre.forceUpdateAll {
+					it.State = StateUpdate
+					it.Skip = false
+					it.CopyAsNew = false
+				} else {
+					it.State = StateSkip
+					it.Skip = true
+					it.CopyAsNew = false
+				}
+			}
+		}
+		m.updateCompPreflightViewport()
+		return m, nil
 	case "j", "down":
 		if m.compPre.listIndex < len(m.compPre.items)-1 {
 			m.compPre.listIndex++
