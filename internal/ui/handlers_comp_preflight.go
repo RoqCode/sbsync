@@ -2,7 +2,9 @@ package ui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"storyblok-sync/internal/sb"
 	"strings"
+	"time"
 )
 
 func (m Model) handleCompPreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -78,7 +80,17 @@ func (m Model) handleCompPreflightKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		// Start concurrent apply with live progress
-		return m, m.startCompApply()
+		// Initialize metrics snapshot early so reads during init (e.g., ListPresets) are reflected in stats
+		if m.api == nil {
+			m.api = sb.New(m.cfg.Token)
+		}
+		m.lastSnapTime = time.Now()
+		m.lastSnap = m.api.MetricsSnapshot()
+		// Switch to sync view immediately to show stats while preparing
+		m.state = stateCompSync
+		m.syncing = true
+		m.updateViewportContent()
+		return m, tea.Batch(m.startCompApply(), m.spinner.Tick, m.statsTick())
 	case " ":
 		// cycle Skip -> Apply -> Fork -> Apply ...
 		i := m.compPre.listIndex

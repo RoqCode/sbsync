@@ -1,28 +1,30 @@
 package ui
 
 import (
-    "fmt"
-    "strings"
+	"fmt"
+	"strings"
 
-    comps "storyblok-sync/internal/core/componentsync"
-    "storyblok-sync/internal/sb"
+	comps "storyblok-sync/internal/core/componentsync"
+	"storyblok-sync/internal/sb"
 )
 
 // startCompPreflight builds component preflight items from current selection
 func (m *Model) startCompPreflight() {
 	// Build target name -> ID map
-    tgtByName := make(map[string]int, len(m.componentsTarget))
+	tgtByName := make(map[string]int, len(m.componentsTarget))
 	for _, t := range m.componentsTarget {
 		if t.Name == "" {
 			continue
 		}
 		ln := strings.ToLower(t.Name)
-        tgtByName[ln] = t.ID
+		tgtByName[ln] = t.ID
 	}
 	// Build name->component map for target (lower-cased)
 	tgtCompByName := make(map[string]sb.Component, len(m.componentsTarget))
 	for _, t := range m.componentsTarget {
-		if t.Name == "" { continue }
+		if t.Name == "" {
+			continue
+		}
 		ln := strings.ToLower(t.Name)
 		tgtCompByName[ln] = t
 	}
@@ -38,20 +40,20 @@ func (m *Model) startCompPreflight() {
 		it := CompPreflightItem{Source: c, Selected: true, Collision: exists, TargetID: id}
 		if exists {
 			it.State = StateUpdate
-            // Auto-skip if equal after mapping (no changes) unless forceUpdateAll is enabled
-            if tgt, ok := tgtCompByName[lower]; ok {
-                if comps.EqualAfterMapping(c, tgt, s2n, n2t) {
-                    if m.compPre.forceUpdateAll {
-                        it.State = StateUpdate
-                        it.Skip = false
-                        it.Issue = "no changes"
-                    } else {
-                        it.State = StateSkip
-                        it.Skip = true
-                        it.Issue = "no changes"
-                    }
-                }
-            }
+			// Auto-skip if equal after mapping (no changes) unless forceUpdateAll is enabled
+			if tgt, ok := tgtCompByName[lower]; ok {
+				if comps.EqualAfterMapping(c, tgt, s2n, n2t) {
+					if m.compPre.forceUpdateAll {
+						it.State = StateUpdate
+						it.Skip = false
+						it.Issue = "no changes"
+					} else {
+						it.State = StateSkip
+						it.Skip = true
+						it.Issue = "no changes"
+					}
+				}
+			}
 		} else {
 			it.State = StateCreate
 		}

@@ -21,11 +21,11 @@ type CompPreflightItem struct {
 }
 
 type CompPreflightState struct {
-    items     []CompPreflightItem
-    listIndex int
-    // inline rename input when Fork is selected
-    input    textinput.Model
-    renaming bool
-    // When true, items auto-detected as "no changes" are forced to Update
-    forceUpdateAll bool
+	items     []CompPreflightItem
+	listIndex int
+	// inline rename input when Fork is selected
+	input    textinput.Model
+	renaming bool
+	// When true, items auto-detected as "no changes" are forced to Update
+	forceUpdateAll bool
 }

@@ -394,16 +394,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.prevSuccS = m.spsSuccess
 				m.prevWarnPct = m.warningRate
 				m.prevErrPct = m.errorRate
-				// window-based RPS using first and last totals
+				// window-based Req/s; instantaneous Read/Write per last tick for responsiveness
 				if len(m.reqTimes) >= 2 {
 					elapsed := now.Sub(m.reqTimes[0]).Seconds()
 					if elapsed > 0 {
 						totalDelta := float64(m.reqTotals[len(m.reqTotals)-1] - m.reqTotals[0])
 						m.rpsCurrent = totalDelta / elapsed
-						readDelta := float64(m.readTotals[len(m.readTotals)-1] - m.readTotals[0])
-						writeDelta := float64(m.writeTotals[len(m.writeTotals)-1] - m.writeTotals[0])
-						m.rpsReadCurrent = readDelta / elapsed
-						m.rpsWriteCurrent = writeDelta / elapsed
+						// Instantaneous read/write RPS since last snapshot
+						dtInst := now.Sub(m.lastSnapTime).Seconds()
+						if dtInst <= 0 {
+							dtInst = 0.5
+						}
+						readDeltaInst := float64(snap.ReadRequests - m.lastSnap.ReadRequests)
+						writeDeltaInst := float64(snap.WriteRequests - m.lastSnap.WriteRequests)
+						m.rpsReadCurrent = readDeltaInst / dtInst
+						m.rpsWriteCurrent = writeDeltaInst / dtInst
 						// HTTP warning/error rates as percentages over the same window
 						if totalDelta > 0 {
 							warnDelta := float64(m.status429Totals[len(m.status429Totals)-1] - m.status429Totals[0])
