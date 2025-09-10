@@ -46,7 +46,7 @@ Interrupts: `r` to rescan, `q` to abort.
 
 5. Security & logging - completed
 
-6. Component sync
+6. Component sync - completed
 
 - Mode toggle: switch between Stories and Components in the UI.
 - API: extend client to list/get/create/update components; handle groups and display names.
@@ -60,14 +60,125 @@ Interrupts: `r` to rescan, `q` to abort.
 
 7. CI & releases
 
-   - GitHub Actions: `go fmt/vet/test` + `staticcheck` on PRs.
-   - Goreleaser for multi-arch binaries; release notes template.
+   Goals
+
+   - Fast, deterministic CI for PRs and main.
+   - Automated, repeatable releases with checksums and multi-arch binaries.
+
+   Continuous Integration (GitHub Actions)
+
+   - Workflow: `.github/workflows/ci.yml` on `pull_request` and `push` to `main`.
+   - Runners/Matrix: `ubuntu-latest`, Go `1.25.x` (extend to macOS/Windows later if needed).
+   - Steps:
+     - `actions/checkout@v4` (with fetch-depth: 0 for tags when releasing).
+     - `actions/setup-go@v5` with caching on `go.sum`.
+     - `go mod download` to populate cache.
+     - Format check: `gofmt -l .` and fail if any files listed.
+     - `go vet ./...` for static checks.
+     - `staticcheck` install and run: `go install honnef.co/go/tools/cmd/staticcheck@latest` then `staticcheck ./...`.
+     - Tests: `go test ./... -race -covermode=atomic -coverprofile=coverage.out`.
+     - Build sanity: `go build ./cmd/sbsync` to catch linker issues.
+     - Artifacts: upload `coverage.out` and the built binary for debugging (optional).
+   - Best practices: enable concurrency cancellation per-branch; cache Go build/mod; keep CI under ~3–4 minutes.
+
+   Releases (GoReleaser)
+
+   - Config: `.goreleaser.yaml` with builds for linux/darwin/windows, `amd64` and `arm64`; binary name `sbsync`, main `./cmd/sbsync`.
+   - Archive: tar/zip per-OS, checksums file, SBOM optional.
+   - Changelog: conventional-commit grouping; exclude chore/docs/refactor by default.
+   - Homebrew/NFPM: optional later; start with GitHub Releases only.
+   - Workflow: `.github/workflows/release.yml` triggered on tag push `v*.*.*`:
+     - Checkout with full history; setup Go 1.25.
+     - Use `goreleaser/goreleaser-action@v5` to run `goreleaser release --clean`.
+   - Permissions: set repository Actions “Workflow permissions” to “Read and write” so `GITHUB_TOKEN` can create releases.
+   - Signing (optional later): add `cosign` for detached signatures and `provenance`/SBOM if supply-chain hardening is desired.
+
+   Repository Settings (recommended)
+
+   - Protect `main`: require PRs, 1–2 approvals, and the CI job to pass before merge.
+   - Require linear history or squash merges for clean release notes.
+   - Enable Dependabot (`.github/dependabot.yml`) for `gomod` and `github-actions`.
+   - Create `CODEOWNERS` to enforce reviews; keep `AGENTS.md` as the contributor guide.
+   - Actions: ensure GitHub Actions is enabled for the repo; set “Read and write” workflow permissions.
+
+   Rollout Plan
+
+   - 7.1 Add CI workflow file and verify on a PR.
+   - 7.2 Add `.goreleaser.yaml` and release workflow; push a prerelease tag (`v1.1.0-rc.1`).
+   - 7.3 Review artifacts (checksums, archives), test binaries on macOS/Linux.
+   - 7.4 Cut `v1.1.0` with generated release notes.
 
 8. Dry-run mode (low priority)
 
    - Core: no-op write layer that still produces full reports.
    - UI toggle; clear messaging in Report view.
    - Tests verifying zero write calls and identical plan.
+
+9. CLI-only mode
+
+   Goals
+
+   - Enable non-interactive sync from CI or scripts without launching the TUI.
+   - Parity with core features: stories and components, filters, preflight, dry-run, and reporting.
+
+   CLI Shape
+
+   - Subcommand or flags: `sbsync sync --from <spaceID> --to <spaceID> [--stories|--components] [--prefix <path>] [--group <name>] [--since <YYYY-MM-DD>] [--publish] [--concurrency N] [--overwrite|--skip|--fork-suffix "-copy"] [--preflight-only] [--dry-run] [--report out.json] [--yes]`.
+   - Auth: read token from env (`STORYBLOK_TOKEN`) or `internal/config` store; forbid interactive prompts when `--yes` not set.
+   - Output: human-readable progress to stdout; machine-readable JSON report file (same schema as TUI report).
+   - Exit codes: `0` success; `2` preflight found blocking issues; `3` partial failures beyond threshold; `4` invalid flags/config.
+
+   Scope
+
+   - Reuse existing scan → preflight → plan → execute pipeline from the core packages.
+   - Implement minimal flag parser (stdlib `flag` or cobra); keep command surface small and stable.
+   - Deterministic logs without secrets; optional `--verbose` for debug.
+
+   Tests
+
+   - Table tests for flag parsing and validation.
+   - Golden tests for JSON report output on fixtures.
+   - E2E dry-run against testdata to assert planning parity with TUI.
+
+10. Datasources sync
+
+   Goals
+
+   - Sync Storyblok Datasources and their entries between spaces for parity across environments.
+
+   Scope
+
+   - API: extend client with List/Get/Create/Update for datasources and datasource entries; handle paging.
+   - Mapping: match datasources by slug; entries by key; upsert values; optional create-missing-only mode.
+   - Preflight: detect missing datasources, key collisions, and potential destructive changes (deletes disabled by default).
+   - UI/CLI: browse/search datasources and entries; filters by slug/prefix; include in CLI with `--datasources` and `--ds-slug` filters.
+   - Safety: no deletes by default; add `--allow-delete` gate later with explicit confirmation.
+   - Backups: optional export of target datasources to `testdata/` or timestamped snapshots before writes.
+
+   Tests
+
+   - Fixtures under `testdata/datasources/` and `testdata/datasource_entries/`.
+
+11. Sync process refactor
+
+   Goals
+
+   - Reduce duplication between Stories and Components flows; centralize shared orchestration, decisions, and reporting.
+
+   Approach
+
+   - Extract a small sync engine in `internal/core/sync` (or `internal/core/engine`) with:
+     - Scheduler/worker pool with SpaceLimiter and retries.
+     - Preflight decision model (Skip/Apply/Fork) and persistence.
+     - Common report/result structures and progress events.
+     - Hooks/interfaces for domain-specific parts (scan, identity, classify, apply, validators).
+   - Keep domain packages (`storiesync`, `componentsync`) thin: implement adapters to the shared engine.
+   - Maintain behavior parity; avoid over-generalizing domain rules.
+
+   Tests
+
+   - Unit tests for engine components (scheduler, decisions, reporting).
+   - Migration tests to ensure stories/components produce identical plans/reports before/after refactor.
 
 ## Project Structure
 
