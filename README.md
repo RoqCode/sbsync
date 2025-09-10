@@ -1,6 +1,6 @@
 # Storyblok Sync TUI
 
-Storyblok Sync is a terminal user interface (TUI) that synchronises Stories and Folders between two Storyblok spaces. It allows users to scan source and target spaces, select content, preview collisions and apply changes.
+Storyblok Sync is a terminal user interface (TUI) that synchronises Stories, Folders, and Components between two Storyblok spaces. It lets you scan source/target, select content, preflight collisions, and apply changes — now including component group mapping, internal tags, and presets.
 
 See also:
 
@@ -74,6 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/RoqCode/storyblok-sync/main/scripts
 ```
 
 Notes:
+
 - The script verifies the `checksums.txt` when possible (requires `sha256sum` or `shasum`).
 - Set `GITHUB_TOKEN` in CI to avoid GitHub API rate limiting when resolving the latest tag.
 - Use `-b "$HOME/.local/bin"` for user‑local installs; add it to your PATH.
@@ -102,13 +103,15 @@ TARGET_SPACE_ID=<space_id>
 
 ## Features
 
-- Scan source and target spaces and list stories with metadata.
-- Mark individual stories or entire folders for synchronisation.
-- Fuzzy search over name, slug and path.
-- Preflight collision check with per-item skip or overwrite decisions.
-- Sync engine that creates or updates stories in the target space with progress and error reporting.
-- Rescan at any time to refresh space data.
-- Prefix filter for listing/selection only (no bulk "starts-with" execution).
+- Stories: scan, browse, fuzzy search, preflight, sync (create/update), report.
+- Folders: hierarchy planning, create/update, publish mode handling.
+- Components: scan, browse, preflight, and sync (create/update) with:
+  - Group remapping: maps `component_group_uuid` and whitelist UUIDs via name.
+  - Internal tags: ensures tags exist and sets `internal_tag_ids`.
+  - Presets: parity with Storyblok’s flow (POST new, PUT existing by name), including image passthrough.
+  - Force-Update toggle in preflight to update “no changes” items for preset propagation.
+- Stats panel: live Req/s with instantaneous Read/Write RPS and success/sec, plus worker bar.
+- Rescan and mode switch between Stories and Components.
 
 ## User Flow
 
@@ -124,97 +127,29 @@ Interrupts: `r` to rescan, `q` to abort.
 
 ## Status
 
-- v1.0: Functional and stable TUI for syncing Stories and Folders between Storyblok spaces. Implemented flow: auth, space selection, scan, browse with search, preflight, sync with retries, and final report. Logging is available via `DEBUG` to `debug.log`.
+- Components sync MVP complete: groups, internal tags, and presets in sync (create/update) with preflight Force-Update.
+- Stories/Folder sync stable: end-to-end flow with retries, rate-limiting, and reporting.
+- Logging available via `DEBUG=1` to `debug.log`.
 
-## TODO (Next Steps)
+## Next Steps
 
-1. Robust rate limiting & retries — completed
+- Preset images: optional asset upload flow to target space (S3 signed URL) when cross-space URLs aren’t valid.
+- Component deletions and preset cleanup: detect target-only presets/components (optional/guarded).
+- Component diff UX: structural JSON diff and breaking-change highlighting (types/required/enums).
+- Component browse filters: group filter and schema key search.
+- Dry-run mode: no-op writes with full report and risk summary.
+- CLI mode: non-interactive sync (stories/components) for CI.
+- CI & releases: keep staticcheck, vet, tests enforced; GoReleaser for multi-arch binaries.
 
-2. Copy-as-new under different slug (collision handling) - completed
+Completed (high level)
 
-3. UX improvements - completed
+- Robust rate limiting & retries
+- Copy-as-new (stories) and folder fork
+- Publish mode toggle and unpublish-after overwrite handling
+- Security/logging improvements
+- Component sync MVP (groups, internal tags, presets)
 
-4. Toggle publish state - completed
-
-5. Security & logging - completed
-
-6. Component sync - completed
-
-- Mode toggle: switch between Stories and Components in the UI.
-- API: extend client to list/get/create/update components; handle groups and display names.
-- Browse/search: fuzzy search by name, group, and schema keys; filter by group.
-- Collision check: detect name/group conflicts and schema diffs.
-- Diff/merge: JSON schema diff with collapse/expand; highlight breaking changes (type, required, enum shrink).
-- Dependencies: resolve nested component references; compute sync order; warn on missing dependencies.
-- Safety/validation: block breaking changes by default or gate behind confirmation; optional dry‑run validator to check impact on existing stories.
-- Backups: export target component schemas before overwrite; store under `testdata/` or timestamped snapshots.
-- Tests: fixtures for components and dependency graphs; diff and ordering tests.
-
-7. CI & releases
-
-   Goals
-
-   - Fast, deterministic CI for PRs and main.
-   - Automated, repeatable releases with checksums and multi-arch binaries.
-
-   Continuous Integration (GitHub Actions)
-
-   - Workflow: `.github/workflows/ci.yml` on `pull_request` and `push` to `main`.
-   - Runners/Matrix: `ubuntu-latest`, Go `1.25.x` (extend to macOS/Windows later if needed).
-   - Steps:
-     - `actions/checkout@v4` (with fetch-depth: 0 for tags when releasing).
-     - `actions/setup-go@v5` with caching on `go.sum`.
-     - `go mod download` to populate cache.
-     - Format check: `gofmt -l .` and fail if any files listed.
-     - `go vet ./...` for static checks.
-     - `staticcheck` install and run: `go install honnef.co/go/tools/cmd/staticcheck@latest` then `staticcheck ./...`.
-     - Tests: `go test ./... -race -covermode=atomic -coverprofile=coverage.out`.
-     - Build sanity: `go build ./cmd/sbsync` to catch linker issues.
-     - Artifacts: upload `coverage.out` and the built binary for debugging (optional).
-   - Best practices: enable concurrency cancellation per-branch; cache Go build/mod; keep CI under ~3–4 minutes.
-
-   Releases (GoReleaser)
-
-   - Config: `.goreleaser.yaml` with builds for linux/darwin/windows, `amd64` and `arm64`; binary name `sbsync`, main `./cmd/sbsync`.
-   - Archive: tar/zip per-OS, checksums file, SBOM optional.
-   - Changelog: conventional-commit grouping; exclude chore/docs/refactor by default.
-   - Homebrew/NFPM: optional later; start with GitHub Releases only.
-   - Workflow: `.github/workflows/release.yml` triggered on tag push `v*.*.*`:
-     - Checkout with full history; setup Go 1.25.
-     - Use `goreleaser/goreleaser-action@v5` to run `goreleaser release --clean`.
-   - Permissions: set repository Actions “Workflow permissions” to “Read and write” so `GITHUB_TOKEN` can create releases.
-   - Signing (optional later): add `cosign` for detached signatures and `provenance`/SBOM if supply-chain hardening is desired.
-
-   Using release artifacts
-
-   - Artifacts: per‑OS archives plus a `checksums.txt` file.
-   - Naming: `sbsync_<version>_<os>_<arch>.(tar.gz|zip)` (Windows uses `.zip`).
-   - Verify: download `checksums.txt` from the same release and verify with `shasum -a 256 -c checksums.txt`.
-   - Install: extract the archive and place the `sbsync` binary anywhere on your `PATH`.
-   - Local dry‑run: maintainers can run `goreleaser release --clean --skip=publish` to build into `dist/` without creating a GitHub release.
-
-   Repository Settings (recommended)
-
-   - Protect `main`: require PRs, 1–2 approvals, and the CI job to pass before merge.
-   - Require linear history or squash merges for clean release notes.
-   - Enable Dependabot (`.github/dependabot.yml`) for `gomod` and `github-actions`.
-   - Create `CODEOWNERS` to enforce reviews; keep `AGENTS.md` as the contributor guide.
-   - Actions: ensure GitHub Actions is enabled for the repo; set “Read and write” workflow permissions.
-
-   Rollout Plan
-
-   - 7.1 Add CI workflow file and verify on a PR.
-   - 7.2 Add `.goreleaser.yaml` and release workflow; push a prerelease tag (`v1.1.0-rc.1`).
-   - 7.3 Review artifacts (checksums, archives), test binaries on macOS/Linux.
-   - 7.4 Cut `v1.1.0` with generated release notes.
-
-8. Dry-run mode (low priority)
-
-   - Core: no-op write layer that still produces full reports.
-   - UI toggle; clear messaging in Report view.
-   - Tests verifying zero write calls and identical plan.
-
-9. CLI-only mode
+8. CLI-only mode
 
    Goals
 
@@ -240,7 +175,7 @@ Interrupts: `r` to rescan, `q` to abort.
    - Golden tests for JSON report output on fixtures.
    - E2E dry-run against testdata to assert planning parity with TUI.
 
-10. Datasources sync
+9. Datasources sync
 
    Goals
 
@@ -259,26 +194,32 @@ Interrupts: `r` to rescan, `q` to abort.
 
    - Fixtures under `testdata/datasources/` and `testdata/datasource_entries/`.
 
-11. Sync process refactor
+10. Sync process refactor
 
-   Goals
+Goals
 
-   - Reduce duplication between Stories and Components flows; centralize shared orchestration, decisions, and reporting.
+- Reduce duplication between Stories and Components flows; centralize shared orchestration, decisions, and reporting.
 
-   Approach
+Approach
 
-   - Extract a small sync engine in `internal/core/sync` (or `internal/core/engine`) with:
-     - Scheduler/worker pool with SpaceLimiter and retries.
-     - Preflight decision model (Skip/Apply/Fork) and persistence.
-     - Common report/result structures and progress events.
-     - Hooks/interfaces for domain-specific parts (scan, identity, classify, apply, validators).
-   - Keep domain packages (`storiesync`, `componentsync`) thin: implement adapters to the shared engine.
-   - Maintain behavior parity; avoid over-generalizing domain rules.
+- Extract a small sync engine in `internal/core/sync` (or `internal/core/engine`) with:
+  - Scheduler/worker pool with SpaceLimiter and retries.
+  - Preflight decision model (Skip/Apply/Fork) and persistence.
+  - Common report/result structures and progress events.
+  - Hooks/interfaces for domain-specific parts (scan, identity, classify, apply, validators).
+- Keep domain packages (`storiesync`, `componentsync`) thin: implement adapters to the shared engine.
+- Maintain behavior parity; avoid over-generalizing domain rules.
 
-   Tests
+Tests
 
-   - Unit tests for engine components (scheduler, decisions, reporting).
-   - Migration tests to ensure stories/components produce identical plans/reports before/after refactor.
+- Unit tests for engine components (scheduler, decisions, reporting).
+- Migration tests to ensure stories/components produce identical plans/reports before/after refactor.
+
+11. Dry-run mode (low priority)
+
+- Core: no-op write layer that still produces full reports.
+- UI toggle; clear messaging in Report view.
+- Tests verifying zero write calls and identical plan.
 
 ## Project Structure
 
