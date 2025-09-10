@@ -11,7 +11,6 @@ import (
 	"storyblok-sync/internal/infra/logx"
 	"storyblok-sync/internal/sb"
 	"strings"
-	"sync"
 )
 
 // compApplyDoneMsg signals completion of components apply
@@ -24,8 +23,7 @@ type compReportEntry struct {
 	RetryTotal int
 }
 type compApplyDoneMsg struct {
-	errCount int
-	entries  []compReportEntry
+	entries []compReportEntry
 }
 type compExecInitMsg struct {
 	err  error
@@ -46,6 +44,9 @@ type compRemapMaps struct {
 
 // execCompApplyCmd builds a plan from preflight decisions and applies it serially.
 // It ensures groups/tags and remaps schema whitelists before writes.
+/*
+// Deprecated: execCompApplyCmd superseded by startCompApply with streaming UI.
+// Keeping this comment to explain removal during rebase.
 func (m Model) execCompApplyCmd() func() tea.Msg {
 	// capture snapshot data needed
 	token := m.cfg.Token
@@ -94,10 +95,10 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 		}
 		// Ensure groups
 		tgtGroups, err := comps.EnsureTargetGroups(ctx, m.api, tgtID, m.componentGroupsSource)
-		if err != nil {
-			logx.Errorf("COMP_APPLY ensure groups: %v", err)
-			return compApplyDoneMsg{errCount: len(selected)}
-		}
+        if err != nil {
+            logx.Errorf("COMP_APPLY ensure groups: %v", err)
+            return compApplyDoneMsg{entries: nil}
+        }
 		// Build maps for remap
 		srcUUIDToName, tgtNameToUUID := comps.BuildGroupNameMaps(m.componentGroupsSource, tgtGroups)
 		// Pre-ensure internal tags across all selected components
@@ -110,10 +111,10 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 			}
 		}
 		tagMap, err := comps.EnsureTagNameIDs(ctx, m.api, tgtID, tagNames)
-		if err != nil {
-			logx.Errorf("COMP_APPLY ensure tags: %v", err)
-			return compApplyDoneMsg{errCount: len(selected)}
-		}
+        if err != nil {
+            logx.Errorf("COMP_APPLY ensure tags: %v", err)
+            return compApplyDoneMsg{entries: nil}
+        }
 		// Fetch presets from source and target spaces
 		var srcPresets []sb.ComponentPreset
 		if m.sourceSpace != nil {
@@ -300,17 +301,14 @@ func (m Model) execCompApplyCmd() func() tea.Msg {
 		wg.Wait()
 		close(results)
 
-		entries := make([]compReportEntry, 0, len(plan))
-		errCount := 0
-		for r := range results {
-			if r.Err != "" {
-				errCount++
-			}
-			entries = append(entries, r)
-		}
-		return compApplyDoneMsg{errCount: errCount, entries: entries}
-	}
+        entries := make([]compReportEntry, 0, len(plan))
+        for r := range results {
+            entries = append(entries, r)
+        }
+        return compApplyDoneMsg{entries: entries}
+    }
 }
+*/
 
 // Start streaming apply with live per-item progress
 func (m *Model) startCompApply() tea.Cmd {

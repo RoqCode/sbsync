@@ -192,11 +192,4 @@ func (m Model) handleCompListKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// toggleCurrentGroupCollapse is a no-op in flat list mode (kept for compatibility)
-func (m *Model) toggleCurrentGroupCollapse(_ bool) { return }
-
-func nowMidnight() time.Time {
-	t := time.Now()
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-}
 func timeZero() time.Time { return time.Time{} }

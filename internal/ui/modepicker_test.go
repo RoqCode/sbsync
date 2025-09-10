@@ -10,7 +10,7 @@ func TestModePickerNavigation(t *testing.T) {
 	m.state = stateModePicker
 	// move down to Components and select
 	var cmd tea.Cmd
-	m, cmd = m.handleModePickerKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m, _ = m.handleModePickerKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	if m.modePickerIndex != 1 {
 		t.Fatalf("expected index 1, got %d", m.modePickerIndex)
 	}
