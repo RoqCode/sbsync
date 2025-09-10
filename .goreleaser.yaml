@@ -1,0 +1,43 @@
+project_name: sbsync
+
+builds:
+  - id: sbsync
+    main: ./cmd/sbsync
+    binary: sbsync
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    builds: [sbsync]
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^chore(\(.+\))?:'
+      - '^docs(\(.+\))?:'
+      - '^test(\(.+\))?:'
+      - '^refactor(\(.+\))?:'
+      - '^ci(\(.+\))?:'
+      - '^build(\(.+\))?:'
+
+release:
+  prerelease: auto
+
