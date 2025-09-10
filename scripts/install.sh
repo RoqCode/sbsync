@@ -4,15 +4,15 @@ set -euo pipefail
 # Portable installer for sbsync release binaries.
 #
 # Usage examples:
-#   bash scripts/install.sh -r <owner/repo>               # latest -> /usr/local/bin
-#   bash scripts/install.sh -r <owner/repo> -v v1.2.3     # specific version
-#   bash scripts/install.sh -r <owner/repo> -b "$HOME/.local/bin"  # custom bin dir
+#   bash scripts/install.sh                                # latest -> /usr/local/bin
+#   bash scripts/install.sh -v v1.2.3                      # specific version
+#   bash scripts/install.sh -b "$HOME/.local/bin"         # custom bin dir
 #
-# CI one-liner (replace <owner/repo> as appropriate):
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/install.sh \
-#     | bash -s -- -r <owner/repo> -b /usr/local/bin
+# CI one-liner:
+#   curl -fsSL https://raw.githubusercontent.com/RoqCode/storyblok-sync/main/scripts/install.sh \
+#     | bash -s -- -b /usr/local/bin
 
-REPO=""
+REPO="RoqCode/storyblok-sync"
 VERSION=""
 BIN_DIR="/usr/local/bin"
 NO_SUDO="0"
@@ -23,7 +23,6 @@ usage() {
 Install sbsync from GitHub Releases
 
 Options:
-  -r, --repo <owner/repo>   GitHub repository (required), e.g. storyblok/storyblok-sync
   -v, --version <tag>       Version tag (default: latest), e.g. v1.2.3
   -b, --bin-dir <dir>       Install directory (default: /usr/local/bin)
       --no-sudo             Do not use sudo even if BIN_DIR requires it
@@ -106,7 +105,6 @@ install_file() {
 parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
-      -r|--repo) REPO=${2:-}; shift 2 ;;
       -v|--version) VERSION=${2:-}; shift 2 ;;
       -b|--bin-dir) BIN_DIR=${2:-}; shift 2 ;;
       --no-sudo) NO_SUDO=1; shift ;;
@@ -115,11 +113,6 @@ parse_args() {
       *) echo "error: unknown option: $1" >&2; usage; exit 1 ;;
     esac
   done
-  if [ -z "$REPO" ]; then
-    echo "error: --repo <owner/repo> is required" >&2
-    usage
-    exit 1
-  fi
 }
 
 main() {
@@ -181,4 +174,3 @@ main() {
 }
 
 main "$@"
-

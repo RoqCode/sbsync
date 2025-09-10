@@ -57,20 +57,20 @@ sudo install -m 0755 sbsync /usr/local/bin/sbsync
 
 ### 3) Curl‑to‑install script (for CI)
 
-Use the provided installer to fetch the latest (or a pinned) release and install into a directory on your PATH. The repository is `RoqCode/storyblok-sync`.
+Use the provided installer to fetch the latest (or a pinned) release and install into a directory on your PATH.
 
 Latest:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/RoqCode/storyblok-sync/main/scripts/install.sh \
-  | bash -s -- -r RoqCode/storyblok-sync -b /usr/local/bin
+  | bash -s -- -b /usr/local/bin
 ```
 
 Pinned version:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/RoqCode/storyblok-sync/main/scripts/install.sh \
-  | bash -s -- -r RoqCode/storyblok-sync -v v1.2.3 -b /usr/local/bin
+  | bash -s -- -v v1.2.3 -b /usr/local/bin
 ```
 
 Notes:
