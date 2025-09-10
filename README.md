@@ -8,6 +8,98 @@ See also:
 - Planning and roadmap details: [docs/PLANNING.md](./docs/PLANNING.md)
 - Environment flags reference: [docs/env.md](./docs/env.md)
 
+## Installation
+
+There are two supported ways to install `sbsync`:
+
+### 1) Download a prebuilt binary (recommended)
+
+We publish multi‑platform archives on GitHub Releases via GoReleaser:
+
+- Linux (amd64/arm64): `sbsync_<version>_linux_<arch>.tar.gz`
+- macOS (amd64/arm64): `sbsync_<version>_darwin_<arch>.tar.gz`
+- Windows (amd64/arm64): `sbsync_<version>_windows_<arch>.zip`
+
+Steps (Linux/macOS):
+
+1. Download the archive matching your OS/arch from the latest release.
+2. Verify checksum (optional but recommended):
+   ```sh
+   # in the folder with the downloaded files
+   shasum -a 256 -c checksums.txt | grep sbsync_<version>_<os>_<arch>
+   ```
+3. Extract and place the binary on your `PATH`:
+   ```sh
+   tar -xzf sbsync_<version>_<os>_<arch>.tar.gz
+   sudo install -m 0755 sbsync /usr/local/bin/sbsync
+   ```
+4. macOS Gatekeeper note: if you see a quarantine warning, allow the binary once or remove the flag:
+   ```sh
+   xattr -d com.apple.quarantine /usr/local/bin/sbsync
+   ```
+
+Steps (Windows):
+
+1. Download the `.zip` for your architecture.
+2. Extract `sbsync.exe` and add its folder to your `PATH`, or run it directly.
+
+### 2) Build from source
+
+Prerequisites: Go 1.25+
+
+```sh
+git clone <this-repo-url>
+cd storyblok-sync
+go build ./cmd/sbsync
+# optional: place on PATH
+sudo install -m 0755 sbsync /usr/local/bin/sbsync
+```
+
+### 3) Curl‑to‑install script (for CI)
+
+Use the provided installer to fetch the latest (or a pinned) release and install into a directory on your PATH. The repository is `RoqCode/storyblok-sync`.
+
+Latest:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/RoqCode/storyblok-sync/main/scripts/install.sh \
+  | bash -s -- -r RoqCode/storyblok-sync -b /usr/local/bin
+```
+
+Pinned version:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/RoqCode/storyblok-sync/main/scripts/install.sh \
+  | bash -s -- -r RoqCode/storyblok-sync -v v1.2.3 -b /usr/local/bin
+```
+
+Notes:
+- The script verifies the `checksums.txt` when possible (requires `sha256sum` or `shasum`).
+- Set `GITHUB_TOKEN` in CI to avoid GitHub API rate limiting when resolving the latest tag.
+- Use `-b "$HOME/.local/bin"` for user‑local installs; add it to your PATH.
+- Windows runners can use the script in GitHub Actions’ bash shell; it downloads the `.zip` and installs `sbsync.exe`.
+
+### Quick start
+
+```sh
+# provide your Storyblok token via env or config file
+export SB_TOKEN=<your_token>
+
+# run the TUI
+sbsync
+
+# optional: enable debug logs to debug.log
+DEBUG=1 sbsync --verbose
+```
+
+`sbsync` also reads a config file at `~/.sbrc` (created/saved by the app) with keys:
+
+```
+SB_TOKEN=<token>
+SOURCE_SPACE_ID=<space_id>
+TARGET_SPACE_ID=<space_id>
+```
+
 ## Features
 
 - Scan source and target spaces and list stories with metadata.
@@ -92,6 +184,14 @@ Interrupts: `r` to rescan, `q` to abort.
      - Use `goreleaser/goreleaser-action@v5` to run `goreleaser release --clean`.
    - Permissions: set repository Actions “Workflow permissions” to “Read and write” so `GITHUB_TOKEN` can create releases.
    - Signing (optional later): add `cosign` for detached signatures and `provenance`/SBOM if supply-chain hardening is desired.
+
+   Using release artifacts
+
+   - Artifacts: per‑OS archives plus a `checksums.txt` file.
+   - Naming: `sbsync_<version>_<os>_<arch>.(tar.gz|zip)` (Windows uses `.zip`).
+   - Verify: download `checksums.txt` from the same release and verify with `shasum -a 256 -c checksums.txt`.
+   - Install: extract the archive and place the `sbsync` binary anywhere on your `PATH`.
+   - Local dry‑run: maintainers can run `goreleaser release --clean --skip=publish` to build into `dist/` without creating a GitHub release.
 
    Repository Settings (recommended)
 
