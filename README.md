@@ -24,11 +24,12 @@ There are two supported ways to install `sbsync`:
 
 ### 1) Download a prebuilt binary (recommended)
 
-We publish multi‑platform archives on GitHub Releases via GoReleaser:
+We publish Linux and macOS archives on GitHub Releases via GoReleaser:
 
 - Linux (amd64/arm64): `sbsync_<version>_linux_<arch>.tar.gz`
 - macOS (amd64/arm64): `sbsync_<version>_darwin_<arch>.tar.gz`
-- Windows (amd64/arm64): `sbsync_<version>_windows_<arch>.zip`
+
+Note for Windows users: sbsync does not ship native Windows binaries. Please use WSL2 and follow the Linux instructions inside your WSL environment.
 
 Steps (Linux/macOS):
 
@@ -47,11 +48,6 @@ Steps (Linux/macOS):
    ```sh
    xattr -d com.apple.quarantine /usr/local/bin/sbsync
    ```
-
-Steps (Windows):
-
-1. Download the `.zip` for your architecture.
-2. Extract `sbsync.exe` and add its folder to your `PATH`, or run it directly.
 
 ### 2) Build from source
 
@@ -88,7 +84,7 @@ Notes:
 - The script verifies the `checksums.txt` when possible (requires `sha256sum` or `shasum`).
 - Set `GITHUB_TOKEN` in CI to avoid GitHub API rate limiting when resolving the latest tag.
 - Use `-b "$HOME/.local/bin"` for user‑local installs; add it to your PATH.
-- Windows runners can use the script in GitHub Actions’ bash shell; it downloads the `.zip` and installs `sbsync.exe`.
+- Windows: use WSL2 and run the installer inside your Linux distribution.
 
 ### Quick start
 

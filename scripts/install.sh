@@ -40,8 +40,7 @@ detect_os() {
   case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
     linux*) echo linux ;;
     darwin*) echo darwin ;;
-    msys*|cygwin*|mingw*) echo windows ;;
-    *) echo "error: unsupported OS" >&2; exit 1 ;;
+    *) echo "error: unsupported OS (supported: linux, darwin). On Windows, please use WSL2." >&2; exit 1 ;;
   esac
 }
 
@@ -135,7 +134,6 @@ main() {
   fi
 
   EXT=tar.gz
-  [ "$OS" = "windows" ] && EXT=zip
   ARCHIVE="sbsync_${VERSION}_${OS}_${ARCH}.${EXT}"
 
   BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
@@ -154,16 +152,9 @@ main() {
   fi
 
   echo "extracting..."
-  if [ "$EXT" = "zip" ]; then
-    need_cmd unzip
-    unzip -q "$tmpdir/$ARCHIVE" -d "$tmpdir"
-    BIN_SRC="$tmpdir/sbsync.exe"
-    BIN_NAME="sbsync.exe"
-  else
-    tar -xzf "$tmpdir/$ARCHIVE" -C "$tmpdir"
-    BIN_SRC="$tmpdir/sbsync"
-    BIN_NAME="sbsync"
-  fi
+  tar -xzf "$tmpdir/$ARCHIVE" -C "$tmpdir"
+  BIN_SRC="$tmpdir/sbsync"
+  BIN_NAME="sbsync"
 
   if [ ! -f "$BIN_SRC" ]; then
     echo "error: extracted binary not found (expected $BIN_SRC)" >&2

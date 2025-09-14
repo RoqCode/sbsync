@@ -6,7 +6,7 @@ This document lists all supported environment variables, what they do, and sensi
 
 - macOS/Linux (temporary): `SB_MA_RPS=6 SB_TUI_GRAPH=1 go run ./cmd/sbsync`
 - macOS/Linux (shell profile): `export SB_MA_RPS=6`
-- Windows PowerShell: `$env:SB_MA_RPS=6`
+- Windows users: Use WSL2 and set env vars inside your Linux distribution as above.
 
 ## Authentication & Config
 
