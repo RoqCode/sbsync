@@ -249,6 +249,10 @@ The sync core has been extracted to `internal/core/sync`. Future modules (`infra
 
 See [AGENTS.md](AGENTS.md) for coding conventions and testing requirements. Submit pull requests with a short description of the change and note any deviations from the guidelines.
 
+## License
+
+Licensed under the GNU General Public License, version 3 (GPL-3.0). See `LICENSE` for details.
+
 ## Future ideas
 
 - Interactive Diff & Merge view for collisions
