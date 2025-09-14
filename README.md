@@ -8,6 +8,14 @@ See also:
 - Planning and roadmap details: [docs/PLANNING.md](./docs/PLANNING.md)
 - Environment flags reference: [docs/env.md](./docs/env.md)
 
+## Disclaimer
+
+- This project is under active development; behavior may change and things may break.
+- No warranty, promise of support, or liability is provided. Use at your own risk. I accept no responsibility for unintended outcomes, including data loss.
+- Sync operations can be destructive. Create backups/exports and test in non‑production spaces first where possible.
+- Use with caution: review preflight results, start with small batches, and verify outcomes.
+- After each sync, double‑check all affected items in Storyblok to confirm they were updated as intended.
+
 ## Installation
 
 There are two supported ways to install `sbsync`:
@@ -221,6 +229,32 @@ Tests
 - UI toggle; clear messaging in Report view.
 - Tests verifying zero write calls and identical plan.
 
+12. Workflow stages handling
+
+Goals
+
+- Allow updates to stories that are restricted by workflow stages by temporarily changing stage.
+
+Approach
+
+- Detect each story’s current `workflow_stage_id` and the allowed transition graph from the API.
+- Preflight: identify stories requiring a stage change and propose a transition path to an editable stage (e.g., Draft/In progress).
+- Sync: transition to the editable stage, apply the update, then transition back to the original stage.
+- Preserve assignees/comments and optionally attach a transition note for auditability.
+- Idempotency: if the revert fails, record it in the report and surface a clear follow-up action.
+
+Safety
+
+- Require an explicit gate (TUI toggle/CLI `--allow-stage-change`) and support dry-run.
+- Respect permissions and transition rules; skip when the token lacks rights or the transition is not allowed.
+- Rate-limit and retry stage transitions; never change stages for published items unless explicitly enabled.
+
+Tests
+
+- Fixtures covering multiple workflow configurations and blocked stories.
+- Golden tests for preflight labeling and planned transition paths.
+- Dry-run E2E ensuring zero stage changes and identical update plans.
+
 ## Project Structure
 
 ```
@@ -240,6 +274,10 @@ The sync core has been extracted to `internal/core/sync`. Future modules (`infra
 ## Contributing
 
 See [AGENTS.md](AGENTS.md) for coding conventions and testing requirements. Submit pull requests with a short description of the change and note any deviations from the guidelines.
+
+## License
+
+Licensed under the GNU General Public License, version 3 (GPL-3.0). See `LICENSE` for details.
 
 ## Future ideas
 
