@@ -6,7 +6,7 @@ builds:
     binary: sbsync
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin, windows]
+    goos: [linux, darwin]
     goarch: [amd64, arm64]
     flags:
       - -trimpath
@@ -16,9 +16,6 @@ builds:
 archives:
   - id: default
     builds: [sbsync]
-    format_overrides:
-      - goos: windows
-        format: zip
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     files:
       - README.md
@@ -40,4 +37,3 @@ changelog:
 
 release:
   prerelease: auto
-

@@ -15,6 +15,13 @@
 - `go vet ./...`: Static checks for common mistakes.
 - `go test ./...`: Run the full test suite. Add `-cover` for coverage.
 
+Recommended local hooks (optional):
+
+- Enable: `git config core.hooksPath scripts/githooks && chmod +x scripts/githooks/*`
+- pre-commit: formats staged Go files; runs `go vet` and `staticcheck` on affected packages.
+- pre-push: runs `go test -race -cover ./...`.
+- Install staticcheck: `go install honnef.co/go/tools/cmd/staticcheck@latest`.
+
 ## Coding Style & Naming Conventions
 - **Language:** Go 1.25; identifiers and comments in English. User‑facing strings may be German.
 - **Formatting:** Use `go fmt` (tabs). Group imports: stdlib, third‑party, internal.
@@ -38,4 +45,3 @@
 
 ## Architecture Notes
 - Bubble Tea MVU for UI (`internal/ui`) with business logic and Storyblok access decoupled (`internal/sb`). Keep future domain logic under `internal/core/` to maintain clear boundaries.
-

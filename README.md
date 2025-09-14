@@ -1,6 +1,8 @@
-# Storyblok Sync TUI
+# sbsync – a TUI for syncing Storyblok spaces
 
-Storyblok Sync is a terminal user interface (TUI) that synchronises Stories, Folders, and Components between two Storyblok spaces. It lets you scan source/target, select content, preflight collisions, and apply changes — now including component group mapping, internal tags, and presets.
+sbsync is a terminal user interface (TUI) that synchronises Stories, Folders, and Components between two Storyblok spaces. It lets you scan source/target, select content, preflight collisions, and apply changes — now including component group mapping, internal tags, and presets.
+
+_This is an independent open-source project. It is not affiliated with or endorsed by Storyblok GmbH._
 
 See also:
 
@@ -22,11 +24,12 @@ There are two supported ways to install `sbsync`:
 
 ### 1) Download a prebuilt binary (recommended)
 
-We publish multi‑platform archives on GitHub Releases via GoReleaser:
+We publish Linux and macOS archives on GitHub Releases via GoReleaser:
 
 - Linux (amd64/arm64): `sbsync_<version>_linux_<arch>.tar.gz`
 - macOS (amd64/arm64): `sbsync_<version>_darwin_<arch>.tar.gz`
-- Windows (amd64/arm64): `sbsync_<version>_windows_<arch>.zip`
+
+Note for Windows users: sbsync does not ship native Windows binaries. Please use WSL2 and follow the Linux instructions inside your WSL environment.
 
 Steps (Linux/macOS):
 
@@ -45,11 +48,6 @@ Steps (Linux/macOS):
    ```sh
    xattr -d com.apple.quarantine /usr/local/bin/sbsync
    ```
-
-Steps (Windows):
-
-1. Download the `.zip` for your architecture.
-2. Extract `sbsync.exe` and add its folder to your `PATH`, or run it directly.
 
 ### 2) Build from source
 
@@ -86,7 +84,7 @@ Notes:
 - The script verifies the `checksums.txt` when possible (requires `sha256sum` or `shasum`).
 - Set `GITHUB_TOKEN` in CI to avoid GitHub API rate limiting when resolving the latest tag.
 - Use `-b "$HOME/.local/bin"` for user‑local installs; add it to your PATH.
-- Windows runners can use the script in GitHub Actions’ bash shell; it downloads the `.zip` and installs `sbsync.exe`.
+- Windows: use WSL2 and run the installer inside your Linux distribution.
 
 ### Quick start
 
@@ -274,6 +272,15 @@ The sync core has been extracted to `internal/core/sync`. Future modules (`infra
 ## Contributing
 
 See [AGENTS.md](AGENTS.md) for coding conventions and testing requirements. Submit pull requests with a short description of the change and note any deviations from the guidelines.
+
+## Git Hooks
+
+Optional local hooks for fast feedback:
+
+- Install: `git config core.hooksPath scripts/githooks && chmod +x scripts/githooks/*`
+- Pre-commit: formats staged Go files, then runs `go vet` and `staticcheck` on affected packages.
+- Pre-push: runs `go test -race -cover ./...`.
+- Note: install staticcheck locally with `go install honnef.co/go/tools/cmd/staticcheck@latest`.
 
 ## License
 

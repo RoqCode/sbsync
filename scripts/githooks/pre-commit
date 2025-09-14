@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run fast checks on staged Go files only: format, vet, staticcheck.
+
+changed_go_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.go$' || true)
+[ -z "$changed_go_files" ] && exit 0
+
+echo "pre-commit: formatting staged Go files..."
+gofmt -s -w $changed_go_files
+git add $changed_go_files
+
+# Derive affected packages from changed files
+pkgs=$(printf '%s\n' "$changed_go_files" \
+  | xargs -n1 dirname | sort -u \
+  | xargs -n1 -I{} bash -c 'go list ./{} 2>/dev/null' \
+  | sort -u)
+
+echo "pre-commit: go vet on affected packages..."
+go vet $pkgs
+
+if command -v staticcheck >/dev/null 2>&1; then
+  echo "pre-commit: staticcheck on affected packages..."
+  staticcheck $pkgs
+else
+  echo "pre-commit: staticcheck not found; install with:" >&2
+  echo "  go install honnef.co/go/tools/cmd/staticcheck@latest" >&2
+fi
+
+echo "pre-commit: OK"
+

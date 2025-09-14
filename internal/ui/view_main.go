@@ -59,7 +59,7 @@ func (m Model) View() string {
 
 func (m Model) renderHeader() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Storyblok Sync (TUI)"))
+	b.WriteString(titleStyle.Render("sbsync"))
 	b.WriteString("\n")
 	b.WriteString(dividerStyle.Render(strings.Repeat("─", max(10, m.width-2))))
 	b.WriteString("\n")
