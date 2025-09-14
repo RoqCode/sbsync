@@ -6,8 +6,8 @@ import (
 )
 
 func (m Model) viewWelcome() string {
-	title := titleStyle.Render("🚀 Storyblok Sync")
-	subtitle := subtitleStyle.Render("Synchronisiere Stories zwischen Spaces")
+	title := titleStyle.Render("🚀 sbsync")
+	subtitle := subtitleStyle.Render("Synchronisiere Stories zwischen Storyblok Spaces")
 
 	var statusLines []string
 	if m.cfg.Token != "" {

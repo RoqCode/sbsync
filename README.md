@@ -1,6 +1,8 @@
-# Storyblok Sync TUI
+# sbsync – a TUI for syncing Storyblok spaces
 
-Storyblok Sync is a terminal user interface (TUI) that synchronises Stories, Folders, and Components between two Storyblok spaces. It lets you scan source/target, select content, preflight collisions, and apply changes — now including component group mapping, internal tags, and presets.
+sbsync is a terminal user interface (TUI) that synchronises Stories, Folders, and Components between two Storyblok spaces. It lets you scan source/target, select content, preflight collisions, and apply changes — now including component group mapping, internal tags, and presets.
+
+This is an independent open-source project. It is not affiliated with or endorsed by Storyblok GmbH.
 
 See also:
 
@@ -10,6 +12,7 @@ See also:
 
 ## Disclaimer
 
+- This is an independent open-source project and is not affiliated with or endorsed by Storyblok GmbH.
 - This project is under active development; behavior may change and things may break.
 - No warranty, promise of support, or liability is provided. Use at your own risk. I accept no responsibility for unintended outcomes, including data loss.
 - Sync operations can be destructive. Create backups/exports and test in non‑production spaces first where possible.
