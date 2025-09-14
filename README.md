@@ -229,6 +229,32 @@ Tests
 - UI toggle; clear messaging in Report view.
 - Tests verifying zero write calls and identical plan.
 
+12. Workflow stages handling
+
+Goals
+
+- Allow updates to stories that are restricted by workflow stages by temporarily changing stage.
+
+Approach
+
+- Detect each story’s current `workflow_stage_id` and the allowed transition graph from the API.
+- Preflight: identify stories requiring a stage change and propose a transition path to an editable stage (e.g., Draft/In progress).
+- Sync: transition to the editable stage, apply the update, then transition back to the original stage.
+- Preserve assignees/comments and optionally attach a transition note for auditability.
+- Idempotency: if the revert fails, record it in the report and surface a clear follow-up action.
+
+Safety
+
+- Require an explicit gate (TUI toggle/CLI `--allow-stage-change`) and support dry-run.
+- Respect permissions and transition rules; skip when the token lacks rights or the transition is not allowed.
+- Rate-limit and retry stage transitions; never change stages for published items unless explicitly enabled.
+
+Tests
+
+- Fixtures covering multiple workflow configurations and blocked stories.
+- Golden tests for preflight labeling and planned transition paths.
+- Dry-run E2E ensuring zero stage changes and identical update plans.
+
 ## Project Structure
 
 ```
