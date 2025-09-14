@@ -8,6 +8,14 @@ See also:
 - Planning and roadmap details: [docs/PLANNING.md](./docs/PLANNING.md)
 - Environment flags reference: [docs/env.md](./docs/env.md)
 
+## Disclaimer
+
+- This project is under active development; behavior may change and things may break.
+- No warranty, promise of support, or liability is provided. Use at your own risk. I accept no responsibility for unintended outcomes, including data loss.
+- Sync operations can be destructive. Create backups/exports and test in non‑production spaces first where possible.
+- Use with caution: review preflight results, start with small batches, and verify outcomes.
+- After each sync, double‑check all affected items in Storyblok to confirm they were updated as intended.
+
 ## Installation
 
 There are two supported ways to install `sbsync`:
