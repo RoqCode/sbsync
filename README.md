@@ -277,6 +277,15 @@ The sync core has been extracted to `internal/core/sync`. Future modules (`infra
 
 See [AGENTS.md](AGENTS.md) for coding conventions and testing requirements. Submit pull requests with a short description of the change and note any deviations from the guidelines.
 
+## Git Hooks
+
+Optional local hooks for fast feedback:
+
+- Install: `git config core.hooksPath scripts/githooks && chmod +x scripts/githooks/*`
+- Pre-commit: formats staged Go files, then runs `go vet` and `staticcheck` on affected packages.
+- Pre-push: runs `go test -race -cover ./...`.
+- Note: install staticcheck locally with `go install honnef.co/go/tools/cmd/staticcheck@latest`.
+
 ## License
 
 Licensed under the GNU General Public License, version 3 (GPL-3.0). See `LICENSE` for details.

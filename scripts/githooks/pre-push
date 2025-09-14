@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "pre-push: running tests (race, cover)..."
+go test -race -cover ./...
+
+# Optional: uncomment to run extra checks on push
+# echo "pre-push: go vet..."
+# go vet ./...
+# if command -v staticcheck >/dev/null 2>&1; then
+#   echo "pre-push: staticcheck..."
+#   staticcheck ./...
+# fi
+
+echo "pre-push: OK"
+
